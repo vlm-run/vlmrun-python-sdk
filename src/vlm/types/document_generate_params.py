@@ -1,0 +1,70 @@
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+
+from __future__ import annotations
+
+from typing import Union, Optional
+from datetime import datetime
+from typing_extensions import Literal, Annotated, TypedDict
+
+from .._utils import PropertyInfo
+
+__all__ = ["DocumentGenerateParams", "Metadata"]
+
+
+class DocumentGenerateParams(TypedDict, total=False):
+    id: str
+    """Unique identifier of the request."""
+
+    batch: bool
+    """Whether to process the document in batch mode (async)."""
+
+    callback_url: Optional[str]
+    """The URL to call when the request is completed."""
+
+    created_at: Annotated[Union[str, datetime], PropertyInfo(format="iso8601")]
+    """Date and time when the request was created (in UTC timezone)"""
+
+    detail: Literal["auto", "hi", "lo"]
+    """The detail level to use for the model."""
+
+    domain: Union[
+        Literal[
+            "document.file",
+            "document.pdf",
+            "document.generative",
+            "document.markdown",
+            "document.presentation",
+            "document.invoice",
+            "document.receipt",
+            "document.resume",
+            "document.utility-bill",
+        ],
+        str,
+    ]
+    """The domain identifier for the model."""
+
+    file_id: Optional[str]
+    """The ID of the uploaded file (provide either `file_id` or `url`)."""
+
+    json_schema: Optional[object]
+    """The schema to use for the model."""
+
+    metadata: Optional[Metadata]
+    """Metadata for the request."""
+
+    model: Literal["vlm-1"]
+    """The model to use for generating the response."""
+
+    url: Optional[str]
+    """The URL of the file (provide either `file_id` or `url`)."""
+
+
+class Metadata(TypedDict, total=False):
+    allow_training: bool
+    """Whether the file can be used for training"""
+
+    environment: Literal["dev", "staging", "prod"]
+    """The environment where the request was made."""
+
+    session_id: Optional[str]
+    """The session ID of the request"""
