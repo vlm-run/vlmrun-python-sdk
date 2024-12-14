@@ -4,7 +4,23 @@ from __future__ import annotations
 
 import httpx
 
+from .image import (
+    ImageResource,
+    AsyncImageResource,
+    ImageResourceWithRawResponse,
+    AsyncImageResourceWithRawResponse,
+    ImageResourceWithStreamingResponse,
+    AsyncImageResourceWithStreamingResponse,
+)
 from ..._types import NOT_GIVEN, Body, Query, Headers, NotGiven
+from .document import (
+    DocumentResource,
+    AsyncDocumentResource,
+    DocumentResourceWithRawResponse,
+    AsyncDocumentResourceWithRawResponse,
+    DocumentResourceWithStreamingResponse,
+    AsyncDocumentResourceWithStreamingResponse,
+)
 from ..._compat import cached_property
 from ..._resource import SyncAPIResource, AsyncAPIResource
 from ..._response import (
@@ -13,23 +29,9 @@ from ..._response import (
     async_to_raw_response_wrapper,
     async_to_streamed_response_wrapper,
 )
-from .image.image import (
-    ImageResource,
-    AsyncImageResource,
-    ImageResourceWithRawResponse,
-    AsyncImageResourceWithRawResponse,
-    ImageResourceWithStreamingResponse,
-    AsyncImageResourceWithStreamingResponse,
-)
+from .image.image import ImageResource, AsyncImageResource
 from ..._base_client import make_request_options
-from .document.document import (
-    DocumentResource,
-    AsyncDocumentResource,
-    DocumentResourceWithRawResponse,
-    AsyncDocumentResourceWithRawResponse,
-    DocumentResourceWithStreamingResponse,
-    AsyncDocumentResourceWithStreamingResponse,
-)
+from .document.document import DocumentResource, AsyncDocumentResource
 
 __all__ = ["ExperimentalResource", "AsyncExperimentalResource"]
 
