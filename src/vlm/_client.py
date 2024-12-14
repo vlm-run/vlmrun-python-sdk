@@ -8,7 +8,7 @@ from typing_extensions import Self, override
 
 import httpx
 
-from . import _exceptions
+from . import resources, _exceptions
 from ._qs import Querystring
 from ._types import (
     NOT_GIVEN,
@@ -33,7 +33,6 @@ from ._response import (
     async_to_raw_response_wrapper,
     async_to_streamed_response_wrapper,
 )
-from .resources import web, audio, files, image, models, schema, document, response
 from ._streaming import Stream as Stream, AsyncStream as AsyncStream
 from ._exceptions import VlmError, APIStatusError
 from ._base_client import (
@@ -42,23 +41,31 @@ from ._base_client import (
     AsyncAPIClient,
     make_request_options,
 )
-from .resources.openai import openai
-from .resources.experimental import experimental
 
-__all__ = ["Timeout", "Transport", "ProxiesTypes", "RequestOptions", "Vlm", "AsyncVlm", "Client", "AsyncClient"]
+__all__ = [
+    "Timeout",
+    "Transport",
+    "ProxiesTypes",
+    "RequestOptions",
+    "resources",
+    "Vlm",
+    "AsyncVlm",
+    "Client",
+    "AsyncClient",
+]
 
 
 class Vlm(SyncAPIClient):
-    openai: openai.OpenAIResource
-    experimental: experimental.ExperimentalResource
-    models: models.ModelsResource
-    files: files.FilesResource
-    response: response.ResponseResource
-    document: document.DocumentResource
-    audio: audio.AudioResource
-    image: image.ImageResource
-    web: web.WebResource
-    schema: schema.SchemaResource
+    openai: resources.OpenAIResource
+    experimental: resources.ExperimentalResource
+    models: resources.ModelsResource
+    files: resources.FilesResource
+    response: resources.ResponseResource
+    document: resources.DocumentResource
+    audio: resources.AudioResource
+    image: resources.ImageResource
+    web: resources.WebResource
+    schema: resources.SchemaResource
     with_raw_response: VlmWithRawResponse
     with_streaming_response: VlmWithStreamedResponse
 
@@ -116,16 +123,16 @@ class Vlm(SyncAPIClient):
             _strict_response_validation=_strict_response_validation,
         )
 
-        self.openai = openai.OpenAIResource(self)
-        self.experimental = experimental.ExperimentalResource(self)
-        self.models = models.ModelsResource(self)
-        self.files = files.FilesResource(self)
-        self.response = response.ResponseResource(self)
-        self.document = document.DocumentResource(self)
-        self.audio = audio.AudioResource(self)
-        self.image = image.ImageResource(self)
-        self.web = web.WebResource(self)
-        self.schema = schema.SchemaResource(self)
+        self.openai = resources.OpenAIResource(self)
+        self.experimental = resources.ExperimentalResource(self)
+        self.models = resources.ModelsResource(self)
+        self.files = resources.FilesResource(self)
+        self.response = resources.ResponseResource(self)
+        self.document = resources.DocumentResource(self)
+        self.audio = resources.AudioResource(self)
+        self.image = resources.ImageResource(self)
+        self.web = resources.WebResource(self)
+        self.schema = resources.SchemaResource(self)
         self.with_raw_response = VlmWithRawResponse(self)
         self.with_streaming_response = VlmWithStreamedResponse(self)
 
@@ -254,16 +261,16 @@ class Vlm(SyncAPIClient):
 
 
 class AsyncVlm(AsyncAPIClient):
-    openai: openai.AsyncOpenAIResource
-    experimental: experimental.AsyncExperimentalResource
-    models: models.AsyncModelsResource
-    files: files.AsyncFilesResource
-    response: response.AsyncResponseResource
-    document: document.AsyncDocumentResource
-    audio: audio.AsyncAudioResource
-    image: image.AsyncImageResource
-    web: web.AsyncWebResource
-    schema: schema.AsyncSchemaResource
+    openai: resources.AsyncOpenAIResource
+    experimental: resources.AsyncExperimentalResource
+    models: resources.AsyncModelsResource
+    files: resources.AsyncFilesResource
+    response: resources.AsyncResponseResource
+    document: resources.AsyncDocumentResource
+    audio: resources.AsyncAudioResource
+    image: resources.AsyncImageResource
+    web: resources.AsyncWebResource
+    schema: resources.AsyncSchemaResource
     with_raw_response: AsyncVlmWithRawResponse
     with_streaming_response: AsyncVlmWithStreamedResponse
 
@@ -321,16 +328,16 @@ class AsyncVlm(AsyncAPIClient):
             _strict_response_validation=_strict_response_validation,
         )
 
-        self.openai = openai.AsyncOpenAIResource(self)
-        self.experimental = experimental.AsyncExperimentalResource(self)
-        self.models = models.AsyncModelsResource(self)
-        self.files = files.AsyncFilesResource(self)
-        self.response = response.AsyncResponseResource(self)
-        self.document = document.AsyncDocumentResource(self)
-        self.audio = audio.AsyncAudioResource(self)
-        self.image = image.AsyncImageResource(self)
-        self.web = web.AsyncWebResource(self)
-        self.schema = schema.AsyncSchemaResource(self)
+        self.openai = resources.AsyncOpenAIResource(self)
+        self.experimental = resources.AsyncExperimentalResource(self)
+        self.models = resources.AsyncModelsResource(self)
+        self.files = resources.AsyncFilesResource(self)
+        self.response = resources.AsyncResponseResource(self)
+        self.document = resources.AsyncDocumentResource(self)
+        self.audio = resources.AsyncAudioResource(self)
+        self.image = resources.AsyncImageResource(self)
+        self.web = resources.AsyncWebResource(self)
+        self.schema = resources.AsyncSchemaResource(self)
         self.with_raw_response = AsyncVlmWithRawResponse(self)
         self.with_streaming_response = AsyncVlmWithStreamedResponse(self)
 
@@ -460,16 +467,16 @@ class AsyncVlm(AsyncAPIClient):
 
 class VlmWithRawResponse:
     def __init__(self, client: Vlm) -> None:
-        self.openai = openai.OpenAIResourceWithRawResponse(client.openai)
-        self.experimental = experimental.ExperimentalResourceWithRawResponse(client.experimental)
-        self.models = models.ModelsResourceWithRawResponse(client.models)
-        self.files = files.FilesResourceWithRawResponse(client.files)
-        self.response = response.ResponseResourceWithRawResponse(client.response)
-        self.document = document.DocumentResourceWithRawResponse(client.document)
-        self.audio = audio.AudioResourceWithRawResponse(client.audio)
-        self.image = image.ImageResourceWithRawResponse(client.image)
-        self.web = web.WebResourceWithRawResponse(client.web)
-        self.schema = schema.SchemaResourceWithRawResponse(client.schema)
+        self.openai = resources.OpenAIResourceWithRawResponse(client.openai)
+        self.experimental = resources.ExperimentalResourceWithRawResponse(client.experimental)
+        self.models = resources.ModelsResourceWithRawResponse(client.models)
+        self.files = resources.FilesResourceWithRawResponse(client.files)
+        self.response = resources.ResponseResourceWithRawResponse(client.response)
+        self.document = resources.DocumentResourceWithRawResponse(client.document)
+        self.audio = resources.AudioResourceWithRawResponse(client.audio)
+        self.image = resources.ImageResourceWithRawResponse(client.image)
+        self.web = resources.WebResourceWithRawResponse(client.web)
+        self.schema = resources.SchemaResourceWithRawResponse(client.schema)
 
         self.health = to_raw_response_wrapper(
             client.health,
@@ -478,16 +485,16 @@ class VlmWithRawResponse:
 
 class AsyncVlmWithRawResponse:
     def __init__(self, client: AsyncVlm) -> None:
-        self.openai = openai.AsyncOpenAIResourceWithRawResponse(client.openai)
-        self.experimental = experimental.AsyncExperimentalResourceWithRawResponse(client.experimental)
-        self.models = models.AsyncModelsResourceWithRawResponse(client.models)
-        self.files = files.AsyncFilesResourceWithRawResponse(client.files)
-        self.response = response.AsyncResponseResourceWithRawResponse(client.response)
-        self.document = document.AsyncDocumentResourceWithRawResponse(client.document)
-        self.audio = audio.AsyncAudioResourceWithRawResponse(client.audio)
-        self.image = image.AsyncImageResourceWithRawResponse(client.image)
-        self.web = web.AsyncWebResourceWithRawResponse(client.web)
-        self.schema = schema.AsyncSchemaResourceWithRawResponse(client.schema)
+        self.openai = resources.AsyncOpenAIResourceWithRawResponse(client.openai)
+        self.experimental = resources.AsyncExperimentalResourceWithRawResponse(client.experimental)
+        self.models = resources.AsyncModelsResourceWithRawResponse(client.models)
+        self.files = resources.AsyncFilesResourceWithRawResponse(client.files)
+        self.response = resources.AsyncResponseResourceWithRawResponse(client.response)
+        self.document = resources.AsyncDocumentResourceWithRawResponse(client.document)
+        self.audio = resources.AsyncAudioResourceWithRawResponse(client.audio)
+        self.image = resources.AsyncImageResourceWithRawResponse(client.image)
+        self.web = resources.AsyncWebResourceWithRawResponse(client.web)
+        self.schema = resources.AsyncSchemaResourceWithRawResponse(client.schema)
 
         self.health = async_to_raw_response_wrapper(
             client.health,
@@ -496,16 +503,16 @@ class AsyncVlmWithRawResponse:
 
 class VlmWithStreamedResponse:
     def __init__(self, client: Vlm) -> None:
-        self.openai = openai.OpenAIResourceWithStreamingResponse(client.openai)
-        self.experimental = experimental.ExperimentalResourceWithStreamingResponse(client.experimental)
-        self.models = models.ModelsResourceWithStreamingResponse(client.models)
-        self.files = files.FilesResourceWithStreamingResponse(client.files)
-        self.response = response.ResponseResourceWithStreamingResponse(client.response)
-        self.document = document.DocumentResourceWithStreamingResponse(client.document)
-        self.audio = audio.AudioResourceWithStreamingResponse(client.audio)
-        self.image = image.ImageResourceWithStreamingResponse(client.image)
-        self.web = web.WebResourceWithStreamingResponse(client.web)
-        self.schema = schema.SchemaResourceWithStreamingResponse(client.schema)
+        self.openai = resources.OpenAIResourceWithStreamingResponse(client.openai)
+        self.experimental = resources.ExperimentalResourceWithStreamingResponse(client.experimental)
+        self.models = resources.ModelsResourceWithStreamingResponse(client.models)
+        self.files = resources.FilesResourceWithStreamingResponse(client.files)
+        self.response = resources.ResponseResourceWithStreamingResponse(client.response)
+        self.document = resources.DocumentResourceWithStreamingResponse(client.document)
+        self.audio = resources.AudioResourceWithStreamingResponse(client.audio)
+        self.image = resources.ImageResourceWithStreamingResponse(client.image)
+        self.web = resources.WebResourceWithStreamingResponse(client.web)
+        self.schema = resources.SchemaResourceWithStreamingResponse(client.schema)
 
         self.health = to_streamed_response_wrapper(
             client.health,
@@ -514,16 +521,16 @@ class VlmWithStreamedResponse:
 
 class AsyncVlmWithStreamedResponse:
     def __init__(self, client: AsyncVlm) -> None:
-        self.openai = openai.AsyncOpenAIResourceWithStreamingResponse(client.openai)
-        self.experimental = experimental.AsyncExperimentalResourceWithStreamingResponse(client.experimental)
-        self.models = models.AsyncModelsResourceWithStreamingResponse(client.models)
-        self.files = files.AsyncFilesResourceWithStreamingResponse(client.files)
-        self.response = response.AsyncResponseResourceWithStreamingResponse(client.response)
-        self.document = document.AsyncDocumentResourceWithStreamingResponse(client.document)
-        self.audio = audio.AsyncAudioResourceWithStreamingResponse(client.audio)
-        self.image = image.AsyncImageResourceWithStreamingResponse(client.image)
-        self.web = web.AsyncWebResourceWithStreamingResponse(client.web)
-        self.schema = schema.AsyncSchemaResourceWithStreamingResponse(client.schema)
+        self.openai = resources.AsyncOpenAIResourceWithStreamingResponse(client.openai)
+        self.experimental = resources.AsyncExperimentalResourceWithStreamingResponse(client.experimental)
+        self.models = resources.AsyncModelsResourceWithStreamingResponse(client.models)
+        self.files = resources.AsyncFilesResourceWithStreamingResponse(client.files)
+        self.response = resources.AsyncResponseResourceWithStreamingResponse(client.response)
+        self.document = resources.AsyncDocumentResourceWithStreamingResponse(client.document)
+        self.audio = resources.AsyncAudioResourceWithStreamingResponse(client.audio)
+        self.image = resources.AsyncImageResourceWithStreamingResponse(client.image)
+        self.web = resources.AsyncWebResourceWithStreamingResponse(client.web)
+        self.schema = resources.AsyncSchemaResourceWithStreamingResponse(client.schema)
 
         self.health = async_to_streamed_response_wrapper(
             client.health,
