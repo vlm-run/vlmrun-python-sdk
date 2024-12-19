@@ -1,2 +1,16 @@
 # vlmrun-python-sdk
-Official Python SDK for VLM Run Client
+Python SDK for VLMRun.
+
+## Installation
+
+```bash
+pip install vlmrun
+```
+
+## Usage
+
+```python
+from vlmrun.client import Client
+
+client = Client()
+```
