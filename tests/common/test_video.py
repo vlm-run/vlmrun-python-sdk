@@ -15,63 +15,46 @@ REAL_VIDEO_FPS = 25
 
 
 @pytest.fixture
-def sample_video(tmp_path) -> Path:
-    """Create a sample video file for testing.
-
-    Args:
-        tmp_path: Pytest fixture providing temporary directory.
+def sample_video() -> Path:
+    """Return path to the test video file.
 
     Returns:
-        Path: Path to the sample video file.
+        Path: Path to the test video file.
     """
-    # Create a sample video using VideoWriter
-    video_path = tmp_path / "sample.mp4"
-    frames = 30
-    width, height = 640, 480
-
-    with VideoWriter(video_path, fps=30.0) as writer:
-        # Create a sequence of frames with different colors
-        for i in range(frames):
-            # Create a frame with a moving gradient
-            frame = np.zeros((height, width, 3), dtype=np.uint8)
-            frame[:, :, 0] = (i * 255 // frames)  # Red channel
-            frame[:, :, 1] = ((frames - i) * 255 // frames)  # Green channel
-            frame[:, :, 2] = (i * 255 // frames)  # Blue channel
-            writer.write(frame)
-
-    return video_path
+    return Path(__file__).parent.parent / "test_data" / "test.mp4"
 
 
 def test_video_reader_basic(sample_video):
     """Test basic VideoReader functionality."""
     with VideoReader(sample_video) as reader:
         # Test length
-        assert len(reader) == 30
+        assert len(reader) == REAL_VIDEO_FRAMES
 
         # Test iteration
         frame_count = 0
         for frame in reader:
             assert isinstance(frame, np.ndarray)
-            assert frame.shape == (480, 640, 3)
+            assert frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
             assert frame.dtype == np.uint8
             frame_count += 1
-        assert frame_count == 30
+        assert frame_count == REAL_VIDEO_FRAMES
 
         # Test position
-        assert reader.pos() == 30
+        assert reader.pos() == REAL_VIDEO_FRAMES
 
 
 def test_video_reader_seeking(sample_video):
     """Test VideoReader seeking functionality."""
     with VideoReader(sample_video) as reader:
         # Test seeking to specific frame
-        reader.seek(15)
-        assert reader.pos() == 15
+        mid_frame = REAL_VIDEO_FRAMES // 2
+        reader.seek(mid_frame)
+        assert reader.pos() == mid_frame
 
         # Test reading frame after seeking
         frame = next(reader)
         assert isinstance(frame, np.ndarray)
-        assert frame.shape == (480, 640, 3)
+        assert frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
 
         # Test seeking to start
         reader.reset()
@@ -91,15 +74,15 @@ def test_video_reader_getitem(sample_video):
         # Test single frame access
         frame = reader[0]
         assert isinstance(frame, np.ndarray)
-        assert frame.shape == (480, 640, 3)
+        assert frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
 
         # Test multiple frame access
-        frames = reader[[0, 15, 29]]
+        frames = reader[[0, REAL_VIDEO_FRAMES // 2, REAL_VIDEO_FRAMES - 1]]
         assert isinstance(frames, list)
         assert len(frames) == 3
         for frame in frames:
             assert isinstance(frame, np.ndarray)
-            assert frame.shape == (480, 640, 3)
+            assert frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
 
         # Test invalid index
         with pytest.raises(IndexError):
