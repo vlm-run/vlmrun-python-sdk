@@ -1,9 +1,9 @@
-## VLM Run Python SDK
+The [VLM Run Python SDK](https://pypi.org/project/vlmrun/) is the official Python client for [VLM Run API platform](https://docs.vlm.run), providing a convenient way to interacting with our REST APIs.
 
-Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface for interacting with [VLM Run's Vision Language Model APIs](https://vlm.run). Vision Language Models (VLMs) are AI models that can understand and process both visual and textual information, enabling sophisticated analysis of images and documents. This SDK provides seamless integration capabilities for processing images, videos, and documents using state-of-the-art vision language models.
+Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface for interacting with [VLM Run's Vision Language Model APIs](https://docs.vlm.run). Vision Language Models (VLMs) are AI models that can understand and process both visual and textual information, enabling sophisticated analysis of images and documents. This SDK provides seamless integration capabilities for processing images, videos, and documents using state-of-the-art vision language models.
 
 <p align="center">
-<a href="https://vlm.run"><b>Website</b></a> | <a href="https://docs.vlm.run/"><b>Docs</b></a> | <a href="https://docs.vlm.run/blog"><b>Blog</b></a> | <a href="https://discord.gg/AMApC2UzVY"><b>Discord</b></a>
+<a href="https://docs.vlm.run"><b>Website</b></a> | <a href="https://docs.vlm.run/"><b>Docs</b></a> | <a href="https://docs.vlm.run/blog"><b>Blog</b></a> | <a href="https://discord.gg/AMApC2UzVY"><b>Discord</b></a>
 </p>
 <p align="center">
 <a href="https://pypi.org/project/vlmrun/"><img alt="PyPI Version" src="https://badge.fury.io/py/vlmrun.svg"></a>
