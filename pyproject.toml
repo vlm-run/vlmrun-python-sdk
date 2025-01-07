@@ -30,7 +30,6 @@ dynamic = ["version", "dependencies"]
 [project.optional-dependencies]
 test = ["pytest"]
 build = ["twine", "build"]
-torch = ["torch>=2.3.1", "torchvision>=0.18.1", "transformers>=4.41.2", "torch-nos>=0.3.0"]
 
 [tool.setuptools.dynamic]
 version = {attr = "vlmrun.version.__version__"}
