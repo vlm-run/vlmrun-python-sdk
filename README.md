@@ -16,7 +16,7 @@ Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface
 
 ## 💡 Motivation
 
-The VLM Run Python SDK is designed to make it easy for developers to integrate vision language models into their applications. It provides:
+The VLM Run Python SDK is designed to make it easy for developers to integrate Vision Language Models with the [VLM Run API](https://docs.vlm.run). It provides:
 
 - 🔑 **Simple Authentication**: Easy-to-use client setup with API key management
 - 🎯 **Type Safety**: Full type hints and modern Python typing support
