@@ -8,7 +8,7 @@ import pytest
 import requests
 from PIL import Image
 
-from vlmrun.common import encode_image, download_image
+from vlmrun.common.image import encode_image, download_image
 
 
 def _validate_base64_image(data: Union[str, bytes], expected_format: str) -> None:

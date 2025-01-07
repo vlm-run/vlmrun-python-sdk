@@ -18,7 +18,7 @@ client = Client()
 
 ### Image Utilities
 ```python
-from vlmrun.common import encode_image, download_image
+from vlmrun.common.image import encode_image, download_image
 from PIL import Image
 
 # Convert image to base64 or binary
