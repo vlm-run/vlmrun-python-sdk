@@ -1,6 +1,6 @@
 ## VLM Run Python SDK
 
-Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface for interacting with VLM Run's Vision Language Model APIs. This SDK provides seamless integration capabilities for processing images, videos, and documents using state-of-the-art vision language models.
+Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface for interacting with [VLM Run's Vision Language Model APIs](https://vlm.run). This SDK provides seamless integration capabilities for processing images, videos, and documents using state-of-the-art vision language models.
 
 <p align="center">
 <a href="https://vlm.run"><b>Website</b></a> | <a href="https://docs.vlm.run/"><b>Docs</b></a> | <a href="https://docs.vlm.run/blog"><b>Blog</b></a> | <a href="https://discord.gg/CCY8cYNC"><b>Discord</b></a>
