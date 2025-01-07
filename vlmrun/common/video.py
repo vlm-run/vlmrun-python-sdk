@@ -1,4 +1,5 @@
 """Video utilities for reading and writing video files using OpenCV."""
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, Iterator, List, Optional, Union
@@ -128,7 +129,9 @@ class BaseVideoReader(ABC):
 class VideoReader(BaseVideoReader):
     """Video reader implementation using OpenCV."""
 
-    def __init__(self, filename: Union[str, Path], transform: Optional[Callable] = None):
+    def __init__(
+        self, filename: Union[str, Path], transform: Optional[Callable] = None
+    ):
         """Initialize the video reader.
 
         Args:
@@ -286,11 +289,7 @@ class VideoWriter:
             height, width = frame.shape[:2]
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             self.writer = cv2.VideoWriter(
-                str(self.filename),
-                fourcc,
-                self.fps,
-                (width, height),
-                frame.ndim == 3
+                str(self.filename), fourcc, self.fps, (width, height), frame.ndim == 3
             )
 
         # Convert RGB to BGR for OpenCV

@@ -1,5 +1,5 @@
 """Tests for video utilities."""
-import os
+
 from pathlib import Path
 
 import numpy as np
@@ -174,7 +174,7 @@ def test_video_reader_real_video(real_video_path):
     with VideoReader(real_video_path) as reader:
         # Test basic properties
         assert len(reader) == REAL_VIDEO_FRAMES
-        
+
         # Test frame dimensions
         frame = next(reader)
         assert isinstance(frame, np.ndarray)
