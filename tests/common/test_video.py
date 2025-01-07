@@ -7,6 +7,12 @@ import pytest
 
 from vlmrun.common.video import VideoReader, VideoWriter
 
+# Constants for real test video properties
+REAL_VIDEO_WIDTH = 294
+REAL_VIDEO_HEIGHT = 240
+REAL_VIDEO_FRAMES = 168
+REAL_VIDEO_FPS = 25
+
 
 @pytest.fixture
 def sample_video(tmp_path) -> Path:
@@ -168,3 +174,37 @@ def test_video_context_managers(sample_video, tmp_path):
     # Verify writer is closed
     assert writer.writer is None
     assert output_path.exists()
+
+
+@pytest.fixture
+def real_video_path() -> Path:
+    """Return path to the real test video file.
+
+    Returns:
+        Path: Path to the test video file.
+    """
+    return Path(__file__).parent.parent / "test_data" / "test.mp4"
+
+
+def test_video_reader_real_video(real_video_path):
+    """Test VideoReader with a real video file."""
+    with VideoReader(real_video_path) as reader:
+        # Test basic properties
+        assert len(reader) == REAL_VIDEO_FRAMES
+        
+        # Test frame dimensions
+        frame = next(reader)
+        assert isinstance(frame, np.ndarray)
+        assert frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
+        assert frame.dtype == np.uint8
+
+        # Test seeking
+        reader.seek(REAL_VIDEO_FRAMES // 2)
+        mid_frame = next(reader)
+        assert isinstance(mid_frame, np.ndarray)
+        assert mid_frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
+
+        # Test reading all frames
+        reader.reset()
+        frame_count = sum(1 for _ in reader)
+        assert frame_count == REAL_VIDEO_FRAMES
