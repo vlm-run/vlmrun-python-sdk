@@ -1,7 +1,4 @@
-The [VLM Run Python SDK](https://pypi.org/project/vlmrun/) is the official Python client for [VLM Run API platform](https://docs.vlm.run), providing a convenient way to interacting with our REST APIs.
-
-Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface for interacting with [VLM Run's Vision Language Model APIs](https://docs.vlm.run). Vision Language Models (VLMs) are AI models that can understand and process both visual and textual information, enabling sophisticated analysis of images and documents. This SDK provides seamless integration capabilities for processing images, videos, and documents using state-of-the-art vision language models.
-
+## VLM Run Python SDK
 <p align="center">
 <a href="https://docs.vlm.run"><b>Website</b></a> | <a href="https://docs.vlm.run/"><b>Docs</b></a> | <a href="https://docs.vlm.run/blog"><b>Blog</b></a> | <a href="https://discord.gg/AMApC2UzVY"><b>Discord</b></a>
 </p>
@@ -14,14 +11,8 @@ Welcome to the **VLM Run Python SDK**, a powerful and intuitive Python interface
 <a href="https://twitter.com/vlmrun"><img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/vlmrun.svg?style=social&logo=twitter"></a>
 </p>
 
-## 💡 Motivation
+The [VLM Run Python SDK](https://pypi.org/project/vlmrun/) is the official Python client for [VLM Run API platform](https://docs.vlm.run), providing a convenient way to interacting with our REST APIs.
 
-The VLM Run Python SDK is designed to make it easy for developers to integrate Vision Language Models with the [VLM Run API](https://docs.vlm.run). It provides:
-
-- 🔑 **Simple Authentication**: Easy-to-use client setup with API key management
-- 🎯 **Type Safety**: Full type hints and modern Python typing support
-- 🛠️ **Utility Functions**: Helper functions for common image processing tasks
-- 🔌 **Extensible Design**: Easy to extend and customize for your needs
 
 ## 🚀 Getting Started
 
@@ -48,9 +39,6 @@ response = client.image.generate(
     json_schema=Invoice.model_json_schema(),
 )
 ```
-
-<details>
-<summary>Advanced Usage Examples</summary>
 
 ### Image Utilities
 
@@ -81,10 +69,6 @@ vlmrun/
 └── types/           # Type definitions
     └── responses.py # API response types
 ```
-
-## ✨ Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
 
 ## 🔗 Quick Links
 
