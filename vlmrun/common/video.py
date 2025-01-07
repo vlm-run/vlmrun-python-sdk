@@ -109,4 +109,5 @@ class VideoItertools:
 
     def __del__(self):
         """Clean up CLIP model."""
-        del self.model
+        if hasattr(self, 'model'):
+            del self.model

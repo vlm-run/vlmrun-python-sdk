@@ -39,15 +39,17 @@ def sample_video(tmp_path) -> Path:
 @pytest.fixture
 def frame_generator(sample_video):
     """Create a frame generator from the sample video."""
+    frames = []
     cap = cv2.VideoCapture(str(sample_video))
     try:
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-            yield frame
+            frames.append(frame)
     finally:
         cap.release()
+    return iter(frames)
 
 
 def test_video_itertools_initialization():
