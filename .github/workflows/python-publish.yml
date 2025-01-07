@@ -58,7 +58,9 @@ jobs:
     steps:
       - name: Checkout git repo
         uses: actions/checkout@v3
-
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
