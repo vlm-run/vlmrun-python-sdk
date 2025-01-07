@@ -7,7 +7,17 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from vlmrun.common import VideoItertools
+try:
+    from vlmrun.common import VideoItertools
+    HAS_CLIP = True
+except ImportError:
+    HAS_CLIP = False
+
+# Skip all tests if CLIP is not available
+pytestmark = pytest.mark.skipif(
+    not HAS_CLIP,
+    reason="CLIP model not available. Install torch extras with: pip install vlmrun[torch]"
+)
 
 
 # Use a small test video URL that's reliable
