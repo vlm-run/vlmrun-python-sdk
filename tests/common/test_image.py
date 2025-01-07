@@ -1,4 +1,5 @@
 """Tests for image utilities."""
+
 import base64
 from io import BytesIO
 from pathlib import Path
@@ -15,14 +16,14 @@ def _validate_base64_image(data: Union[str, bytes], expected_format: str) -> Non
     """Helper to validate base64 encoded image data."""
     # Convert to string if needed
     data_str = data.decode() if isinstance(data, bytes) else str(data)
-    
+
     # Validate prefix
     prefix = f"data:image/{expected_format.lower()};base64,"
     assert data_str.startswith(prefix), f"Data does not start with {prefix}"
-    
+
     # Extract base64 content
     base64_str = data_str.split(",", 1)[1]
-    
+
     # Validate base64 content
     try:
         base64.b64decode(base64_str.encode())
@@ -33,7 +34,7 @@ def _validate_base64_image(data: Union[str, bytes], expected_format: str) -> Non
 @pytest.fixture
 def sample_image(tmp_path) -> Image.Image:
     """Create a sample image for testing."""
-    img = Image.new('RGB', (100, 100), color='red')
+    img = Image.new("RGB", (100, 100), color="red")
     img_path = tmp_path / "test_image.png"
     img.save(img_path)
     return img
@@ -87,7 +88,7 @@ def test_download_image():
     """Test downloading an image from URL."""
     # Use a reliable test image URL
     url = "https://raw.githubusercontent.com/python-pillow/Pillow/main/Tests/images/hopper.png"
-    
+
     # Download and verify image
     img = download_image(url)
     assert isinstance(img, Image.Image)

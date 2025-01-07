@@ -1,4 +1,5 @@
 """Image utilities for VLMRun."""
+
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -13,14 +14,14 @@ def encode_image(
     format: Literal["PNG", "JPEG", "binary"] = "PNG",
 ) -> Union[str, bytes]:
     """Convert an image to a base64 string or binary format.
-    
+
     Args:
         image: PIL Image, path to image, or Path object
         format: Output format ("PNG", "JPEG", or "binary")
-    
+
     Returns:
         Base64 encoded string or binary bytes
-    
+
     Raises:
         FileNotFoundError: If image path doesn't exist
         ValueError: If image type is invalid
@@ -48,10 +49,10 @@ def encode_image(
 
 def download_image(url: str) -> Image.Image:
     """Download an image from a URL.
-    
+
     Args:
         url: URL of the image to download
-    
+
     Returns:
         PIL Image in RGB format
     """

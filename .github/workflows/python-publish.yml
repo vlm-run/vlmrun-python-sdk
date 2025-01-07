@@ -30,6 +30,7 @@ jobs:
           key: pip-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
             pip-
+          id: cache
 
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
@@ -57,9 +58,6 @@ jobs:
     steps:
       - name: Checkout git repo
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -71,6 +69,7 @@ jobs:
           key: pip-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
             pip-
+          id: cache
 
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
