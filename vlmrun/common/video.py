@@ -9,13 +9,14 @@ from typing import Iterable, Optional, Union
 
 import cv2
 import numpy as np
-from nos.models import CLIP  # type: ignore
 from tqdm import tqdm
 
+HAS_CLIP = False
 try:
+    from nos.models import CLIP  # type: ignore
     HAS_CLIP = True
 except ImportError:
-    HAS_CLIP = False
+    pass
 
 
 @dataclass
