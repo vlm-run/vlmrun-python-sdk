@@ -2,8 +2,10 @@ import pytest
 from vlmrun.client import Client
 
 
-def test_client_with_api_key():
+def test_client_with_api_key(monkeypatch):
     """Test client initialization with API key provided in constructor."""
+    monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
+    monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     client = Client(api_key="test-key")
     assert client.api_key == "test-key"
     assert client.base_url == "https://api.vlm.run/v1"  # Default URL
@@ -33,8 +35,10 @@ def test_client_with_env_base_url(monkeypatch):
     assert client.base_url == "https://env.api"
 
 
-def test_client_missing_api_key():
+def test_client_missing_api_key(monkeypatch):
     """Test client initialization fails when API key is missing."""
+    monkeypatch.delenv("VLMRUN_API_KEY", raising=False)  # Ensure no API key in env
+    monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     with pytest.raises(ValueError) as exc_info:
         Client()
     assert "API key must be provided" in str(exc_info.value)
