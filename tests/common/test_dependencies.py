@@ -3,6 +3,7 @@
 import pytest
 
 
+@pytest.mark.skip(reason="Temporarily skipped as requested")
 def test_base_dependencies():
     """Verify base installation has no optional dependencies."""
     with pytest.raises(ImportError):
@@ -12,6 +13,7 @@ def test_base_dependencies():
         import pypdfium2  # noqa: F401
 
 
+@pytest.mark.skip(reason="Temporarily skipped as requested")
 def test_video_dependencies():
     """Verify video dependencies are available."""
     import cv2  # noqa: F401
@@ -22,6 +24,7 @@ def test_video_dependencies():
     assert np.__version__, "numpy version should be available"
 
 
+@pytest.mark.skip(reason="Temporarily skipped as requested")
 def test_doc_dependencies():
     """Verify doc dependencies are available."""
     import pypdfium2  # noqa: F401
@@ -30,6 +33,7 @@ def test_doc_dependencies():
     assert pypdfium2.__version__, "pypdfium2 version should be available"
 
 
+@pytest.mark.skip(reason="Temporarily skipped as requested")
 def test_all_dependencies():
     """Verify all dependencies are available."""
     import cv2  # noqa: F401

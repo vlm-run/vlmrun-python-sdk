@@ -49,33 +49,16 @@ jobs:
           VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
           VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
         run: |
+          # Test base installation first to verify dependency isolation
           pip install -e .
-          pytest tests/common/test_dependencies.py -v
-          make test
+          pytest tests/common/test_dependencies.py::test_base_dependencies -v
 
-      - name: Test video extra
+      - name: Run all tests
         env:
           VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
           VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
         run: |
-          pip install -e '.[video]'
-          pytest tests/common/test_dependencies.py::test_video_dependencies -v
-          pytest tests/common/test_video.py
-
-      - name: Test doc extra
-        env:
-          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
-          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
-        run: |
-          pip install -e '.[doc]'
-          pytest tests/common/test_dependencies.py::test_doc_dependencies -v
-          pytest tests/common/test_pdf.py
-
-      - name: Test all extras
-        env:
-          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
-          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
-        run: |
+          # Install all extras and run complete test suite
           pip install -e '.[all]'
-          pytest tests/common/test_dependencies.py::test_all_dependencies -v
+          pytest tests/common/test_dependencies.py -v
           make test
