@@ -1,6 +1,7 @@
 import os
 import requests
 import pytest
+from functools import lru_cache
 from vlmrun.client import Client
 
 
@@ -56,6 +57,7 @@ def test_client_env_precedence(monkeypatch):
     assert client.base_url == "https://custom.api"  # Constructor value
 
 
+@lru_cache  # needs to be checked just once
 def _healthcheck():
     return (
         requests.get(
@@ -76,3 +78,16 @@ def test_client_health():
     client = Client()
     assert client.healthcheck()
     assert len(client.models.list()) > 0, "No models found"
+
+
+@pytest.mark.skipif(
+    os.getenv("VLMRUN_API_KEY", None) is None
+    and os.getenv("VLMRUN_BASE_URL", None) is None,
+    reason="No VLMRUN_API_KEY and VLMRUN_BASE_URL in environment",
+)
+@pytest.mark.skipif(not _healthcheck(), reason="API is not healthy")
+def test_client_openai():
+    """Test client OpenAI client."""
+    client = Client()
+    assert client.openai is not None
+    assert client.openai.models.list() is not None
