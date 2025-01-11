@@ -1,4 +1,5 @@
 """Generation API commands."""
+
 from pathlib import Path
 from typing import Optional
 
@@ -6,6 +7,7 @@ import typer
 from rich import print as rprint
 
 app = typer.Typer(help="Generation operations")
+
 
 @app.command()
 def image(
@@ -22,6 +24,7 @@ def image(
     else:
         rprint("Image data generated (use --output to save to file)")
 
+
 @app.command()
 def video(
     ctx: typer.Context,
@@ -36,6 +39,7 @@ def video(
         rprint(f"Video saved to {output}")
     else:
         rprint("Video data generated (use --output to save to file)")
+
 
 @app.command()
 def document(

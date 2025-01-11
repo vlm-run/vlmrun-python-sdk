@@ -1,6 +1,4 @@
 """Test hub subcommand."""
-import pytest
-from typer.testing import CliRunner
 
 from vlmrun.cli.cli import app
 
@@ -24,6 +22,8 @@ def test_hub_submit(runner, mock_client, tmp_path):
     """Test hub submit command."""
     test_file = tmp_path / "test.txt"
     test_file.write_text("test content")
-    result = runner.invoke(app, ["hub", "submit", str(test_file), "--name", "test", "--version", "1.0.0"])
+    result = runner.invoke(
+        app, ["hub", "submit", str(test_file), "--name", "test", "--version", "1.0.0"]
+    )
     assert result.exit_code == 0
     assert "item1" in result.stdout

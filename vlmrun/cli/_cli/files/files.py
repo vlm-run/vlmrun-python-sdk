@@ -1,4 +1,5 @@
 """Files API commands."""
+
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +9,7 @@ from rich.console import Console
 from rich import print as rprint
 
 app = typer.Typer(help="File operations")
+
 
 @app.command()
 def list(ctx: typer.Context) -> None:
@@ -21,7 +23,7 @@ def list(ctx: typer.Context) -> None:
     table.add_column("Filename")
     table.add_column("Size")
     table.add_column("Created At")
-    
+
     for file in files:
         table.add_row(
             file["id"],
@@ -29,8 +31,9 @@ def list(ctx: typer.Context) -> None:
             str(file["size"]),
             file["created_at"],
         )
-    
+
     console.print(table)
+
 
 @app.command()
 def upload(
@@ -43,6 +46,7 @@ def upload(
     result = client.upload_file(str(file), purpose=purpose)
     rprint(f"Uploaded file {result['filename']} with ID: {result['id']}")
 
+
 @app.command()
 def delete(
     ctx: typer.Context,
@@ -52,6 +56,7 @@ def delete(
     client = ctx.obj
     client.delete_file(file_id)
     rprint(f"Deleted file {file_id}")
+
 
 @app.command()
 def get(
