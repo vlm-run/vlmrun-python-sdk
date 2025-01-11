@@ -24,7 +24,7 @@ class Client:
     """
 
     api_key: str | None = None
-    base_url: str | None = None
+    base_url: str = "https://api.vlm.run/v1"
     timeout: float = 30.0
 
     def __post_init__(self):
@@ -44,9 +44,11 @@ class Client:
                     "or VLMRUN_API_KEY environment variable"
                 )
 
-        # Handle base URL
-        if self.base_url is None:
-            self.base_url = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
+        # Handle base URL - only use environment if default value is unchanged
+        if self.base_url == "https://api.vlm.run/v1":
+            env_base_url = os.getenv("VLMRUN_BASE_URL")
+            if env_base_url:
+                self.base_url = env_base_url
 
         # Initialize resources
         self.files = Files(self)

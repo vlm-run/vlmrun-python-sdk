@@ -12,6 +12,7 @@ def test_client_with_api_key():
 def test_client_with_env_api_key(monkeypatch):
     """Test client initialization with API key from environment variable."""
     monkeypatch.setenv("VLMRUN_API_KEY", "env-key")
+    monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     client = Client()
     assert client.api_key == "env-key"
     assert client.base_url == "https://api.vlm.run/v1"  # Default URL
