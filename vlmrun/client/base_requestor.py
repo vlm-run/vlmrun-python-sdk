@@ -1,6 +1,6 @@
 """VLM Run API requestor implementation."""
 
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 from urllib.parse import urljoin
 
 import requests
@@ -24,8 +24,8 @@ class APIError(Exception):
     def __init__(
         self,
         message: str,
-        http_status: Optional[int] = None,
-        headers: Optional[Dict[str, str]] = None,
+        http_status: int | None = None,
+        headers: Dict[str, str] | None = None,
     ):
         super().__init__(message)
         self.message = message
@@ -67,10 +67,10 @@ class APIRequestor:
         self,
         method: str,
         url: str,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        params: Dict[str, Any] | None = None,
+        data: Dict[str, Any] | None = None,
+        files: Dict[str, Any] | None = None,
+        headers: Dict[str, str] | None = None,
         raw_response: bool = False,
     ) -> Tuple[Union[Dict[str, Any], bytes], int, Dict[str, str]]:
         """Make an API request with retry logic.
