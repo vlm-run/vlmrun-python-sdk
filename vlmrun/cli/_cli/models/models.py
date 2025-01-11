@@ -14,15 +14,13 @@ def list(ctx: typer.Context) -> None:
     models = client.list_models()
     console = Console()
     table = Table(show_header=True, header_style="bold")
-    table.add_column("Model ID")
-    table.add_column("Name")
-    table.add_column("Description")
+    table.add_column("Model")
+    table.add_column("Domain")
 
     for model in models:
         table.add_row(
-            model["id"],
-            model["name"],
-            model["description"],
+            model["model"],
+            model["domain"],
         )
 
     console.print(table)

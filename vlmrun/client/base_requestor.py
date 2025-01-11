@@ -39,7 +39,7 @@ class APIRequestor:
     def __init__(
         self,
         client,
-        base_url: str = "https://api.vlm.run/v1",
+        base_url: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         """Initialize API requestor.
@@ -50,7 +50,7 @@ class APIRequestor:
             timeout: Request timeout in seconds
         """
         self._client = client
-        self._base_url = base_url
+        self._base_url = base_url or client.base_url
         self._timeout = timeout
         self._session = requests.Session()
 
@@ -97,7 +97,7 @@ class APIRequestor:
             headers["Authorization"] = f"Bearer {self._client.api_key}"
 
         # Build full URL
-        full_url = urljoin(self._base_url, url)
+        full_url = urljoin(self._base_url.rstrip("/") + "/", url.lstrip("/"))
 
         try:
             response = self._session.request(

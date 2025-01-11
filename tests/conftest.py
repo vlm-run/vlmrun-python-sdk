@@ -60,9 +60,7 @@ def mock_client(monkeypatch):
             return {"status": "running"}
 
         def list_models(self):
-            return [
-                {"id": "model1", "name": "Test Model", "description": "A test model"}
-            ]
+            return [{"model": "model1", "domain": "test-domain"}]
 
         def generate_image(self, prompt):
             return b"image data"

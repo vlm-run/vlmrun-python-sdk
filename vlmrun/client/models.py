@@ -29,7 +29,7 @@ class Models:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url="v1/models",
+            url="models",
         )
 
         if not isinstance(response, list):

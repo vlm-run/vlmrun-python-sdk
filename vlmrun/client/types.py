@@ -31,10 +31,8 @@ class FileList:
 class ModelResponse:
     """Response from model operations."""
 
-    id: str
-    name: str
+    model: str
     domain: str
-    created_at: datetime | None = None
 
 
 @dataclass
