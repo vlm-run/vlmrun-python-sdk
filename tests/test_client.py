@@ -8,7 +8,7 @@ def test_client_with_api_key(monkeypatch):
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     client = Client(api_key="test-key")
     assert client.api_key == "test-key"
-    assert client.base_url == "https://api.vlm.run/v1"  # Default URL
+    assert client.base_url == "https://api.vlm.run/v1"  # Default URL with /v1 suffix
 
 
 def test_client_with_env_api_key(monkeypatch):
@@ -17,7 +17,7 @@ def test_client_with_env_api_key(monkeypatch):
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     client = Client()
     assert client.api_key == "env-key"
-    assert client.base_url == "https://api.vlm.run/v1"  # Default URL
+    assert client.base_url == "https://api.vlm.run/v1"  # Default URL with /v1 suffix
 
 
 def test_client_with_base_url():
