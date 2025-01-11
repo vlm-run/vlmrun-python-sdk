@@ -1,9 +1,11 @@
 """Models API commands."""
+
 import typer
 from rich.table import Table
 from rich.console import Console
 
 app = typer.Typer(help="Model operations")
+
 
 @app.command()
 def list(ctx: typer.Context) -> None:
@@ -15,12 +17,12 @@ def list(ctx: typer.Context) -> None:
     table.add_column("Model ID")
     table.add_column("Name")
     table.add_column("Description")
-    
+
     for model in models:
         table.add_row(
             model["id"],
             model["name"],
             model["description"],
         )
-    
+
     console.print(table)

@@ -1,7 +1,9 @@
 """VLM Run API Models resource."""
-from typing import Dict, List
+
+from typing import List
 
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.client.types import ModelResponse
 
 
 class Models:
@@ -10,12 +12,17 @@ class Models:
     def __init__(self, client) -> None:
         """Initialize Models resource with client."""
         self._client = client
+        self._requestor = APIRequestor(client)
 
-    def list(self) -> List[Dict]:
+    def list(self) -> List[ModelResponse]:
         """List available models.
-        
+
         Returns:
-            List[Dict]: List of model objects
+            List[ModelResponse]: List of model objects with their capabilities
         """
-        # TODO: Implement with APIRequestor
-        return []
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url="v1/models",
+        )
+
+        return [ModelResponse(**model) for model in response]

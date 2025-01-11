@@ -1,6 +1,6 @@
 """Hub API commands."""
+
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -9,12 +9,14 @@ from rich import print as rprint
 
 app = typer.Typer(help="Hub operations")
 
+
 @app.command()
 def version(ctx: typer.Context) -> None:
     """Get hub version."""
     client = ctx.obj
     version = client.get_hub_version()
     rprint(f"Hub version: {version}")
+
 
 @app.command()
 def list(ctx: typer.Context) -> None:
@@ -27,7 +29,7 @@ def list(ctx: typer.Context) -> None:
     table.add_column("Name")
     table.add_column("Type")
     table.add_column("Version")
-    
+
     for item in items:
         table.add_row(
             item["id"],
@@ -35,8 +37,9 @@ def list(ctx: typer.Context) -> None:
             item["type"],
             item["version"],
         )
-    
+
     console.print(table)
+
 
 @app.command()
 def submit(

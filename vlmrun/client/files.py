@@ -1,10 +1,10 @@
 """VLM Run API Files resource."""
-from pathlib import Path
-from typing import Dict, List, Optional
 
-import requests
+from pathlib import Path
+from typing import Union
 
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.client.types import FileList, FileResponse
 
 
 class Files:
@@ -13,61 +13,94 @@ class Files:
     def __init__(self, client) -> None:
         """Initialize Files resource with client."""
         self._client = client
+        self._requestor = APIRequestor(client)
 
-    def list(self) -> List[Dict]:
+    def list(self) -> FileList:
         """List all files.
-        
-        Returns:
-            Dict: List of file objects
-        """
-        # TODO: Implement with APIRequestor
-        return []
 
-    def upload(self, file: Path | str, purpose: str = "fine-tune") -> Dict:
+        Returns:
+            FileList: List of file objects
+        """
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url="v1/files",
+        )
+
+        return FileList(
+            data=[FileResponse(**file) for file in response.get("data", [])]
+        )
+
+    def upload(
+        self, file: Union[Path, str], purpose: str = "fine-tune"
+    ) -> FileResponse:
         """Upload a file.
-        
+
         Args:
             file: Path to file to upload
             purpose: Purpose of file (default: fine-tune)
-            
-        Returns:
-            Dict: Uploaded file object
-        """
-        # TODO: Implement with APIRequestor
-        return {"id": "", "filename": str(file), "purpose": purpose}
 
-    def retrieve(self, file_id: str) -> Dict:
+        Returns:
+            FileResponse: Uploaded file object
+        """
+        if isinstance(file, str):
+            file = Path(file)
+
+        with open(file, "rb") as f:
+            files = {"file": (file.name, f)}
+            response, status_code, headers = self._requestor.request(
+                method="POST",
+                url="v1/files",
+                params={"purpose": purpose},
+                files=files,
+            )
+
+        return FileResponse(**response)
+
+    def retrieve(self, file_id: str) -> FileResponse:
         """Get file metadata.
-        
+
         Args:
             file_id: ID of file to retrieve
-            
+
         Returns:
-            Dict: File metadata
+            FileResponse: File metadata
         """
-        # TODO: Implement with APIRequestor
-        return {"id": file_id}
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url=f"v1/files/{file_id}",
+        )
+
+        return FileResponse(**response)
 
     def retrieve_content(self, file_id: str) -> bytes:
         """Get file content.
-        
+
         Args:
             file_id: ID of file to retrieve content for
-            
+
         Returns:
             bytes: File content
         """
-        # TODO: Implement with APIRequestor
-        return b""
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url=f"v1/files/{file_id}/content",
+            raw_response=True,
+        )
 
-    def delete(self, file_id: str) -> Dict:
+        return response
+
+    def delete(self, file_id: str) -> FileResponse:
         """Delete a file.
-        
+
         Args:
             file_id: ID of file to delete
-            
+
         Returns:
-            Dict: Deletion confirmation
+            FileResponse: Deletion confirmation
         """
-        # TODO: Implement with APIRequestor
-        return {"id": file_id, "deleted": True}
+        response, status_code, headers = self._requestor.request(
+            method="DELETE",
+            url=f"v1/files/{file_id}",
+        )
+
+        return FileResponse(**response)

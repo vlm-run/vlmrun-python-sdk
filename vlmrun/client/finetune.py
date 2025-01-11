@@ -1,7 +1,6 @@
 """VLM Run API Fine-tuning resource."""
-from typing import Dict, List, Optional
 
-from vlmrun.client.base_requestor import APIRequestor
+from typing import Dict, List, Optional
 
 
 class FineTuning:
@@ -18,10 +17,10 @@ class FineTuning:
         n_epochs: int = 1,
         batch_size: Optional[int] = None,
         learning_rate: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict:
         """Create a fine-tuning job.
-        
+
         Args:
             training_file: File ID for training data
             model: Base model to fine-tune
@@ -29,7 +28,7 @@ class FineTuning:
             batch_size: Batch size for training
             learning_rate: Learning rate for training
             **kwargs: Additional fine-tuning parameters
-            
+
         Returns:
             Dict: Created fine-tuning job
         """
@@ -38,7 +37,7 @@ class FineTuning:
 
     def list(self) -> List[Dict]:
         """List all fine-tuning jobs.
-        
+
         Returns:
             List[Dict]: List of fine-tuning jobs
         """
@@ -47,10 +46,10 @@ class FineTuning:
 
     def retrieve(self, job_id: str) -> Dict:
         """Get fine-tuning job details.
-        
+
         Args:
             job_id: ID of job to retrieve
-            
+
         Returns:
             Dict: Fine-tuning job details
         """
@@ -59,10 +58,10 @@ class FineTuning:
 
     def cancel(self, job_id: str) -> Dict:
         """Cancel a fine-tuning job.
-        
+
         Args:
             job_id: ID of job to cancel
-            
+
         Returns:
             Dict: Cancelled job details
         """
@@ -71,10 +70,10 @@ class FineTuning:
 
     def list_events(self, job_id: str) -> List[Dict]:
         """List events for a fine-tuning job.
-        
+
         Args:
             job_id: ID of job to get events for
-            
+
         Returns:
             List[Dict]: List of job events
         """

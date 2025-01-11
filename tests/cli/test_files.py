@@ -1,6 +1,4 @@
 """Test files subcommand."""
-import pytest
-from typer.testing import CliRunner
 
 from vlmrun.cli.cli import app
 

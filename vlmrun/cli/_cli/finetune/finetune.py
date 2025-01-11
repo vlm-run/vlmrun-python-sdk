@@ -1,5 +1,4 @@
 """Fine-tuning API commands."""
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -7,6 +6,7 @@ from rich.console import Console
 from rich import print as rprint
 
 app = typer.Typer(help="Fine-tuning operations")
+
 
 @app.command()
 def create(
@@ -28,6 +28,7 @@ def create(
     )
     rprint(f"Created fine-tuning job with ID: {result['id']}")
 
+
 @app.command()
 def list(ctx: typer.Context) -> None:
     """List all fine-tuning jobs."""
@@ -39,7 +40,7 @@ def list(ctx: typer.Context) -> None:
     table.add_column("Model")
     table.add_column("Status")
     table.add_column("Created At")
-    
+
     for job in jobs:
         table.add_row(
             job["id"],
@@ -47,8 +48,9 @@ def list(ctx: typer.Context) -> None:
             job["status"],
             job["created_at"],
         )
-    
+
     console.print(table)
+
 
 @app.command()
 def get(
@@ -60,6 +62,7 @@ def get(
     job = client.get_fine_tuning_job(job_id)
     rprint(job)
 
+
 @app.command()
 def cancel(
     ctx: typer.Context,
@@ -69,6 +72,7 @@ def cancel(
     client = ctx.obj
     client.cancel_fine_tuning_job(job_id)
     rprint(f"Cancelled fine-tuning job {job_id}")
+
 
 @app.command()
 def status(

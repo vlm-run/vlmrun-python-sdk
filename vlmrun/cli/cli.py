@@ -1,7 +1,7 @@
 """Main CLI implementation for vlmrun."""
+
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 import typer
@@ -20,12 +20,15 @@ app = typer.Typer(
     add_completion=True,
 )
 
+
 def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
         from vlmrun import version
+
         rprint(f"vlmrun version: {version.__version__}")
         raise typer.Exit()
+
 
 @app.callback()
 def main(
@@ -51,6 +54,7 @@ def main(
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
     ctx.obj = Client(api_key=api_key)
+
 
 # Add subcommands
 app.add_typer(files_app, name="files")
