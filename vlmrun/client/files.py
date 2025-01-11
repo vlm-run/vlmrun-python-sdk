@@ -30,7 +30,7 @@ class Files:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url="v1/files",
+            url="files",
         )
 
         return FileList(
@@ -56,7 +56,7 @@ class Files:
             files = {"file": (file.name, f)}
             response, status_code, headers = self._requestor.request(
                 method="POST",
-                url="v1/files",
+                url="files",
                 params={"purpose": purpose},
                 files=files,
             )
@@ -76,7 +76,7 @@ class Files:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"v1/files/{file_id}",
+            url=f"files/{file_id}",
         )
 
         if not isinstance(response, dict):
@@ -94,7 +94,7 @@ class Files:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"v1/files/{file_id}/content",
+            url=f"files/{file_id}/content",
             raw_response=True,
         )
 
@@ -111,7 +111,7 @@ class Files:
         """
         response, status_code, headers = self._requestor.request(
             method="DELETE",
-            url=f"v1/files/{file_id}",
+            url=f"files/{file_id}",
         )
 
         if not isinstance(response, dict):

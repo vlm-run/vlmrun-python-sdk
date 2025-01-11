@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass
 import os
+from functools import cached_property
 
+from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.files import Files
 from vlmrun.client.models import Models
 from vlmrun.client.finetune import FineTuning
@@ -24,7 +26,7 @@ class Client:
     """
 
     api_key: str | None = None
-    base_url: str = "https://api.vlm.run"  # Default URL base
+    base_url: str | None = None
     timeout: float = 30.0
 
     def __post_init__(self):
@@ -36,27 +38,33 @@ class Client:
         """
         # Handle API key first
         if not self.api_key:  # Handle both None and empty string
-            self.api_key = os.getenv("VLMRUN_API_KEY")
+            self.api_key = os.getenv("VLMRUN_API_KEY", None)
             if not self.api_key:  # Still None or empty after env check
                 raise ValueError(
                     "API key must be provided either through constructor "
                     "or VLMRUN_API_KEY environment variable"
                 )
 
-        # Handle base URL - normalize to include /v1 suffix
-        if self.base_url == "https://api.vlm.run":  # Only modify if using default
-            env_base_url = os.getenv("VLMRUN_BASE_URL")
-            if env_base_url:
-                # Use environment URL as-is since it includes /v1
-                self.base_url = env_base_url
-            else:
-                # Add /v1 to default URL
-                self.base_url = f"{self.base_url}/v1"
+        # Handle base URL
+        if self.base_url is None:
+            self.base_url = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
 
         # Initialize resources
         self.files = Files(self)
         self.models = Models(self)
         self.finetune = FineTuning(self)
+
+    @cached_property
+    def requestor(self):
+        """Requestor for the API."""
+        return APIRequestor(self)
+
+    def healthcheck(self) -> bool:
+        """Check the health of the API."""
+        _, status_code, _ = self.requestor.request(
+            method="GET", url="/health", raw_response=True
+        )
+        return status_code == 200
 
     # Deprecated methods - use resource classes instead
     def list_files(self):

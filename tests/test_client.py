@@ -1,3 +1,5 @@
+import os
+import requests
 import pytest
 from vlmrun.client import Client
 
@@ -52,3 +54,25 @@ def test_client_env_precedence(monkeypatch):
     client = Client(api_key="test-key", base_url="https://custom.api")
     assert client.api_key == "test-key"  # Constructor value
     assert client.base_url == "https://custom.api"  # Constructor value
+
+
+def _healthcheck():
+    return (
+        requests.get(
+            os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1") + "/health"
+        ).status_code
+        == 200
+    )
+
+
+@pytest.mark.skipif(
+    os.getenv("VLMRUN_API_KEY", None) is None
+    and os.getenv("VLMRUN_BASE_URL", None) is None,
+    reason="No VLMRUN_API_KEY and VLMRUN_BASE_URL in environment",
+)
+@pytest.mark.skipif(not _healthcheck(), reason="API is not healthy")
+def test_client_health():
+    """Test client health check."""
+    client = Client()
+    assert client.healthcheck()
+    assert len(client.models.list()) > 0, "No models found"

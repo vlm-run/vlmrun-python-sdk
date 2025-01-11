@@ -5,7 +5,11 @@ from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
 
-app = typer.Typer(help="Fine-tuning operations")
+app = typer.Typer(
+    help="Fine-tuning operations",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 
 @app.command()
