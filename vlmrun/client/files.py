@@ -1,17 +1,24 @@
 """VLM Run API Files resource."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Union
 
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.types.abstract import Client
 from vlmrun.client.types import FileList, FileResponse
 
 
 class Files:
     """Files resource for VLM Run API."""
 
-    def __init__(self, client) -> None:
-        """Initialize Files resource with client."""
+    def __init__(self, client: "Client") -> None:
+        """Initialize Files resource with client.
+
+        Args:
+            client: VLM Run API client instance
+        """
         self._client = client
         self._requestor = APIRequestor(client)
 
@@ -54,7 +61,9 @@ class Files:
                 files=files,
             )
 
-        return FileResponse(**response)
+            if not isinstance(response, dict):
+                raise TypeError("Expected dict response")
+            return FileResponse(**response)
 
     def retrieve(self, file_id: str) -> FileResponse:
         """Get file metadata.
@@ -70,6 +79,8 @@ class Files:
             url=f"v1/files/{file_id}",
         )
 
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
         return FileResponse(**response)
 
     def retrieve_content(self, file_id: str) -> bytes:
@@ -103,4 +114,6 @@ class Files:
             url=f"v1/files/{file_id}",
         )
 
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
         return FileResponse(**response)

@@ -1,8 +1,10 @@
 """Type definitions for VLM Run API responses."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 @dataclass
@@ -32,7 +34,7 @@ class ModelResponse:
     id: str
     name: str
     domain: str
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
 
 @dataclass
@@ -40,5 +42,5 @@ class APIError(Exception):
     """API error response."""
 
     message: str
-    http_status: Optional[int] = None
-    headers: Optional[Dict[str, str]] = None
+    http_status: int | None = None
+    headers: Dict[str, str] | None = None

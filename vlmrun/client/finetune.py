@@ -1,13 +1,21 @@
 """VLM Run API Fine-tuning resource."""
 
-from typing import Dict, List, Optional
+from __future__ import annotations
+
+from typing import Dict, List
+
+from vlmrun.types.abstract import Client
 
 
 class FineTuning:
     """Fine-tuning resource for VLM Run API."""
 
-    def __init__(self, client) -> None:
-        """Initialize FineTuning resource with client."""
+    def __init__(self, client: "Client") -> None:
+        """Initialize FineTuning resource with client.
+
+        Args:
+            client: VLM Run API client instance
+        """
         self._client = client
 
     def create(
@@ -15,8 +23,8 @@ class FineTuning:
         training_file: str,
         model: str,
         n_epochs: int = 1,
-        batch_size: Optional[int] = None,
-        learning_rate: Optional[float] = None,
+        batch_size: int | None = None,
+        learning_rate: float | None = None,
         **kwargs,
     ) -> Dict:
         """Create a fine-tuning job.

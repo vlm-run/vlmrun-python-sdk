@@ -1,6 +1,6 @@
 """VLM Run API requestor implementation."""
 
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Tuple
 from urllib.parse import urljoin
 
 import requests
@@ -72,7 +72,7 @@ class APIRequestor:
         files: Dict[str, Any] | None = None,
         headers: Dict[str, str] | None = None,
         raw_response: bool = False,
-    ) -> Tuple[Union[Dict[str, Any], bytes], int, Dict[str, str]]:
+    ) -> Tuple[Dict[str, Any], int, Dict[str, str]] | Tuple[bytes, int, Dict[str, str]]:
         """Make an API request with retry logic.
 
         Args:
