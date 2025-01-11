@@ -33,20 +33,44 @@ jobs:
           restore-keys: |
             pip-
 
-      - name: Install dependencies
+      - name: Install base dependencies
         run: |
           which python
           python -m pip install --upgrade pip
-          pip install -e '.[test]'
+          pip install -e '.[test,all]'
         if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Quality Check
         uses: pre-commit/action@v3.0.1
         continue-on-error: true
 
-      - name: Run tests
+      - name: Test base installation
         env:
           VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
           VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
         run: |
+          make test
+
+      - name: Test video extra
+        env:
+          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
+          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
+        run: |
+          pip install -e '.[video]'
+          pytest tests/common/test_video.py
+
+      - name: Test doc extra
+        env:
+          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
+          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
+        run: |
+          pip install -e '.[doc]'
+          pytest tests/common/test_pdf.py
+
+      - name: Test all extras
+        env:
+          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
+          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
+        run: |
+          pip install -e '.[all]'
           make test
