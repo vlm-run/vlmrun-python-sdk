@@ -33,20 +33,32 @@ jobs:
           restore-keys: |
             pip-
 
-      - name: Install dependencies
+      - name: Install base dependencies
         run: |
           which python
           python -m pip install --upgrade pip
-          pip install -e '.[test]'
+          pip install -e '.[test,all]'
         if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Quality Check
         uses: pre-commit/action@v3.0.1
         continue-on-error: true
 
-      - name: Run tests
+      - name: Test base installation
         env:
           VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
           VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
         run: |
+          # Test base installation first to verify dependency isolation
+          pip install -e .
+          pytest tests/common/test_dependencies.py::test_base_dependencies -v
+
+      - name: Run all tests
+        env:
+          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
+          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
+        run: |
+          # Install all extras and run complete test suite
+          pip install -e '.[all]'
+          pytest tests/common/test_dependencies.py -v
           make test
