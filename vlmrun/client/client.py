@@ -24,7 +24,7 @@ class Client:
     """
 
     api_key: str | None = None
-    base_url: str | None = None  # Will default to https://api.vlm.run/v1
+    base_url: str = "https://api.vlm.run/v1"  # Default URL
     timeout: float = 30.0
 
     def __post_init__(self):
@@ -32,21 +32,21 @@ class Client:
 
         This method handles environment variable fallbacks:
         - api_key: Falls back to VLMRUN_API_KEY environment variable
-        - base_url: Falls back to VLMRUN_BASE_URL environment variable,
-          then to https://api.vlm.run/v1
+        - base_url: Can be overridden by constructor or VLMRUN_BASE_URL environment variable
         """
-        # Handle API key
-        if self.api_key is None:
+        # Handle API key first
+        if not self.api_key:  # Handle both None and empty string
             self.api_key = os.getenv("VLMRUN_API_KEY")
-            if self.api_key is None:
+            if not self.api_key:  # Still None or empty after env check
                 raise ValueError(
                     "API key must be provided either through constructor "
                     "or VLMRUN_API_KEY environment variable"
                 )
 
-        # Handle base URL - constructor takes precedence over environment
-        if self.base_url is None:
-            self.base_url = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
+        # Handle base URL - only use environment if no constructor value provided
+        env_base_url = os.getenv("VLMRUN_BASE_URL")
+        if env_base_url and self.base_url == "https://api.vlm.run/v1":
+            self.base_url = env_base_url
 
         # Initialize resources
         self.files = Files(self)
