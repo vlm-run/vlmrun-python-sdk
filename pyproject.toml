@@ -39,3 +39,10 @@ dependencies = {file = ["requirements/requirements.txt"]}
 
 [tool.setuptools.packages.find]
 include = ["vlmrun*"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+
+[project.scripts]
+vlmrun = "vlmrun.cli.cli:app"
