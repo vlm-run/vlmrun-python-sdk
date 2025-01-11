@@ -3,6 +3,8 @@
 import pytest
 from typer.testing import CliRunner
 
+from vlmrun.client.types import ModelResponse
+
 
 @pytest.fixture
 def runner():
@@ -15,8 +17,9 @@ def mock_client(monkeypatch):
     """Mock the Client class."""
 
     class MockClient:
-        def __init__(self, api_key=None):
+        def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
+            self.base_url = base_url or "https://api.vlm.run"
 
         def list_files(self):
             return [
@@ -60,7 +63,7 @@ def mock_client(monkeypatch):
             return {"status": "running"}
 
         def list_models(self):
-            return [{"model": "model1", "domain": "test-domain"}]
+            return [ModelResponse(model="model1", domain="test-domain")]
 
         def generate_image(self, prompt):
             return b"image data"

@@ -16,7 +16,7 @@ from vlmrun.cli._cli.hub import app as hub_app
 
 app = typer.Typer(
     name="vlmrun",
-    help="Command line interface for VLM Run",
+    help="CLI for VLM Run (https://app.vlm.run)",
     add_completion=True,
 )
 
@@ -33,12 +33,17 @@ def version_callback(value: bool) -> None:
 @app.callback()
 def main(
     ctx: typer.Context,
+    base_url: Optional[str] = typer.Option(
+        None,
+        help="Base URL. Defaults to environment variable VLMRUN_BASE_URL",
+        envvar="VLMRUN_BASE_URL",
+    ),
     api_key: Optional[str] = typer.Option(
         None,
         help="API Key. Defaults to environment variable VLMRUN_API_KEY",
         envvar="VLMRUN_API_KEY",
     ),
-    debug: bool = typer.Option(
+    debug: Optional[bool] = typer.Option(
         False,
         "--debug",
         help="Enable debug mode",
@@ -53,7 +58,7 @@ def main(
     ),
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
-    ctx.obj = Client(api_key=api_key)
+    ctx.obj = Client(api_key=api_key, base_url=base_url)
 
 
 # Add subcommands

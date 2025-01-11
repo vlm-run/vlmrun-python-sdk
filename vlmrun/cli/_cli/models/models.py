@@ -4,7 +4,12 @@ import typer
 from rich.table import Table
 from rich.console import Console
 
-app = typer.Typer(help="Model operations")
+# Show the help message for the models command if no subcommand is provided
+app = typer.Typer(
+    help="Model operations",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 
 @app.command()
@@ -19,8 +24,8 @@ def list(ctx: typer.Context) -> None:
 
     for model in models:
         table.add_row(
-            model["model"],
-            model["domain"],
+            model.model,
+            model.domain,
         )
 
     console.print(table)
