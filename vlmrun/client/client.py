@@ -59,6 +59,19 @@ class Client:
         """Requestor for the API."""
         return APIRequestor(self)
 
+    @cached_property
+    def openai(self):
+        """OpenAI client."""
+        try:
+            from openai import OpenAI as _OpenAI
+        except ImportError:
+            raise ImportError(
+                "OpenAI client is not installed. Please install it with "
+                "`pip install openai`"
+            )
+
+        return _OpenAI(api_key=self.api_key, base_url=f"{self.base_url}/openai")
+
     def healthcheck(self) -> bool:
         """Check the health of the API."""
         _, status_code, _ = self.requestor.request(
