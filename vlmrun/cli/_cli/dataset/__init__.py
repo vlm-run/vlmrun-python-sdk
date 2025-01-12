@@ -1,1 +1,1 @@
-from . import dataset  # noqa: F401
+from .dataset import app  # noqa: F401
