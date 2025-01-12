@@ -63,6 +63,21 @@ def encode_image(
         raise ValueError(f"Failed to save image in {image_format} format") from e
 
 
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+}
+
+
 def remote_image(url: str | Path) -> Image.Image:
     """Load an image from a URL or local path.
 
@@ -75,20 +90,6 @@ def remote_image(url: str | Path) -> Image.Image:
     Raises:
         ValueError: If URL/path is invalid or image cannot be loaded
     """
-    _headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Cache-Control": "max-age=0",
-    }
-
     if isinstance(url, Path) or (isinstance(url, str) and not url.startswith("http")):
         try:
             return Image.open(url).convert("RGB")
@@ -96,13 +97,17 @@ def remote_image(url: str | Path) -> Image.Image:
             raise ValueError(f"Failed to open image from path={url}") from e
 
     try:
-        response = requests.get(url, headers=_headers, timeout=10)
+        response = requests.get(url, headers=_HEADERS, timeout=10)
         response.raise_for_status()
         return Image.open(BytesIO(response.content)).convert("RGB")
+    except requests.exceptions.ConnectionError as e:
+        if "Name or service not known" in str(e):
+            raise ValueError(f"Domain not found: {url}")
+        raise ValueError(f"Failed to connect to {url}")
     except requests.exceptions.RequestException as e:
-        raise ValueError(f"Failed to download image from url={url}") from e
+        raise ValueError(f"Failed to download image: {e}")
     except Exception as e:
-        raise ValueError(f"Failed to process image from url={url}") from e
+        raise ValueError(f"Failed to process image from {url}: {e}")
 
 
 def download_image(url: str) -> Image.Image:
