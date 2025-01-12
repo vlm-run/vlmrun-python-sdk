@@ -1,6 +1,5 @@
 import typer
 from typing import List
-from vlmrun.cli.utils import get_context_client
 
 app = typer.Typer(help="Dataset operations")
 
@@ -37,7 +36,7 @@ def generate(
     This command allows you to generate datasets from YouTube playlists or videos.
     The generated dataset will be saved according to the specified format and parameters.
     """
-    client = get_context_client(ctx)
+    client = ctx.obj
     
     # Validate url_type
     valid_url_types = ["yt_playlist", "yt_video"]
