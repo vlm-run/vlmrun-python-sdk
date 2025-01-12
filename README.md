@@ -47,7 +47,8 @@ response = client.image.generate(
 ### Image Utilities
 
 ```python
-from vlmrun.common.image import encode_image, download_image
+from vlmrun.common.image import encode_image
+from vlmrun.common.utils import download_image
 from PIL import Image
 
 # Convert image to base64 or binary
