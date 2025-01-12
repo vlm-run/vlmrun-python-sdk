@@ -88,7 +88,9 @@ def remote_image(url: str | Path) -> Image.Image:
         PIL Image in RGB format
 
     Raises:
-        ValueError: If URL/path is invalid or image cannot be loaded
+        ValueError: If URL/path is invalid
+        requests.exceptions.RequestException: If there's an error downloading the image
+        IOError: If there's an error processing the image
     """
     if isinstance(url, Path) or (isinstance(url, str) and not url.startswith("http")):
         try:
@@ -100,14 +102,11 @@ def remote_image(url: str | Path) -> Image.Image:
         response = requests.get(url, headers=_HEADERS, timeout=10)
         response.raise_for_status()
         return Image.open(BytesIO(response.content)).convert("RGB")
-    except requests.exceptions.ConnectionError as e:
-        if "Name or service not known" in str(e):
-            raise ValueError(f"Domain not found: {url}")
-        raise ValueError(f"Failed to connect to {url}")
-    except requests.exceptions.RequestException as e:
-        raise ValueError(f"Failed to download image: {e}")
+    except requests.exceptions.RequestException:
+        # Let request exceptions propagate through
+        raise
     except Exception as e:
-        raise ValueError(f"Failed to process image from {url}: {e}")
+        raise ValueError(f"Failed to process image from {url}") from e
 
 
 def download_image(url: str) -> Image.Image:
@@ -120,7 +119,8 @@ def download_image(url: str) -> Image.Image:
         PIL Image in RGB format
 
     Raises:
-        ValueError: If URL is invalid or image cannot be downloaded
+        ValueError: If URL format is invalid
+        requests.exceptions.RequestException: If there's an error downloading the image
     """
     if not isinstance(url, str):
         raise ValueError(f"URL must be a string, got {type(url)}")
