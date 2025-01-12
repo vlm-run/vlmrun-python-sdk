@@ -96,10 +96,29 @@ def remote_image(url: str | Path) -> Image.Image:
             raise ValueError(f"Failed to open image from path={url}") from e
 
     try:
-        bytes = requests.get(url, headers=_headers).content
-        return Image.open(BytesIO(bytes)).convert("RGB")
-    except Exception as e:
+        response = requests.get(url, headers=_headers, timeout=10)
+        response.raise_for_status()
+        return Image.open(BytesIO(response.content)).convert("RGB")
+    except requests.exceptions.RequestException as e:
         raise ValueError(f"Failed to download image from url={url}") from e
+    except Exception as e:
+        raise ValueError(f"Failed to process image from url={url}") from e
 
-# For backward compatibility
-download_image = remote_image
+
+def download_image(url: str) -> Image.Image:
+    """Download an image from a URL.
+
+    Args:
+        url: URL of the image to download
+
+    Returns:
+        PIL Image in RGB format
+
+    Raises:
+        ValueError: If URL is invalid or image cannot be downloaded
+    """
+    if not isinstance(url, str):
+        raise ValueError(f"URL must be a string, got {type(url)}")
+    if not url.startswith(("http://", "https://")):
+        raise ValueError(f"Invalid URL format: {url}")
+    return remote_image(url)
