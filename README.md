@@ -26,6 +26,25 @@ The [VLM Run Python SDK](https://pypi.org/project/vlmrun/) is the official Pytho
 pip install vlmrun
 ```
 
+### Installation with Optional Features
+
+The package provides optional features that can be installed based on your needs:
+
+- Video processing features (numpy, opencv-python):
+  ```bash
+  pip install "vlmrun[video]"
+  ```
+
+- Document processing features (pypdfium2):
+  ```bash
+  pip install "vlmrun[doc]"
+  ```
+
+- All optional features:
+  ```bash
+  pip install "vlmrun[all]"
+  ```
+
 ### Basic Usage
 
 ```python
@@ -65,13 +84,18 @@ image = download_image("https://example.com/image.jpg")
 
 ```bash
 vlmrun/
-├── client/           # Client implementation
-│   └── sync.py      # Synchronous client
-├── common/          # Common utilities
-│   ├── auth.py      # Authentication utilities
-│   └── image.py     # Image processing utilities
-└── types/           # Type definitions
-    └── responses.py # API response types
+├── client/               # Client implementation
+│   ├── client.py         # Main Client class
+│   ├── base_requestor.py # Low-level request logic
+│   ├── files.py          # File operations
+│   ├── models.py         # Model operations
+│   ├── finetune.py       # Fine-tuning operations
+│   └── types.py          # Client type definitions
+├── common/              # Common utilities
+│   ├── auth.py          # Authentication utilities
+│   └── image.py         # Image processing utilities
+└── types/              # Type definitions
+    └── abstract.py     # Abstract base classes
 ```
 
 ## 🔗 Quick Links
