@@ -1,7 +1,62 @@
+import os
 import typer
 from typing import List
+from pathlib import Path
+
+from vlmrun.common.utils import create_archive, list_image_files
 
 app = typer.Typer(help="Dataset operations")
+
+
+@app.command()
+def create(
+    ctx: typer.Context,
+    directory: Path = typer.Option(..., help="Directory containing images", exists=True, dir_okay=True, file_okay=False),
+    domain: str = typer.Option(..., help="Domain for the dataset"),
+) -> None:
+    """Create a dataset from a directory of images.
+
+    This command will:
+    1. Create a tar.gz archive from the image directory
+    2. Upload the archive using client.upload_file
+    3. Create a dataset using the uploaded file
+    """
+    client = ctx.obj
+
+    # Verify directory contains images
+    image_files = list_image_files(directory)
+    if not image_files:
+        typer.echo("Error: No image files found in directory", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Found {len(image_files)} image files")
+
+    # Create archive
+    try:
+        archive_path = create_archive(directory)
+        typer.echo(f"Created archive: {archive_path}")
+
+        # Upload archive
+        file_response = client.files.upload(archive_path, purpose="dataset")
+        typer.echo(f"Uploaded archive with file ID: {file_response.id}")
+
+        # Create dataset
+        dataset_response = client.dataset.create(
+            file_id=file_response.id,
+            domain=domain,
+            dataset_type="images"
+        )
+        typer.echo(f"Dataset created successfully! ID: {dataset_response.dataset_id}")
+
+        # Verify dataset creation
+        dataset_info = client.dataset.get(dataset_response.dataset_id)
+        typer.echo(f"Dataset file ID: {dataset_info.file_id}")
+
+    finally:
+        # Cleanup temporary archive
+        if "archive_path" in locals() and os.path.exists(archive_path):
+            os.unlink(archive_path)
+            typer.echo("Cleaned up temporary archive")
 
 
 @app.command()

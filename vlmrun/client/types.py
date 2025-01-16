@@ -8,6 +8,17 @@ from typing import Dict, List
 
 
 @dataclass
+class DatasetResponse:
+    """Response from dataset operations."""
+
+    dataset_id: str
+    file_id: str
+    domain: str
+    dataset_type: str
+    created_at: datetime
+
+
+@dataclass
 class FileResponse:
     """Response from file operations."""
 
