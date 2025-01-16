@@ -2,19 +2,14 @@
 
 from io import BytesIO
 from pathlib import Path
-from typing import Union
+from typing import Union, Literal
+from loguru import logger
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 import requests
 from PIL import Image
+from vlmrun.constants import VLMRUN_CACHE_DIR
 
-
-# VLMRun directory constants
-VLMRUN_CACHE_DIR = Path.home() / ".vlmrun" / "cache"
-VLMRUN_HUB_DIR = Path.home() / ".vlmrun" / "hub"
-
-# Create necessary directories
-VLMRUN_HUB_DIR.mkdir(parents=True, exist_ok=True)
-VLMRUN_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # HTTP request headers
 _HEADERS = {
@@ -81,3 +76,30 @@ def download_image(url: str) -> Image.Image:
     if not url.startswith(("http://", "https://")):
         raise ValueError(f"Invalid URL format: {url}")
     return remote_image(url)
+
+
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(3), reraise=True)
+def download_artifact(
+    url: str, format: Literal["image", "json", "file"]
+) -> Union[Image.Image, dict, Path]:
+    if not url.startswith("http"):
+        raise ValueError(f"Invalid URL: {url}")
+    if format == "image":
+        bytes = requests.get(url, headers=_HEADERS).content
+        return Image.open(BytesIO(bytes)).convert("RGB")
+    elif format == "json":
+        return requests.get(url, headers=_HEADERS).json()
+    elif format == "file":
+        path = VLMRUN_CACHE_DIR / "downloads" / Path(url).name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            with requests.get(url, headers=_HEADERS, stream=True) as r:
+                r.raise_for_status()
+                with path.open("wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+        else:
+            logger.debug(f"File already exists [path={path}]")
+        return path
+    else:
+        raise ValueError(f"Invalid format: {format}")
