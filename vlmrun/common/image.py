@@ -51,9 +51,13 @@ def encode_image(
 
     save_params = {
         "format": image_format,
-        **({"quality": quality, "subsampling": 0} if image_format.upper() == "JPEG" else {})
+        **(
+            {"quality": quality, "subsampling": 0}
+            if image_format.upper() == "JPEG"
+            else {}
+        ),
     }
-    
+
     try:
         image.save(buffered, **save_params)
         img_str = b64encode(buffered.getvalue()).decode()

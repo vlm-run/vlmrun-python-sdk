@@ -18,6 +18,7 @@ def patch_response_format(response_format: Type[BaseModel]) -> Type[BaseModel]:
     This function patches the response format to handle these fields. We convert them to strings and
     then convert them back to the original type.
     """
+
     def patch_pydantic_field_annotation(annotation: Any) -> Any:
         """Convert unsupported types to string."""
         if annotation in [date, datetime, time, timedelta]:
@@ -48,6 +49,8 @@ def patch_response_format(response_format: Type[BaseModel]) -> Type[BaseModel]:
             field_name: (patch_pydantic_field_annotation(field.annotation), field)
             for field_name, field in fields.items()
         }
-        return create_model(f"{model.__name__}_patched", __base__=BaseModel, **new_fields)
+        return create_model(
+            f"{model.__name__}_patched", __base__=BaseModel, **new_fields
+        )
 
     return patch_pydantic_model(response_format)
