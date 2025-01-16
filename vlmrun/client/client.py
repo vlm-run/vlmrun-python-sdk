@@ -5,6 +5,7 @@ import os
 from functools import cached_property
 
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.client.dataset import Dataset
 from vlmrun.client.files import Files
 from vlmrun.client.models import Models
 from vlmrun.client.finetune import FineTuning
@@ -50,6 +51,7 @@ class Client:
             self.base_url = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
 
         # Initialize resources
+        self.dataset = Dataset(self)
         self.files = Files(self)
         self.models = Models(self)
         self.finetune = FineTuning(self)

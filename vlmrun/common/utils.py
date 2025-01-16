@@ -2,10 +2,14 @@
 
 from io import BytesIO
 from pathlib import Path
-from typing import Union, Literal
+from typing import Union, Literal, List
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+import os
+import time
+import tarfile
+import tempfile
 import requests
 from PIL import Image
 from vlmrun.constants import VLMRUN_CACHE_DIR
@@ -79,6 +83,58 @@ def download_image(url: str) -> Image.Image:
 
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(3), reraise=True)
+def create_archive(directory: Union[str, Path]) -> str:
+    """Create a tar.gz archive from a directory.
+
+    Args:
+        directory: Path to directory to archive
+
+    Returns:
+        str: Path to created archive file
+
+    Raises:
+        ValueError: If directory does not exist
+    """
+    if isinstance(directory, str):
+        directory = Path(directory)
+
+    if not directory.is_dir():
+        raise ValueError(f"Directory does not exist: {directory}")
+
+    # Create archive in temp directory
+    temp_dir = tempfile.gettempdir()
+    archive_path = os.path.join(temp_dir, f"dataset_{int(time.time())}.tar.gz")
+
+    with tarfile.open(archive_path, "w:gz") as tar:
+        tar.add(directory, arcname=directory.name)
+
+    return archive_path
+
+
+def list_image_files(directory: Union[str, Path]) -> List[Path]:
+    """List all image files in a directory.
+
+    Args:
+        directory: Path to directory to search
+
+    Returns:
+        List[Path]: List of image file paths
+
+    Raises:
+        ValueError: If directory does not exist
+    """
+    if isinstance(directory, str):
+        directory = Path(directory)
+
+    if not directory.is_dir():
+        raise ValueError(f"Directory does not exist: {directory}")
+
+    image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+    return [
+        p for p in directory.rglob("*") if p.is_file() and p.suffix.lower() in image_extensions
+    ]
+
+
 def download_artifact(
     url: str, format: Literal["image", "json", "file"]
 ) -> Union[Image.Image, dict, Path]:
