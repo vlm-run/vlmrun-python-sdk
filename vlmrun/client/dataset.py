@@ -1,7 +1,6 @@
 """VLM Run API Dataset resource."""
 
 from __future__ import annotations
-from typing import Dict, Any
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import Client
@@ -20,12 +19,15 @@ class Dataset:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def create(self, file_id: str, domain: str, dataset_type: str = "images") -> DatasetResponse:
+    def create(
+        self, file_id: str, domain: str, dataset_name: str, dataset_type: str = "images"
+    ) -> DatasetResponse:
         """Create a dataset from an uploaded file.
 
         Args:
             file_id: ID of the uploaded file to create dataset from
             domain: Domain for the dataset
+            dataset_name: Name of the dataset
             dataset_type: Type of dataset (images, videos, or documents)
 
         Returns:
@@ -40,6 +42,7 @@ class Dataset:
             data={
                 "file_id": file_id,
                 "domain": domain,
+                "dataset_name": dataset_name,
                 "dataset_type": dataset_type,
             },
         )

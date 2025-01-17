@@ -3,7 +3,7 @@ import typer
 from typing import List
 from pathlib import Path
 
-from vlmrun.common.utils import create_archive, list_image_files
+from vlmrun.common.utils import create_archive
 
 app = typer.Typer(help="Dataset operations")
 
@@ -11,8 +11,18 @@ app = typer.Typer(help="Dataset operations")
 @app.command()
 def create(
     ctx: typer.Context,
-    directory: Path = typer.Option(..., help="Directory containing images", exists=True, dir_okay=True, file_okay=False),
+    directory: Path = typer.Option(
+        ...,
+        help="Directory containing images, PDFs or videos",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+    ),
     domain: str = typer.Option(..., help="Domain for the dataset"),
+    dataset_name: str = typer.Option(..., help="Name of the dataset"),
+    dataset_type: str = typer.Option(
+        ..., help="Type of dataset ('images', 'pdfs', 'videos')"
+    ),
 ) -> None:
     """Create a dataset from a directory of images.
 
@@ -23,13 +33,41 @@ def create(
     """
     client = ctx.obj
 
-    # Verify directory contains images
-    image_files = list_image_files(directory)
-    if not image_files:
-        typer.echo("Error: No image files found in directory", err=True)
+    if dataset_type not in ("images", "pdfs", "videos"):
+        typer.echo("Error: Invalid dataset type", err=True)
         raise typer.Exit(1)
 
-    typer.echo(f"Found {len(image_files)} image files")
+    if dataset_type == "images":
+        image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+        files = [
+            p
+            for p in directory.rglob("*")
+            if p.is_file() and p.suffix.lower() in image_extensions
+        ]
+    elif dataset_type == "pdfs":
+        files = [
+            p
+            for p in directory.rglob("*")
+            if p.is_file() and p.suffix.lower() == ".pdf"
+        ]
+
+    elif dataset_type == "videos":
+        video_extensions = {".mp4", ".webm"}
+        files = [
+            p
+            for p in directory.rglob("*")
+            if p.is_file() and p.suffix.lower() in video_extensions
+        ]
+    else:
+        raise ValueError(f"Invalid dataset type: {dataset_type}")
+
+    if not len(files):
+        typer.echo(
+            f"Error: No files of type={dataset_type}] found in directory", err=True
+        )
+        raise typer.Exit(1)
+
+    typer.echo(f"Available files [n={len(files)}, dataset_type={dataset_type}]")
 
     # Create archive
     try:
@@ -44,7 +82,8 @@ def create(
         dataset_response = client.dataset.create(
             file_id=file_response.id,
             domain=domain,
-            dataset_type="images"
+            dataset_name=dataset_name,
+            dataset_type=dataset_type,
         )
         typer.echo(f"Dataset created successfully! ID: {dataset_response.dataset_id}")
 
