@@ -12,9 +12,10 @@ class DatasetResponse:
     """Response from dataset operations."""
 
     dataset_id: str
-    file_id: str
-    domain: str
+    dataset_uri: str
     dataset_type: str
+    domain: str
+    message: str
     created_at: datetime
 
 

@@ -27,24 +27,34 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def create(self, file_id: str, domain: str, dataset_type: str = "images") -> DatasetResponse:
+            def create(
+                self,
+                file_id: str,
+                domain: str,
+                dataset_name: str,
+                dataset_type: str = "images",
+            ) -> DatasetResponse:
                 if dataset_type not in ["images", "videos", "documents"]:
-                    raise ValueError("dataset_type must be one of: images, videos, documents")
+                    raise ValueError(
+                        "dataset_type must be one of: images, videos, documents"
+                    )
                 return DatasetResponse(
                     dataset_id="dataset1",
-                    file_id=file_id,
-                    domain=domain,
+                    dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                     dataset_type=dataset_type,
-                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00")
+                    domain=domain,
+                    message="Dataset created successfully",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
                 )
 
             def get(self, dataset_id: str) -> DatasetResponse:
                 return DatasetResponse(
-                    dataset_id=dataset_id,
-                    file_id="file1",
-                    domain="test-domain",
+                    dataset_id="dataset1",
+                    dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                     dataset_type="images",
-                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00")
+                    domain="test-domain",
+                    message="Dataset created successfully",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
                 )
 
         def list_files(self):
