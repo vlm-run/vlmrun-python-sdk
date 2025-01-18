@@ -19,9 +19,6 @@ def test_hub_health(monkeypatch):
     assert response["status"] == "ok"
     assert response["hub_version"] == "1.0.0"
     
-    # Test convenience method
-    assert client.get_hub_version() == "1.0.0"
-
 
 def test_hub_health_error(monkeypatch):
     """Test hub health check error handling."""

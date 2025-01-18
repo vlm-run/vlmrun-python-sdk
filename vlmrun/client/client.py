@@ -133,17 +133,6 @@ class Client:
     def generate_document(self, prompt: str):
         raise NotImplementedError("Document generation not yet implemented")
 
-    def get_hub_version(self) -> str:
-        """Get the hub version.
-        
-        This is a convenience method that calls hub.get_health()
-        and extracts the version.
-        
-        Returns:
-            The hub version string
-        """
-        return self.hub.get_health()["hub_version"]
-
     # Deprecated methods - use hub resource instead
     def list_hub_items(self):
         """Use client.hub.list_domains() instead. This method is deprecated."""

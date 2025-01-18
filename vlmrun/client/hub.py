@@ -1,42 +1,10 @@
 """VLM Run Hub API client implementation."""
 
 from typing import Any, Dict, List
+from dataclasses import asdict
 
 from vlmrun.client.base_requestor import APIRequestor, APIError
-
-
-class HubSchemaQueryRequest:
-    """Request model for hub schema queries."""
-    
-    def __init__(self, domain: str) -> None:
-        self.domain = domain
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API request."""
-        return {"domain": self.domain}
-
-
-class HubSchemaQueryResponse:
-    """Response model for hub schema queries."""
-    
-    def __init__(
-        self,
-        schema_json: Dict[str, Any],
-        schema_version: str,
-        schema_hash: str
-    ) -> None:
-        self.schema_json = schema_json
-        self.schema_version = schema_version
-        self.schema_hash = schema_hash
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HubSchemaQueryResponse":
-        """Create from API response dictionary."""
-        return cls(
-            schema_json=data["schema_json"],
-            schema_version=data["schema_version"],
-            schema_hash=data["schema_hash"]
-        )
+from vlmrun.client.types import HubSchemaQueryRequest, HubSchemaQueryResponse
 
 
 class Hub:
@@ -136,9 +104,9 @@ class Hub:
             response, _, _ = self._client.requestor.request(
                 method="POST",
                 url="/hub/schema",
-                data=request.to_dict(),
+                data=asdict(request),
                 raw_response=False
             )
-            return HubSchemaQueryResponse.from_dict(response)
+            return HubSchemaQueryResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to get schema for domain {domain}: {str(e)}")
