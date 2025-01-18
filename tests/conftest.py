@@ -1,10 +1,17 @@
 """Test fixtures for vlmrun tests."""
 
 import pytest
+from unittest.mock import MagicMock
 from typer.testing import CliRunner
 
 from datetime import datetime
-from vlmrun.client.types import ModelResponse, DatasetResponse
+from vlmrun.client.types import (
+    ModelResponse,
+    DatasetResponse,
+    ModelFinetuningRequest,
+    ModelFinetuningResponse,
+    FinetunedImagePredictionRequest,
+)
 
 
 @pytest.fixture
@@ -22,6 +29,62 @@ def mock_client(monkeypatch):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
             self.dataset = self.Dataset(self)
+            self.finetune = self.FineTuning(self)
+
+        class FineTuning:
+            def __init__(self, client):
+                self._client = client
+                self.health = MagicMock(return_value=True)
+                self.list_models = MagicMock(side_effect=self._list_models)
+                self.create_fit = MagicMock(side_effect=self._create_fit)
+                self.retrieve_fit = MagicMock(side_effect=self._retrieve_fit)
+                self.generate = MagicMock(side_effect=self._generate)
+
+            def _list_models(self):
+                if getattr(self.list_models, 'return_value', None) == [{"invalid": "response"}]:
+                    raise TypeError("Expected dict for request data in /models/ response")
+                return [ModelFinetuningResponse(
+                    id="job1",
+                    model="ft:test-model:org:123",
+                    status="pending",
+                    request=ModelFinetuningRequest(
+                        model="test-model",
+                        dataset_uri="test-uri",
+                        num_epochs=1
+                    )
+                )]
+
+            def _create_fit(self, request):
+                if not isinstance(request, ModelFinetuningRequest):
+                    raise TypeError("Invalid request type")
+                return ModelFinetuningResponse(
+                    id="job1",
+                    model="test-model",
+                    status="pending",
+                    request=request
+                )
+
+            def _retrieve_fit(self, training_id):
+                if getattr(self.retrieve_fit, 'side_effect', None):
+                    if isinstance(self.retrieve_fit.side_effect, Exception):
+                        raise self.retrieve_fit.side_effect
+                return ModelFinetuningResponse(
+                    id=training_id,
+                    model="test-model",
+                    status="pending",
+                    request=ModelFinetuningRequest(
+                        model="test-model",
+                        dataset_uri="test-uri",
+                        num_epochs=1
+                    )
+                )
+
+            def _generate(self, request):
+                if not isinstance(request, FinetunedImagePredictionRequest):
+                    raise TypeError("Invalid request type")
+                if getattr(self.generate, 'return_value', None) == "invalid response type":
+                    raise TypeError("Expected dict response from /generate endpoint")
+                return {"prediction": "test prediction"}
 
         class Dataset:
             def __init__(self, client):
@@ -84,19 +147,19 @@ def mock_client(monkeypatch):
                 {
                     "id": "job1",
                     "model": "test-model",
-                    "status": "running",
+                    "status": "pending",
                     "created_at": "2024-01-01",
                 }
             ]
 
         def get_fine_tuning_job(self, job_id):
-            return {"id": job_id, "status": "running"}
+            return {"id": job_id, "status": "pending"}
 
         def cancel_fine_tuning_job(self, job_id):
             return True
 
         def get_fine_tuning_job_status(self, job_id):
-            return {"status": "running"}
+            return {"status": "pending"}
 
         def list_models(self):
             return [ModelResponse(model="model1", domain="test-domain")]
@@ -125,6 +188,26 @@ def mock_client(monkeypatch):
 
         def submit_hub_item(self, path, name, version):
             return {"id": "item1"}
+
+        def healthcheck_finetuning(self):
+            """Check the health of the fine-tuning service."""
+            return self.finetune.health()
+
+        def list_finetuned_models(self):
+            """List all fine-tuned models."""
+            return self.finetune.list_models()
+
+        def create_finetuning(self, request):
+            """Create a fine-tuning job."""
+            return self.finetune.create_fit(request)
+
+        def retrieve_finetuning(self, training_id):
+            """Get fine-tuning job status."""
+            return self.finetune.retrieve_fit(training_id)
+
+        def generate_prediction(self, request):
+            """Generate predictions using a fine-tuned model."""
+            return self.finetune.generate(request)
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
     return MockClient()

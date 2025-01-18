@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -45,6 +45,44 @@ class ModelResponse:
 
     model: str
     domain: str
+
+
+@dataclass
+class ModelFinetuningRequest:
+    """Request for fine-tuning a model."""
+
+    model: str
+    dataset_uri: str
+    dataset_format: Optional[str] = None
+    task_prompt: Optional[str] = None
+    num_epochs: int = 1
+    batch_size: Optional[int] = None
+    learning_rate: Optional[float] = None
+    use_lora: Optional[bool] = False
+    track: Optional[bool] = False
+
+
+@dataclass
+class ModelFinetuningResponse:
+    """Response from fine-tuning operations."""
+
+    id: str
+    model: str
+    status: str
+    request: ModelFinetuningRequest
+
+
+@dataclass
+class FinetunedImagePredictionRequest:
+    """Request for generating predictions with a fine-tuned model."""
+
+    model: str
+    image_data: str  # base64-encoded image or URL
+    prompt: Optional[str] = None
+    task_prompt: Optional[str] = None
+    schema: Optional[str] = None
+    temperature: float = 1.0
+    max_new_tokens: int = 128
 
 
 @dataclass

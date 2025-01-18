@@ -3,16 +3,19 @@
 from dataclasses import dataclass
 import os
 from functools import cached_property
+from typing import Dict, List, Any
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.dataset import Dataset
 from vlmrun.client.files import Files
 from vlmrun.client.models import Models
 from vlmrun.client.finetune import FineTuning
+from vlmrun.client.types import ModelFinetuningRequest, ModelFinetuningResponse, FinetunedImagePredictionRequest
+from vlmrun.types.abstract import Client as AbstractClient
 
 
 @dataclass
-class Client:
+class Client(AbstractClient):
     """VLM Run API client.
 
     Attributes:
@@ -99,37 +102,92 @@ class Client:
         return self.files.retrieve_content(file_id)
 
     def create_fine_tuning_job(self, training_file: str, model: str, **kwargs):
-        """Use client.finetune.create() instead. This method is deprecated."""
-        return self.finetune.create(training_file=training_file, model=model, **kwargs)
+        """Use client.finetune.create_fit() instead. This method is deprecated."""
+        request = ModelFinetuningRequest(model=model, dataset_uri=training_file, **kwargs)
+        return self.finetune.create_fit(request)
 
     def list_fine_tuning_jobs(self):
-        """Use client.finetune.list() instead. This method is deprecated."""
-        return self.finetune.list()
+        """Use client.finetune.list_models() instead. This method is deprecated."""
+        return self.finetune.list_models()
 
     def get_fine_tuning_job(self, job_id: str):
-        """Use client.finetune.retrieve() instead. This method is deprecated."""
-        return self.finetune.retrieve(job_id)
+        """Use client.finetune.retrieve_fit() instead. This method is deprecated."""
+        return self.finetune.retrieve_fit(job_id)
 
     def cancel_fine_tuning_job(self, job_id: str):
-        """Use client.finetune.cancel() instead. This method is deprecated."""
-        return self.finetune.cancel(job_id)
+        """Use client.finetune.retrieve_fit() instead. This method is deprecated."""
+        # Note: Cancel operation is not supported in the new API
+        return self.finetune.retrieve_fit(job_id)
 
     def get_fine_tuning_job_status(self, job_id: str):
-        """Use client.finetune.retrieve() instead. This method is deprecated."""
-        return self.finetune.retrieve(job_id)
+        """Use client.finetune.retrieve_fit() instead. This method is deprecated."""
+        return self.finetune.retrieve_fit(job_id)
 
     def list_models(self):
         """Use client.models.list() instead. This method is deprecated."""
         return self.models.list()
 
+    def healthcheck_finetuning(self) -> bool:
+        """Check the health of the fine-tuning service.
+
+        Returns:
+            bool: True if service is healthy
+        """
+        return self.finetune.health()
+
+    def list_finetuned_models(self) -> List[ModelFinetuningResponse]:
+        """List all fine-tuned models.
+
+        Returns:
+            List[ModelFinetuningResponse]: List of fine-tuned models
+        """
+        return self.finetune.list_models()
+
+    def create_finetuning(self, request: ModelFinetuningRequest) -> ModelFinetuningResponse:
+        """Create a fine-tuning job.
+
+        Args:
+            request: Fine-tuning request parameters
+
+        Returns:
+            ModelFinetuningResponse: Created fine-tuning job details
+        """
+        return self.finetune.create_fit(request)
+
+    def retrieve_finetuning(self, training_id: str) -> ModelFinetuningResponse:
+        """Get fine-tuning job status.
+
+        Args:
+            training_id: ID of job to retrieve
+
+        Returns:
+            ModelFinetuningResponse: Fine-tuning job status and details
+        """
+        return self.finetune.retrieve_fit(training_id)
+
+    def generate_prediction(self, request: FinetunedImagePredictionRequest) -> Dict[str, Any]:
+        """Generate predictions using a fine-tuned model.
+
+        Args:
+            request: Prediction request parameters
+
+        Returns:
+            Dict[str, Any]: Model predictions
+        """
+        return self.finetune.generate(request)
+
+    # Legacy methods marked for future removal
     def generate_image(self, prompt: str):
-        raise NotImplementedError("Image generation not yet implemented")
+        """Use generate_prediction() instead. This method is deprecated."""
+        raise NotImplementedError("Use generate_prediction() instead")
 
     def generate_video(self, prompt: str):
-        raise NotImplementedError("Video generation not yet implemented")
+        """Use generate_prediction() instead. This method is deprecated."""
+        raise NotImplementedError("Use generate_prediction() instead")
 
     def generate_document(self, prompt: str):
-        raise NotImplementedError("Document generation not yet implemented")
+        """Use generate_prediction() instead. This method is deprecated."""
+        raise NotImplementedError("Use generate_prediction() instead")
 
     def get_hub_version(self):
         raise NotImplementedError("Hub version not yet implemented")
