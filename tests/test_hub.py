@@ -16,8 +16,8 @@ def test_hub_health(monkeypatch):
     monkeypatch.setattr(client.requestor, "request", mock_request)
     
     response = client.hub.get_health()
-    assert response["status"] == "ok"
-    assert response["hub_version"] == "1.0.0"
+    assert response.status == "ok"
+    assert response.hub_version == "1.0.0"
     
 
 def test_hub_health_error(monkeypatch):
@@ -49,11 +49,8 @@ def test_hub_list_domains(monkeypatch):
     client = Client(api_key="test-key")
     monkeypatch.setattr(client.requestor, "request", mock_request)
     
-    domains = client.hub.list_domains()
-    assert domains == expected_domains
-    
-    # Test deprecated method
-    assert client.list_hub_items() == expected_domains
+    response = client.hub.list_domains()
+    assert response.domains == expected_domains
 
 
 def test_hub_list_domains_error(monkeypatch):
@@ -109,13 +106,3 @@ def test_hub_get_schema_error(monkeypatch):
     with pytest.raises(APIError) as exc_info:
         client.hub.get_schema("invalid.domain")
     assert "Failed to get schema for domain invalid.domain" in str(exc_info.value)
-
-
-def test_hub_deprecated_methods():
-    """Test deprecated hub methods."""
-    client = Client(api_key="test-key")
-    
-    # submit_hub_item should raise NotImplementedError
-    with pytest.raises(NotImplementedError) as exc_info:
-        client.submit_hub_item("path", "name", "version")
-    assert "Use client.hub methods instead" in str(exc_info.value)

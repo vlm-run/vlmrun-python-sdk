@@ -132,12 +132,3 @@ class Client:
 
     def generate_document(self, prompt: str):
         raise NotImplementedError("Document generation not yet implemented")
-
-    # Deprecated methods - use hub resource instead
-    def list_hub_items(self):
-        """Use client.hub.list_domains() instead. This method is deprecated."""
-        return self.hub.list_domains()
-
-    def submit_hub_item(self, path: str, name: str, version: str):
-        """This method is deprecated and will be removed."""
-        raise NotImplementedError("Use client.hub methods instead")

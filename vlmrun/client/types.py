@@ -6,6 +6,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List
 
+from pydantic import BaseModel, Field
+
+
+class HubHealthResponse(BaseModel):
+    """Response from hub health check."""
+    status: str = Field(..., description="Health check status")
+    hub_version: str = Field(..., description="Hub version string")
+
+
+class HubDomainsResponse(BaseModel):
+    """Response from listing hub domains."""
+    domains: List[str] = Field(..., description="List of supported domains")
+
 
 @dataclass
 class HubSchemaQueryRequest:

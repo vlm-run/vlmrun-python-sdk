@@ -1,10 +1,18 @@
 """VLM Run Hub API client implementation."""
 
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 from dataclasses import asdict
 
 from vlmrun.client.base_requestor import APIRequestor, APIError
-from vlmrun.client.types import HubSchemaQueryRequest, HubSchemaQueryResponse
+from vlmrun.client.types import (
+    HubSchemaQueryRequest,
+    HubSchemaQueryResponse,
+    HubHealthResponse,
+    HubDomainsResponse,
+)
+
+if TYPE_CHECKING:
+    from vlmrun.client.client import Client
 
 
 class Hub:
@@ -13,7 +21,7 @@ class Hub:
     This client provides access to the hub routes for managing schemas and domains.
     """
 
-    def __init__(self, client) -> None:
+    def __init__(self, client: "Client") -> None:
         """Initialize Hub client.
         
         Args:
@@ -21,11 +29,11 @@ class Hub:
         """
         self._client = client
 
-    def get_health(self) -> Dict[str, Any]:
+    def get_health(self) -> HubHealthResponse:
         """Check the health of the hub API.
         
         Returns:
-            Dict containing status and hub version
+            HubHealthResponse containing status and hub version
             
         Example:
             >>> client.hub.get_health()
@@ -43,15 +51,17 @@ class Hub:
                 url="/hub/health",
                 raw_response=False
             )
-            return response
+            if not isinstance(response, dict):
+                raise APIError("Expected dict response from health check")
+            return HubHealthResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to check hub health: {str(e)}")
 
-    def list_domains(self) -> List[str]:
+    def list_domains(self) -> HubDomainsResponse:
         """Get the list of supported domains.
         
         Returns:
-            List of domain strings
+            HubDomainsResponse containing list of domain strings
             
         Example:
             >>> client.hub.list_domains()
@@ -70,7 +80,7 @@ class Hub:
                 url="/hub/domains",
                 raw_response=False
             )
-            return response
+            return HubDomainsResponse(domains=response)
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 
@@ -107,6 +117,8 @@ class Hub:
                 data=asdict(request),
                 raw_response=False
             )
+            if not isinstance(response, dict):
+                raise APIError("Expected dict response from schema query")
             return HubSchemaQueryResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to get schema for domain {domain}: {str(e)}")
