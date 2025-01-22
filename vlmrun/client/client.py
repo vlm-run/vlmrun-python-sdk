@@ -7,6 +7,7 @@ from functools import cached_property
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.dataset import Dataset
 from vlmrun.client.files import Files
+from vlmrun.client.hub import Hub
 from vlmrun.client.models import Models
 from vlmrun.client.finetune import FineTuning
 
@@ -53,6 +54,7 @@ class Client:
         # Initialize resources
         self.dataset = Dataset(self)
         self.files = Files(self)
+        self.hub = Hub(self)
         self.models = Models(self)
         self.finetune = FineTuning(self)
 
@@ -130,12 +132,3 @@ class Client:
 
     def generate_document(self, prompt: str):
         raise NotImplementedError("Document generation not yet implemented")
-
-    def get_hub_version(self):
-        raise NotImplementedError("Hub version not yet implemented")
-
-    def list_hub_items(self):
-        raise NotImplementedError("Hub items not yet implemented")
-
-    def submit_hub_item(self, path: str, name: str, version: str):
-        raise NotImplementedError("Hub submission not yet implemented")
