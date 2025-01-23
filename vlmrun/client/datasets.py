@@ -7,17 +7,19 @@ from vlmrun.types.abstract import Client
 from vlmrun.client.types import DatasetResponse
 
 
-class Dataset:
-    """Dataset resource for VLM Run API."""
+class Datasets:
+    """Datasets resource for VLM Run API."""
 
     def __init__(self, client: "Client") -> None:
-        """Initialize Dataset resource with client.
+        """Initialize Datasets resource with client.
 
         Args:
             client: VLM Run API client instance
         """
         self._client = client
-        self._requestor = APIRequestor(client)
+        self._requestor = APIRequestor(
+            client, base_url=f"{client.base_url}/experimental"
+        )
 
     def create(
         self, file_id: str, domain: str, dataset_name: str, dataset_type: str = "images"
@@ -38,7 +40,7 @@ class Dataset:
 
         response, status_code, headers = self._requestor.request(
             method="POST",
-            url="dataset/create",
+            url="datasets/create",
             data={
                 "file_id": file_id,
                 "domain": domain,
@@ -61,7 +63,7 @@ class Dataset:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"dataset/{dataset_id}",
+            url=f"datasets/{dataset_id}",
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")

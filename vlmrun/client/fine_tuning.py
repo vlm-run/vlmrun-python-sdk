@@ -19,7 +19,9 @@ class Finetuning:
             client: VLM Run API client instance
         """
         self._client = client
-        self._requestor = APIRequestor(client)
+        self._requestor = APIRequestor(
+            client, base_url=f"{client.base_url}/experimental"
+        )
 
     def create(
         self,
