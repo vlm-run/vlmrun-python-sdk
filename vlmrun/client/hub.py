@@ -8,6 +8,7 @@ from vlmrun.client.types import (
     HubSchemaQueryRequest,
     HubSchemaQueryResponse,
     HubInfoResponse,
+    HubDomainsResponse,
 )
 
 if TYPE_CHECKING:
@@ -74,7 +75,7 @@ class Hub:
             response, _, _ = self._client.requestor.request(
                 method="GET", url="/hub/domains", raw_response=False
             )
-            return response
+            return HubDomainsResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 

@@ -4,7 +4,13 @@ import pytest
 from typer.testing import CliRunner
 
 from datetime import datetime
-from vlmrun.client.types import ModelResponse, DatasetResponse
+from vlmrun.client.types import (
+    ModelResponse,
+    DatasetResponse,
+    HubInfoResponse,
+    HubDomainsResponse,
+    HubSchemaQueryResponse,
+)
 
 
 @pytest.fixture
@@ -145,27 +151,29 @@ def mock_client(monkeypatch):
                 self.version = "0.1.0"
 
             def info(self):
-                return {"version": "0.1.0"}
+                return HubInfoResponse(version="0.1.0")
 
             def list_domains(self):
-                return {
-                    "domains": [
+                return HubDomainsResponse(
+                    domains=[
                         "document.invoice",
                         "document.receipt",
                         "document.utility_bill",
                     ]
-                }
+                )
 
             def get_schema(self, domain):
-                return {
-                    "schema_json": {
+                return HubSchemaQueryResponse(
+                    schema_json={
                         "type": "object",
                         "properties": {
                             "invoice_number": {"type": "string"},
                             "total_amount": {"type": "number"},
                         },
                     },
-                }
+                    schema_version="1.0.0",
+                    schema_hash="abcd1234",
+                )
 
         class Image:
             def __init__(self, client):
