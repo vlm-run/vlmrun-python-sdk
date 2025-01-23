@@ -22,6 +22,14 @@ def mock_client(monkeypatch):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
             self.dataset = self.Dataset(self)
+            self.fine_tuning = self.FineTuning(self)
+            self.prediction = self.Prediction(self)
+            self.files = self.Files(self)
+            self.models = self.Models(self)
+            self.hub = self.Hub(self)
+            self.image = self.Image(self)
+            self.video = self.Video(self)
+            self.document = self.Document(self)
 
         class Dataset:
             def __init__(self, client):
@@ -57,74 +65,128 @@ def mock_client(monkeypatch):
                     created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
                 )
 
-        def list_files(self):
-            return [
-                {
-                    "id": "file1",
+        class FineTuning:
+            def __init__(self, client):
+                self._client = client
+
+            def create(self, training_file, validation_file, model, **kwargs):
+                return {"id": "job1"}
+
+            def list(self):
+                return [
+                    {
+                        "id": "job1",
+                        "model": "test-model",
+                        "status": "running",
+                        "created_at": "2024-01-01",
+                    }
+                ]
+
+            def get(self, job_id):
+                return {"id": job_id, "status": "running"}
+
+            def cancel(self, job_id):
+                return True
+
+        class Prediction:
+            def __init__(self, client):
+                self._client = client
+
+            def create(self, model, prompt, **kwargs):
+                return {"id": "prediction1"}
+
+            def list(self):
+                return [{"id": "prediction1", "status": "running"}]
+
+            def get(self, prediction_id):
+                return {"id": prediction_id, "status": "running"}
+
+        class Files:
+            def __init__(self, client):
+                self._client = client
+
+            def list(self):
+                return [
+                    {
+                        "id": "file1",
+                        "filename": "test.txt",
+                        "size": 100,
+                        "created_at": "2024-01-01",
+                    }
+                ]
+
+            def upload(self, file_path, purpose="fine-tune"):
+                return {"id": "file1", "filename": file_path}
+
+            def get(self, file_id):
+                return {
+                    "id": file_id,
                     "filename": "test.txt",
                     "size": 100,
                     "created_at": "2024-01-01",
                 }
-            ]
 
-        def upload_file(self, file_path, purpose="fine-tune"):
-            return {"id": "file1", "filename": file_path}
+            def get_content(self, file_id):
+                return b"test content"
 
-        def delete_file(self, file_id):
-            return True
+            def delete(self, file_id):
+                return True
 
-        def get_file(self, file_id):
-            return b"test content"
+        class Models:
+            def __init__(self, client):
+                self._client = client
 
-        def create_fine_tuning_job(self, training_file, model, **kwargs):
-            return {"id": "job1"}
+            def list(self):
+                return [ModelResponse(model="model1", domain="test-domain")]
 
-        def list_fine_tuning_jobs(self):
-            return [
-                {
-                    "id": "job1",
-                    "model": "test-model",
-                    "status": "running",
-                    "created_at": "2024-01-01",
+        class Hub:
+            def __init__(self, client):
+                self._client = client
+                self.version = "0.1.0"
+
+            def info(self):
+                return {"version": "0.1.0"}
+
+            def list_domains(self):
+                return {
+                    "domains": [
+                        "document.invoice",
+                        "document.receipt",
+                        "document.utility_bill",
+                    ]
                 }
-            ]
 
-        def get_fine_tuning_job(self, job_id):
-            return {"id": job_id, "status": "running"}
-
-        def cancel_fine_tuning_job(self, job_id):
-            return True
-
-        def get_fine_tuning_job_status(self, job_id):
-            return {"status": "running"}
-
-        def list_models(self):
-            return [ModelResponse(model="model1", domain="test-domain")]
-
-        def generate_image(self, prompt):
-            return b"image data"
-
-        def generate_video(self, prompt):
-            return b"video data"
-
-        def generate_document(self, prompt):
-            return b"document data"
-
-        def get_hub_version(self):
-            return "0.1.0"
-
-        def list_hub_items(self):
-            return [
-                {
-                    "id": "item1",
-                    "name": "Test Item",
-                    "type": "model",
-                    "version": "1.0.0",
+            def get_schema(self, domain):
+                return {
+                    "schema_json": {
+                        "type": "object",
+                        "properties": {
+                            "invoice_number": {"type": "string"},
+                            "total_amount": {"type": "number"},
+                        },
+                    },
                 }
-            ]
 
-        def submit_hub_item(self, path, name, version):
-            return {"id": "item1"}
+        class Image:
+            def __init__(self, client):
+                self._client = client
+
+            def generate(self, prompt):
+                return b"image data"
+
+        class Video:
+            def __init__(self, client):
+                self._client = client
+
+            def generate(self, prompt):
+                return b"video data"
+
+        class Document:
+            def __init__(self, client):
+                self._client = client
+
+            def generate(self, prompt):
+                return b"document data"
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
     return MockClient()

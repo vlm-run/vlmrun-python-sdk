@@ -20,7 +20,7 @@ def list(ctx: typer.Context) -> None:
     """List all files."""
     client = ctx.obj
 
-    files = client.list_files()
+    files = client.files.list()
     console = Console()
     table = Table(show_header=True, header_style="bold")
     table.add_column("File ID")
@@ -47,7 +47,7 @@ def upload(
 ) -> None:
     """Upload a file."""
     client = ctx.obj
-    result = client.upload_file(str(file), purpose=purpose)
+    result = client.files.upload(str(file), purpose=purpose)
     rprint(f"Uploaded file {result['filename']} with ID: {result['id']}")
 
 
@@ -58,7 +58,7 @@ def delete(
 ) -> None:
     """Delete a file."""
     client = ctx.obj
-    client.delete_file(file_id)
+    client.files.delete(file_id)
     rprint(f"Deleted file {file_id}")
 
 
@@ -70,7 +70,7 @@ def get(
 ) -> None:
     """Get file content."""
     client = ctx.obj
-    content = client.get_file(file_id)
+    content = client.files.get_content(file_id)
     if output:
         output.write_bytes(content)
         rprint(f"File content written to {output}")

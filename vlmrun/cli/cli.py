@@ -9,7 +9,7 @@ from rich import print as rprint
 
 from vlmrun.client import Client
 from vlmrun.cli._cli.files import app as files_app
-from vlmrun.cli._cli.finetune import app as finetune_app
+from vlmrun.cli._cli.fine_tuning import app as fine_tuning_app
 from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
@@ -64,7 +64,7 @@ def main(
 
 # Add subcommands
 app.add_typer(files_app, name="files")
-app.add_typer(finetune_app, name="fine-tuning")
+app.add_typer(fine_tuning_app, name="fine-tuning")
 app.add_typer(models_app, name="models")
 app.add_typer(generate_app, name="generate")
 app.add_typer(hub_app, name="hub")

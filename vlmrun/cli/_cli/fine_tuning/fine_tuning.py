@@ -5,6 +5,8 @@ from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
 
+from vlmrun.client import Client
+
 app = typer.Typer(
     help="Fine-tuning operations",
     add_completion=False,
@@ -22,8 +24,8 @@ def create(
     learning_rate: float = typer.Option(1e-5, help="Learning rate"),
 ) -> None:
     """Create a fine-tuning job."""
-    client = ctx.obj
-    result = client.create_fine_tuning_job(
+    client: Client = ctx.obj
+    result = client.fine_tuning.create(
         training_file=training_file,
         model=model,
         n_epochs=n_epochs,
@@ -36,8 +38,8 @@ def create(
 @app.command()
 def list(ctx: typer.Context) -> None:
     """List all fine-tuning jobs."""
-    client = ctx.obj
-    jobs = client.list_fine_tuning_jobs()
+    client: Client = ctx.obj
+    jobs = client.fine_tuning.list()
     console = Console()
     table = Table(show_header=True, header_style="bold")
     table.add_column("Job ID")

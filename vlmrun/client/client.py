@@ -4,12 +4,14 @@ from dataclasses import dataclass
 import os
 from functools import cached_property
 
+from vlmrun.version import __version__
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.dataset import Dataset
 from vlmrun.client.files import Files
 from vlmrun.client.hub import Hub
 from vlmrun.client.models import Models
-from vlmrun.client.finetune import FineTuning
+from vlmrun.client.fine_tuning import Finetuning
+from vlmrun.client.prediction import Prediction
 
 
 @dataclass
@@ -56,7 +58,15 @@ class Client:
         self.files = Files(self)
         self.hub = Hub(self)
         self.models = Models(self)
-        self.finetune = FineTuning(self)
+        self.fine_tuning = Finetuning(self)
+        self.prediction = Prediction(self)
+
+    def __repr__(self):
+        return f"Client(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
+
+    @property
+    def version(self):
+        return __version__
 
     @cached_property
     def requestor(self):
@@ -82,53 +92,3 @@ class Client:
             method="GET", url="/health", raw_response=True
         )
         return status_code == 200
-
-    # Deprecated methods - use resource classes instead
-    def list_files(self):
-        """Use client.files.list() instead. This method is deprecated."""
-        return self.files.list()
-
-    def upload_file(self, file_path: str, purpose: str = "fine-tune"):
-        """Use client.files.upload() instead. This method is deprecated."""
-        return self.files.upload(file_path, purpose=purpose)
-
-    def delete_file(self, file_id: str):
-        """Use client.files.delete() instead. This method is deprecated."""
-        return self.files.delete(file_id)
-
-    def get_file(self, file_id: str):
-        """Use client.files.retrieve_content() instead. This method is deprecated."""
-        return self.files.retrieve_content(file_id)
-
-    def create_fine_tuning_job(self, training_file: str, model: str, **kwargs):
-        """Use client.finetune.create() instead. This method is deprecated."""
-        return self.finetune.create(training_file=training_file, model=model, **kwargs)
-
-    def list_fine_tuning_jobs(self):
-        """Use client.finetune.list() instead. This method is deprecated."""
-        return self.finetune.list()
-
-    def get_fine_tuning_job(self, job_id: str):
-        """Use client.finetune.retrieve() instead. This method is deprecated."""
-        return self.finetune.retrieve(job_id)
-
-    def cancel_fine_tuning_job(self, job_id: str):
-        """Use client.finetune.cancel() instead. This method is deprecated."""
-        return self.finetune.cancel(job_id)
-
-    def get_fine_tuning_job_status(self, job_id: str):
-        """Use client.finetune.retrieve() instead. This method is deprecated."""
-        return self.finetune.retrieve(job_id)
-
-    def list_models(self):
-        """Use client.models.list() instead. This method is deprecated."""
-        return self.models.list()
-
-    def generate_image(self, prompt: str):
-        raise NotImplementedError("Image generation not yet implemented")
-
-    def generate_video(self, prompt: str):
-        raise NotImplementedError("Video generation not yet implemented")
-
-    def generate_document(self, prompt: str):
-        raise NotImplementedError("Document generation not yet implemented")

@@ -1,5 +1,5 @@
 """Fine-tuning subcommand package."""
 
-from .finetune import app
+from .fine_tuning import app
 
 __all__ = ["app"]

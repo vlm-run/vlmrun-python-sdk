@@ -4,37 +4,42 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List
 
-from pydantic import BaseModel, Field
-
-
-class HubHealthResponse(BaseModel):
-    """Response from hub health check."""
-    status: str = Field(..., description="Health check status")
-    hub_version: str = Field(..., description="Hub version string")
+from typing import Dict, Any, Literal
+from typing import List
 
 
-class HubDomainsResponse(BaseModel):
-    """Response from listing hub domains."""
-    domains: List[str] = Field(..., description="List of supported domains")
+@dataclass
+class HubInfoResponse:
+    """Response from hub info."""
+
+    version: str
 
 
 @dataclass
 class HubSchemaQueryRequest:
     """Request model for hub schema queries."""
+
     domain: str
+
+
+@dataclass
+class HubDomainsResponse:
+    """Response from listing hub domains."""
+
+    domains: List[str]
 
 
 @dataclass
 class HubSchemaQueryResponse:
     """Response model for hub schema queries.
-    
+
     Attributes:
         schema_json: The JSON schema for the domain
         schema_version: Schema version string
         schema_hash: First 8 characters of schema hash
     """
+
     schema_json: Dict[str, Any]
     schema_version: str
     schema_hash: str
@@ -65,11 +70,14 @@ class FileResponse:
 
 
 @dataclass
-class FileList:
-    """Response from listing files."""
+class PredictionResponse:
+    """Response from prediction operations."""
 
-    data: List[FileResponse]
-    object: str = "list"
+    id: str
+    created_at: datetime
+    completed_at: datetime | None
+    response: Any | None
+    status: str
 
 
 @dataclass
@@ -87,3 +95,41 @@ class APIError(Exception):
     message: str
     http_status: int | None = None
     headers: Dict[str, str] | None = None
+
+
+@dataclass
+class CreditUsage:
+    """Credit usage for fine-tuning operations."""
+
+    elements_processed: int
+    element_type: Literal["image", "page", "video", "audio"] | None
+    credits_used: int
+
+
+@dataclass
+class FinetuningJobRequest:
+    """Request for fine-tuning operations."""
+
+    dataset_uri: str
+    dataset_format: str
+    model: str
+    task_prompt: str
+    num_epochs: int
+    batch_size: int
+    learning_rate: float
+    use_lora: bool
+    track: bool
+    wandb_project: str
+
+
+@dataclass
+class FinetuningJobResponse:
+    """Response from fine-tuning operations."""
+
+    id: str
+    created_at: datetime
+    completed_at: datetime | None
+    status: Literal["pending", "running", "completed", "failed"]
+    request: FinetuningJobRequest
+    model: str
+    usage: CreditUsage
