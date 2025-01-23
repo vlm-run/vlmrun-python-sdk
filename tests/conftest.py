@@ -10,6 +10,9 @@ from vlmrun.client.types import (
     HubInfoResponse,
     HubDomainsResponse,
     HubSchemaQueryResponse,
+    FileResponse,
+    PredictionResponse,
+    FeedbackSubmitResponse,
 )
 
 
@@ -24,6 +27,20 @@ def mock_client(monkeypatch):
     """Mock the Client class."""
 
     class MockClient:
+        class AudioPredictions:
+            def __init__(self, client):
+                self._client = client
+
+            def generate(self, *args, **kwargs):
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
+
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
@@ -33,9 +50,11 @@ def mock_client(monkeypatch):
             self.files = self.Files(self)
             self.models = self.Models(self)
             self.hub = self.Hub(self)
-            self.image = self.Image(self)
-            self.video = self.Video(self)
-            self.document = self.Document(self)
+            self.image = self.ImagePredictions(self)
+            self.video = self.VideoPredictions(self)
+            self.document = self.DocumentPredictions(self)
+            self.audio = self.AudioPredictions(self)
+            self.feedback = self.Feedback(self)
 
         class Dataset:
             def __init__(self, client):
@@ -99,13 +118,44 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def create(self, model, prompt, **kwargs):
-                return {"id": "prediction1"}
+                return PredictionResponse(
+                    id="prediction1",
+                    status="running",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at=None,
+                    response=None,
+                    usage={"total_tokens": 0}
+                )
 
             def list(self):
-                return [{"id": "prediction1", "status": "running"}]
+                return [PredictionResponse(
+                    id="prediction1",
+                    status="running",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at=None,
+                    response=None,
+                    usage={"total_tokens": 0}
+                )]
 
             def get(self, prediction_id):
-                return {"id": prediction_id, "status": "running"}
+                return PredictionResponse(
+                    id=prediction_id,
+                    status="running",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at=None,
+                    response=None,
+                    usage={"total_tokens": 0}
+                )
+                
+            def wait(self, prediction_id, timeout=60, sleep=1):
+                return PredictionResponse(
+                    id=prediction_id,
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
         class Files:
             def __init__(self, client):
@@ -113,30 +163,44 @@ def mock_client(monkeypatch):
 
             def list(self):
                 return [
-                    {
-                        "id": "file1",
-                        "filename": "test.txt",
-                        "size": 100,
-                        "created_at": "2024-01-01",
-                    }
+                    FileResponse(
+                        id="file1",
+                        filename="test.txt",
+                        bytes=b"test content",
+                        purpose="assistants",
+                        created_at="2024-01-01T00:00:00Z"
+                    )
                 ]
 
             def upload(self, file_path, purpose="fine-tune"):
-                return {"id": "file1", "filename": file_path}
+                return FileResponse(
+                    id="file1",
+                    filename=str(file_path),
+                    bytes=b"test content",
+                    purpose=purpose,
+                    created_at="2024-01-01T00:00:00Z"
+                )
 
             def get(self, file_id):
-                return {
-                    "id": file_id,
-                    "filename": "test.txt",
-                    "size": 100,
-                    "created_at": "2024-01-01",
-                }
+                return FileResponse(
+                    id=file_id,
+                    filename="test.txt",
+                    bytes=b"test content",
+                    purpose="assistants",
+                    created_at="2024-01-01T00:00:00Z"
+                )
 
             def get_content(self, file_id):
                 return b"test content"
 
             def delete(self, file_id):
-                return True
+                return FileResponse(
+                    id=file_id,
+                    filename="test.txt",
+                    bytes=b"test content",
+                    purpose="assistants",
+                    created_at="2024-01-01T00:00:00Z"
+                )
 
         class Models:
             def __init__(self, client):
@@ -175,26 +239,67 @@ def mock_client(monkeypatch):
                     schema_hash="abcd1234",
                 )
 
-        class Image:
+        class ImagePredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return b"image data"
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
-        class Video:
+        class VideoPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return b"video data"
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
-        class Document:
+        class DocumentPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return b"document data"
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
+
+        class Feedback:
+            def __init__(self, client):
+                self._client = client
+
+            def submit(self, id, label=None, notes=None, flag=None):
+                return FeedbackSubmitResponse(
+                    id="feedback1",
+                    created_at="2024-01-01T00:00:00Z",
+                    request_id=id,
+                    response=label
+                )
+
+            def get(self, id):
+                return FeedbackSubmitResponse(
+                    id="feedback1",
+                    created_at="2024-01-01T00:00:00Z",
+                    request_id=id,
+                    response=None
+                )
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
     return MockClient()

@@ -30,10 +30,10 @@ def list(ctx: typer.Context) -> None:
 
     for file in files:
         table.add_row(
-            file["id"],
-            file["filename"],
-            str(file["size"]),
-            file["created_at"],
+            file.id,
+            file.filename,
+            str(len(file.bytes)),
+            file.created_at,
         )
 
     console.print(table)
@@ -48,7 +48,7 @@ def upload(
     """Upload a file."""
     client = ctx.obj
     result = client.files.upload(str(file), purpose=purpose)
-    rprint(f"Uploaded file {result['filename']} with ID: {result['id']}")
+    rprint(f"Uploaded file {result.filename} with ID: {result.id}")
 
 
 @app.command()
