@@ -36,9 +36,9 @@ def mock_client(monkeypatch):
             self.files = self.Files(self)
             self.models = self.Models(self)
             self.hub = self.Hub(self)
-            self.image = self.Image(self)
-            self.video = self.Video(self)
-            self.document = self.Document(self)
+            self.image = self.ImagePredictions(self)
+            self.video = self.VideoPredictions(self)
+            self.document = self.DocumentPredictions(self)
             self.audio = self.Audio(self)
             self.feedback = self.Feedback(self)
 
@@ -104,7 +104,7 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def create(self, model, prompt, **kwargs):
-                return {"id": "prediction1"}
+                return PredictionResponse(id="prediction1", status="running")
 
             def list(self):
                 return [PredictionResponse(id="prediction1", status="running")]
@@ -188,26 +188,43 @@ def mock_client(monkeypatch):
                     schema_hash="abcd1234",
                 )
 
-        class Image:
+        class ImagePredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
                 return PredictionResponse(id="prediction1", status="completed")
 
-        class Video:
+        class VideoPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
                 return PredictionResponse(id="prediction1", status="completed")
 
-        class Document:
+        class DocumentPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
                 return PredictionResponse(id="prediction1", status="completed")
+
+        class Audio:
+            def __init__(self, client):
+                self._client = client
+
+            def generate(self, *args, **kwargs):
+                return PredictionResponse(id="prediction1", status="completed")
+
+        class Feedback:
+            def __init__(self, client):
+                self._client = client
+
+            def submit(self, id, label=None, notes=None, flag=None):
+                return FeedbackSubmitResponse(id="file1")
+
+            def get(self, id):
+                return FeedbackSubmitResponse(id="file1")
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
     return MockClient()
