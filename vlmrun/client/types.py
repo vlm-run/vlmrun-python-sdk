@@ -78,6 +78,7 @@ class PredictionResponse:
     completed_at: datetime | None
     response: Any | None
     status: str
+    usage: CreditUsage
 
 
 @dataclass

@@ -1,8 +1,10 @@
 """Tests for hub operations."""
 
-import pytest
-from datetime import datetime
-from vlmrun.client.types import HubInfoResponse, HubSchemaQueryResponse, HubDomainsResponse, APIError
+from vlmrun.client.types import (
+    HubInfoResponse,
+    HubSchemaQueryResponse,
+    HubDomainsResponse,
+)
 
 
 def test_hub_info(mock_client):

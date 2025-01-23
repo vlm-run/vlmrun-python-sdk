@@ -11,7 +11,12 @@ from vlmrun.client.files import Files
 from vlmrun.client.hub import Hub
 from vlmrun.client.models import Models
 from vlmrun.client.fine_tuning import Finetuning
-from vlmrun.client.prediction import Prediction
+from vlmrun.client.prediction import (
+    Prediction,
+    ImagePrediction,
+    VideoPrediction,
+    DocumentPrediction,
+)
 
 
 @dataclass
@@ -60,6 +65,9 @@ class Client:
         self.models = Models(self)
         self.fine_tuning = Finetuning(self)
         self.prediction = Prediction(self)
+        self.image = ImagePrediction(self)
+        self.video = VideoPrediction(self)
+        self.document = DocumentPrediction(self)
 
     def __repr__(self):
         return f"Client(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"

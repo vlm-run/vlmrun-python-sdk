@@ -179,21 +179,21 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, prompt):
+            def generate(self, *args, **kwargs):
                 return b"image data"
 
         class Video:
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, prompt):
+            def generate(self, *args, **kwargs):
                 return b"video data"
 
         class Document:
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, prompt):
+            def generate(self, *args, **kwargs):
                 return b"document data"
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
