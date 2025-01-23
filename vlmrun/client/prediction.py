@@ -3,6 +3,7 @@
 from __future__ import annotations
 from pathlib import Path
 from PIL import Image
+from loguru import logger
 
 import time
 from tqdm import tqdm
@@ -122,7 +123,7 @@ class DocumentPrediction(Prediction):
 
     def generate(
         self,
-        file_id: str,
+        file_or_url: str | Path,
         model: str,
         domain: str,
         json_schema: dict | None = None,
@@ -134,7 +135,7 @@ class DocumentPrediction(Prediction):
         """Generate a document prediction.
 
         Args:
-            file_id: ID of the file to generate prediction from
+            file_or_url: File (pathlib.Path) or file_id or URL to generate prediction from
             model: Model to use for prediction
             domain: Domain to use for prediction
             json_schema: JSON schema to use for prediction
@@ -146,11 +147,25 @@ class DocumentPrediction(Prediction):
         Returns:
             PredictionResponse: Prediction response
         """
+        if isinstance(file_or_url, Path):
+            logger.debug(
+                f"Uploading file [path={file_or_url}, size={file_or_url.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
+            )
+            response = self._client.files.upload(file_or_url, purpose="assistants")
+            logger.debug(
+                f"Uploaded file [file_id={response.file_id}, size={response.size / 1024 / 1024:.2f} MB]"
+            )
+            file_or_url = response.file_id
+        elif isinstance(file_or_url, str):
+            is_url = str(file_or_url).startswith(("http://", "https://"))
+        else:
+            raise ValueError("File or URL must be a pathlib.Path, str, or AnyHttpUrl")
+
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="document/generate",
             data={
-                "file_id": file_id,
+                "url" if is_url else "file_id": file_or_url,
                 "model": model,
                 "domain": domain,
                 "json_schema": json_schema,
@@ -170,7 +185,7 @@ class VideoPrediction(Prediction):
 
     def generate(
         self,
-        file_id: str,
+        file_or_url: str | Path,
         model: str,
         domain: str,
         json_schema: dict | None = None,
@@ -182,7 +197,7 @@ class VideoPrediction(Prediction):
         """Generate a document prediction.
 
         Args:
-            file_id: ID of the file to generate prediction from
+            file_or_url: File (pathlib.Path) or file_id or URL to generate prediction from
             model: Model to use for prediction
             domain: Domain to use for prediction
             json_schema: JSON schema to use for prediction
@@ -194,11 +209,25 @@ class VideoPrediction(Prediction):
         Returns:
             PredictionResponse: Prediction response
         """
+        if isinstance(file_or_url, Path):
+            logger.debug(
+                f"Uploading file [path={file_or_url}, size={file_or_url.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
+            )
+            response = self._client.files.upload(file_or_url, purpose="assistants")
+            logger.debug(
+                f"Uploaded file [file_id={response.file_id}, size={response.size / 1024 / 1024:.2f} MB]"
+            )
+            file_or_url = response.file_id
+        elif isinstance(file_or_url, str):
+            is_url = str(file_or_url).startswith(("http://", "https://"))
+        else:
+            raise ValueError("File or URL must be a pathlib.Path, str, or AnyHttpUrl")
+
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="video/generate",
             data={
-                "file_id": file_id,
+                "url" if is_url else "file_id": file_or_url,
                 "model": model,
                 "domain": domain,
                 "json_schema": json_schema,

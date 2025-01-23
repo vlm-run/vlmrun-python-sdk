@@ -36,7 +36,7 @@ class Client:
 
     api_key: str | None = None
     base_url: str | None = None
-    timeout: float = 30.0
+    timeout: float = 120.0
 
     def __post_init__(self):
         """Initialize the client after dataclass initialization.

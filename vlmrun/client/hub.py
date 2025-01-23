@@ -1,11 +1,9 @@
 """VLM Run Hub API client implementation."""
 
 from typing import TYPE_CHECKING
-from dataclasses import asdict
 
 from vlmrun.client.base_requestor import APIError
 from vlmrun.client.types import (
-    HubSchemaQueryRequest,
     HubSchemaQueryResponse,
     HubInfoResponse,
     HubDomainsResponse,
@@ -105,11 +103,10 @@ class Hub:
             APIError: If the request fails or domain is not found
         """
         try:
-            request = HubSchemaQueryRequest(domain=domain)
             response, _, _ = self._client.requestor.request(
                 method="POST",
                 url="/hub/schema",
-                data=asdict(request),
+                data={"domain": domain},
                 raw_response=False,
             )
             if not isinstance(response, dict):

@@ -10,57 +10,14 @@ from typing import List
 
 
 @dataclass
-class HubInfoResponse:
-    """Response from hub info."""
-
-    version: str
-
-
-@dataclass
-class HubSchemaQueryRequest:
-    """Request model for hub schema queries."""
-
-    domain: str
-
-
-@dataclass
-class HubDomainsResponse:
-    """Response from listing hub domains."""
-
-    domains: List[str]
-
-
-@dataclass
-class HubSchemaQueryResponse:
-    """Response model for hub schema queries.
-
-    Attributes:
-        schema_json: The JSON schema for the domain
-        schema_version: Schema version string
-        schema_hash: First 8 characters of schema hash
-    """
-
-    schema_json: Dict[str, Any]
-    schema_version: str
-    schema_hash: str
-
-
-@dataclass
-class DatasetResponse:
-    """Response from dataset operations."""
-
-    dataset_id: str
-    dataset_uri: str
-    dataset_type: str
-    domain: str
+class APIError(Exception):
     message: str
-    created_at: datetime
+    http_status: int | None = None
+    headers: Dict[str, str] | None = None
 
 
 @dataclass
 class FileResponse:
-    """Response from file operations."""
-
     id: str
     filename: str
     bytes: int
@@ -70,9 +27,14 @@ class FileResponse:
 
 
 @dataclass
-class PredictionResponse:
-    """Response from prediction operations."""
+class CreditUsage:
+    elements_processed: int
+    element_type: Literal["image", "page", "video", "audio"] | None
+    credits_used: int
 
+
+@dataclass
+class PredictionResponse:
     id: str
     created_at: datetime
     completed_at: datetime | None
@@ -82,35 +44,40 @@ class PredictionResponse:
 
 
 @dataclass
-class ModelResponse:
-    """Response from model operations."""
-
+class ModelInfoResponse:
     model: str
     domain: str
 
 
 @dataclass
-class APIError(Exception):
-    """API error response."""
-
-    message: str
-    http_status: int | None = None
-    headers: Dict[str, str] | None = None
+class HubInfoResponse:
+    version: str
 
 
 @dataclass
-class CreditUsage:
-    """Credit usage for fine-tuning operations."""
+class HubDomainsResponse:
+    domains: List[str]
 
-    elements_processed: int
-    element_type: Literal["image", "page", "video", "audio"] | None
-    credits_used: int
+
+@dataclass
+class HubSchemaQueryResponse:
+    schema_json: Dict[str, Any]
+    schema_version: str
+    schema_hash: str
+
+
+@dataclass
+class DatasetResponse:
+    dataset_id: str
+    dataset_uri: str
+    dataset_type: str
+    domain: str
+    message: str
+    created_at: datetime
 
 
 @dataclass
 class FinetuningJobRequest:
-    """Request for fine-tuning operations."""
-
     dataset_uri: str
     dataset_format: str
     model: str
@@ -125,8 +92,6 @@ class FinetuningJobRequest:
 
 @dataclass
 class FinetuningJobResponse:
-    """Response from fine-tuning operations."""
-
     id: str
     created_at: datetime
     completed_at: datetime | None

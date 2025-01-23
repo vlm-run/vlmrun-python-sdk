@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 
 from datetime import datetime
 from vlmrun.client.types import (
-    ModelResponse,
+    ModelInfoResponse,
     DatasetResponse,
     HubInfoResponse,
     HubDomainsResponse,
@@ -143,7 +143,7 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def list(self):
-                return [ModelResponse(model="model1", domain="test-domain")]
+                return [ModelInfoResponse(model="model1", domain="test-domain")]
 
         class Hub:
             def __init__(self, client):
