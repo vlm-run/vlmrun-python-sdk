@@ -10,6 +10,9 @@ from vlmrun.client.types import (
     HubInfoResponse,
     HubDomainsResponse,
     HubSchemaQueryResponse,
+    FileResponse,
+    PredictionResponse,
+    FeedbackSubmitResponse,
 )
 
 
@@ -36,6 +39,8 @@ def mock_client(monkeypatch):
             self.image = self.Image(self)
             self.video = self.Video(self)
             self.document = self.Document(self)
+            self.audio = self.Audio(self)
+            self.feedback = self.Feedback(self)
 
         class Dataset:
             def __init__(self, client):
@@ -102,10 +107,13 @@ def mock_client(monkeypatch):
                 return {"id": "prediction1"}
 
             def list(self):
-                return [{"id": "prediction1", "status": "running"}]
+                return [PredictionResponse(id="prediction1", status="running")]
 
             def get(self, prediction_id):
-                return {"id": prediction_id, "status": "running"}
+                return PredictionResponse(id=prediction_id, status="running")
+                
+            def wait(self, prediction_id, timeout=60, sleep=1):
+                return PredictionResponse(id=prediction_id, status="completed")
 
         class Files:
             def __init__(self, client):
@@ -113,30 +121,35 @@ def mock_client(monkeypatch):
 
             def list(self):
                 return [
-                    {
-                        "id": "file1",
-                        "filename": "test.txt",
-                        "size": 100,
-                        "created_at": "2024-01-01",
-                    }
+                    FileResponse(
+                        id="file1",
+                        filename="test.txt",
+                        size=100,
+                        created_at="2024-01-01",
+                    )
                 ]
 
             def upload(self, file_path, purpose="fine-tune"):
-                return {"id": "file1", "filename": file_path}
+                return FileResponse(id="file1", filename=str(file_path))
 
             def get(self, file_id):
-                return {
-                    "id": file_id,
-                    "filename": "test.txt",
-                    "size": 100,
-                    "created_at": "2024-01-01",
-                }
+                return FileResponse(
+                    id=file_id,
+                    filename="test.txt",
+                    size=100,
+                    created_at="2024-01-01",
+                )
 
             def get_content(self, file_id):
                 return b"test content"
 
             def delete(self, file_id):
-                return True
+                return FileResponse(
+                    id=file_id,
+                    filename="test.txt",
+                    size=100,
+                    created_at="2024-01-01",
+                )
 
         class Models:
             def __init__(self, client):
@@ -180,21 +193,21 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return b"image data"
+                return PredictionResponse(id="prediction1", status="completed")
 
         class Video:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return b"video data"
+                return PredictionResponse(id="prediction1", status="completed")
 
         class Document:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return b"document data"
+                return PredictionResponse(id="prediction1", status="completed")
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
     return MockClient()
