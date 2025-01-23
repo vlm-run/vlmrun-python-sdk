@@ -6,17 +6,19 @@ from functools import cached_property
 
 from vlmrun.version import __version__
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.client.dataset import Dataset
+from vlmrun.client.datasets import Datasets
 from vlmrun.client.files import Files
 from vlmrun.client.hub import Hub
 from vlmrun.client.models import Models
 from vlmrun.client.fine_tuning import Finetuning
-from vlmrun.client.prediction import (
-    Prediction,
-    ImagePrediction,
-    VideoPrediction,
-    DocumentPrediction,
+from vlmrun.client.predictions import (
+    Predictions,
+    ImagePredictions,
+    VideoPredictions,
+    DocumentPredictions,
+    AudioPredictions,
 )
+from vlmrun.client.feedback import Feedback
 
 
 @dataclass
@@ -59,15 +61,20 @@ class Client:
             self.base_url = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
 
         # Initialize resources
-        self.dataset = Dataset(self)
+        self.datasets = Datasets(self)
         self.files = Files(self)
         self.hub = Hub(self)
         self.models = Models(self)
         self.fine_tuning = Finetuning(self)
-        self.prediction = Prediction(self)
-        self.image = ImagePrediction(self)
-        self.video = VideoPrediction(self)
-        self.document = DocumentPrediction(self)
+        self.predictions = Predictions(self)
+        self.image = ImagePredictions(self)
+        self.document = DocumentPredictions(self)
+        self.document._requestor._timeout = 120.0
+        self.audio = AudioPredictions(self)
+        self.audio._requestor._timeout = 120.0
+        self.video = VideoPredictions(self)
+        self.video._requestor._timeout = 120.0
+        self.feedback = Feedback(self)
 
     def __repr__(self):
         return f"Client(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"

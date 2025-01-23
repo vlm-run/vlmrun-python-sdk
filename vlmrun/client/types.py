@@ -99,3 +99,11 @@ class FinetuningJobResponse:
     request: FinetuningJobRequest
     model: str
     usage: CreditUsage
+
+
+@dataclass
+class FeedbackSubmitResponse:
+    id: str
+    created_at: datetime
+    request_id: str
+    response: Any
