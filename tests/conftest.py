@@ -27,6 +27,13 @@ def mock_client(monkeypatch):
     """Mock the Client class."""
 
     class MockClient:
+        class Audio:
+            def __init__(self, client):
+                self._client = client
+
+            def generate(self, *args, **kwargs):
+                return PredictionResponse(id="prediction1", status="completed")
+
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
@@ -203,13 +210,6 @@ def mock_client(monkeypatch):
                 return PredictionResponse(id="prediction1", status="completed")
 
         class DocumentPredictions:
-            def __init__(self, client):
-                self._client = client
-
-            def generate(self, *args, **kwargs):
-                return PredictionResponse(id="prediction1", status="completed")
-
-        class Audio:
             def __init__(self, client):
                 self._client = client
 
