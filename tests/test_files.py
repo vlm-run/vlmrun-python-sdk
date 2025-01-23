@@ -32,7 +32,7 @@ def test_get_file(mock_client):
     assert isinstance(response, FileResponse)
     assert response.id == "file1"
     assert response.filename == "test.txt"
-    assert response.size == 100
+    assert len(response.bytes) == len(b"test content")
 
 
 def test_get_content(mock_client):
