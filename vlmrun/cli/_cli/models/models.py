@@ -4,6 +4,8 @@ import typer
 from rich.table import Table
 from rich.console import Console
 
+from vlmrun.client import Client
+
 # Show the help message for the models command if no subcommand is provided
 app = typer.Typer(
     help="Model operations",
@@ -15,8 +17,8 @@ app = typer.Typer(
 @app.command()
 def list(ctx: typer.Context) -> None:
     """List available models."""
-    client = ctx.obj
-    models = client.list_models()
+    client: Client = ctx.obj
+    models = client.models.list()
     console = Console()
     table = Table(show_header=True, header_style="bold")
     table.add_column("Model")

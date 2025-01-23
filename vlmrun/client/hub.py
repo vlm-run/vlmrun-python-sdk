@@ -1,13 +1,11 @@
 """VLM Run Hub API client implementation."""
 
-from typing import TYPE_CHECKING, Any, Dict, List
-from dataclasses import asdict
+from typing import TYPE_CHECKING
 
-from vlmrun.client.base_requestor import APIRequestor, APIError
+from vlmrun.client.base_requestor import APIError
 from vlmrun.client.types import (
-    HubSchemaQueryRequest,
     HubSchemaQueryResponse,
-    HubHealthResponse,
+    HubInfoResponse,
     HubDomainsResponse,
 )
 
@@ -17,52 +15,49 @@ if TYPE_CHECKING:
 
 class Hub:
     """Hub API client for VLM Run.
-    
+
     This client provides access to the hub routes for managing schemas and domains.
     """
 
     def __init__(self, client: "Client") -> None:
         """Initialize Hub client.
-        
+
         Args:
             client: API client instance
         """
         self._client = client
 
-    def get_health(self) -> HubHealthResponse:
-        """Check the health of the hub API.
-        
+    def info(self) -> HubInfoResponse:
+        """Get the hub info.
+
         Returns:
-            HubHealthResponse containing status and hub version
-            
+            HubInfoResponse containing hub version
+
         Example:
-            >>> client.hub.get_health()
+            >>> client.hub.info()
             {
-                "status": "ok",
-                "hub_version": "1.0.0"
+                "version": "1.0.0"
             }
-            
+
         Raises:
             APIError: If the request fails
         """
         try:
             response, _, _ = self._client.requestor.request(
-                method="GET",
-                url="/hub/health",
-                raw_response=False
+                method="GET", url="/hub/info", raw_response=False
             )
             if not isinstance(response, dict):
                 raise APIError("Expected dict response from health check")
-            return HubHealthResponse(**response)
+            return HubInfoResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to check hub health: {str(e)}")
 
-    def list_domains(self) -> HubDomainsResponse:
+    def list_domains(self) -> list[str]:
         """Get the list of supported domains.
-        
+
         Returns:
-            HubDomainsResponse containing list of domain strings
-            
+            List of domain strings
+
         Example:
             >>> client.hub.list_domains()
             [
@@ -70,32 +65,30 @@ class Hub:
                 "document.receipt",
                 "document.utility_bill"
             ]
-            
+
         Raises:
             APIError: If the request fails
         """
         try:
             response, _, _ = self._client.requestor.request(
-                method="GET",
-                url="/hub/domains",
-                raw_response=False
+                method="GET", url="/hub/domains", raw_response=False
             )
-            return HubDomainsResponse(domains=response)
+            return HubDomainsResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 
     def get_schema(self, domain: str) -> HubSchemaQueryResponse:
         """Get the JSON schema for a given domain.
-        
+
         Args:
             domain: Domain identifier (e.g. "document.invoice")
-            
+
         Returns:
             HubSchemaQueryResponse containing:
             - schema_json: The JSON schema for the domain
             - schema_version: Schema version string
             - schema_hash: First 8 characters of schema hash
-            
+
         Example:
             >>> response = client.hub.get_schema("document.invoice")
             >>> print(response.schema_version)
@@ -105,17 +98,16 @@ class Hub:
                 "type": "object",
                 "properties": {...}
             }
-            
+
         Raises:
             APIError: If the request fails or domain is not found
         """
         try:
-            request = HubSchemaQueryRequest(domain=domain)
             response, _, _ = self._client.requestor.request(
                 method="POST",
                 url="/hub/schema",
-                data=asdict(request),
-                raw_response=False
+                data={"domain": domain},
+                raw_response=False,
             )
             if not isinstance(response, dict):
                 raise APIError("Expected dict response from schema query")

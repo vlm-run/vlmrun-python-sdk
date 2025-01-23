@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
+from typing import Union, Literal
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import Client
-from vlmrun.client.types import FileList, FileResponse
+from vlmrun.client.types import FileResponse
 
 
 class Files:
@@ -22,23 +22,34 @@ class Files:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def list(self) -> FileList:
+    def list(self, skip: int = 0, limit: int = 10) -> list[FileResponse]:
         """List all files.
 
+        Args:
+            skip: Number of items to skip
+            limit: Maximum number of items to return
+
         Returns:
-            FileList: List of file objects
+            List[FileResponse]: List of file objects
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="files",
+            params={"skip": skip, "limit": limit},
         )
-
-        return FileList(
-            data=[FileResponse(**file) for file in response.get("data", [])]
-        )
+        return [FileResponse(**file) for file in response]
 
     def upload(
-        self, file: Union[Path, str], purpose: str = "fine-tune"
+        self,
+        file: Union[Path, str],
+        purpose: Literal[
+            "fine-tune",
+            "assistants",
+            "assistants_output",
+            "batch",
+            "batch_output",
+            "vision",
+        ] = "assistants",
     ) -> FileResponse:
         """Upload a file.
 
@@ -65,7 +76,7 @@ class Files:
                 raise TypeError("Expected dict response")
             return FileResponse(**response)
 
-    def retrieve(self, file_id: str) -> FileResponse:
+    def get(self, file_id: str) -> FileResponse:
         """Get file metadata.
 
         Args:
@@ -83,7 +94,7 @@ class Files:
             raise TypeError("Expected dict response")
         return FileResponse(**response)
 
-    def retrieve_content(self, file_id: str) -> bytes:
+    def get_content(self, file_id: str) -> bytes:
         """Get file content.
 
         Args:
@@ -92,13 +103,7 @@ class Files:
         Returns:
             bytes: File content
         """
-        response, status_code, headers = self._requestor.request(
-            method="GET",
-            url=f"files/{file_id}/content",
-            raw_response=True,
-        )
-
-        return response
+        raise NotImplementedError("Not implemented")
 
     def delete(self, file_id: str) -> FileResponse:
         """Delete a file.

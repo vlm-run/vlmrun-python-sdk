@@ -4,58 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List
 
-from pydantic import BaseModel, Field
-
-
-class HubHealthResponse(BaseModel):
-    """Response from hub health check."""
-    status: str = Field(..., description="Health check status")
-    hub_version: str = Field(..., description="Hub version string")
-
-
-class HubDomainsResponse(BaseModel):
-    """Response from listing hub domains."""
-    domains: List[str] = Field(..., description="List of supported domains")
+from typing import Dict, Any, Literal
+from typing import List
 
 
 @dataclass
-class HubSchemaQueryRequest:
-    """Request model for hub schema queries."""
-    domain: str
-
-
-@dataclass
-class HubSchemaQueryResponse:
-    """Response model for hub schema queries.
-    
-    Attributes:
-        schema_json: The JSON schema for the domain
-        schema_version: Schema version string
-        schema_hash: First 8 characters of schema hash
-    """
-    schema_json: Dict[str, Any]
-    schema_version: str
-    schema_hash: str
-
-
-@dataclass
-class DatasetResponse:
-    """Response from dataset operations."""
-
-    dataset_id: str
-    dataset_uri: str
-    dataset_type: str
-    domain: str
+class APIError(Exception):
     message: str
-    created_at: datetime
+    http_status: int | None = None
+    headers: Dict[str, str] | None = None
 
 
 @dataclass
 class FileResponse:
-    """Response from file operations."""
-
     id: str
     filename: str
     bytes: int
@@ -65,25 +27,75 @@ class FileResponse:
 
 
 @dataclass
-class FileList:
-    """Response from listing files."""
-
-    data: List[FileResponse]
-    object: str = "list"
+class CreditUsage:
+    elements_processed: int
+    element_type: Literal["image", "page", "video", "audio"] | None
+    credits_used: int
 
 
 @dataclass
-class ModelResponse:
-    """Response from model operations."""
+class PredictionResponse:
+    id: str
+    created_at: datetime
+    completed_at: datetime | None
+    response: Any | None
+    status: str
+    usage: CreditUsage
 
+
+@dataclass
+class ModelInfoResponse:
     model: str
     domain: str
 
 
 @dataclass
-class APIError(Exception):
-    """API error response."""
+class HubInfoResponse:
+    version: str
 
+
+@dataclass
+class HubDomainsResponse:
+    domains: List[str]
+
+
+@dataclass
+class HubSchemaQueryResponse:
+    schema_json: Dict[str, Any]
+    schema_version: str
+    schema_hash: str
+
+
+@dataclass
+class DatasetResponse:
+    dataset_id: str
+    dataset_uri: str
+    dataset_type: str
+    domain: str
     message: str
-    http_status: int | None = None
-    headers: Dict[str, str] | None = None
+    created_at: datetime
+
+
+@dataclass
+class FinetuningJobRequest:
+    dataset_uri: str
+    dataset_format: str
+    model: str
+    task_prompt: str
+    num_epochs: int
+    batch_size: int
+    learning_rate: float
+    use_lora: bool
+    track: bool
+    wandb_project: str
+
+
+@dataclass
+class FinetuningJobResponse:
+    id: str
+    created_at: datetime
+    completed_at: datetime | None
+    status: Literal["pending", "running", "completed", "failed"]
+    request: FinetuningJobRequest
+    model: str
+    usage: CreditUsage

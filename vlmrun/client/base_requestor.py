@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, Tuple
 from urllib.parse import urljoin
+from dataclasses import dataclass
 
 import requests
 from tenacity import (
@@ -18,19 +19,18 @@ INITIAL_RETRY_DELAY = 1  # seconds
 MAX_RETRY_DELAY = 10  # seconds
 
 
+@dataclass
 class APIError(Exception):
     """Base exception for API errors."""
 
-    def __init__(
-        self,
-        message: str,
-        http_status: int | None = None,
-        headers: Dict[str, str] | None = None,
-    ):
-        super().__init__(message)
-        self.message = message
-        self.http_status = http_status
-        self.headers = headers or {}
+    message: str
+    http_status: int | None = None
+    headers: Dict[str, str] | None = None
+
+    def __post_init__(self):
+        super().__init__(self.message)
+        if self.headers is None:
+            self.headers = {}
 
 
 class APIRequestor:

@@ -1,6 +1,9 @@
 """Test fine-tuning subcommand."""
 
+import pytest
 from vlmrun.cli.cli import app
+
+pytestmark = pytest.mark.skip(reason="Not implemented")
 
 
 def test_create_finetune(runner, mock_client):

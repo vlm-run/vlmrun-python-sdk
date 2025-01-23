@@ -17,7 +17,7 @@ def image(
 ) -> None:
     """Generate an image."""
     client = ctx.obj
-    image_data = client.generate_image(prompt)
+    image_data = client.image.generate(prompt)
     if output:
         output.write_bytes(image_data)
         rprint(f"Image saved to {output}")
@@ -33,7 +33,7 @@ def video(
 ) -> None:
     """Generate a video."""
     client = ctx.obj
-    video_data = client.generate_video(prompt)
+    video_data = client.video.generate(prompt)
     if output:
         output.write_bytes(video_data)
         rprint(f"Video saved to {output}")
@@ -49,7 +49,7 @@ def document(
 ) -> None:
     """Generate a document."""
     client = ctx.obj
-    document_data = client.generate_document(prompt)
+    document_data = client.document.generate(prompt)
     if output:
         output.write_bytes(document_data)
         rprint(f"Document saved to {output}")
