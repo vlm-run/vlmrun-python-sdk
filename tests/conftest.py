@@ -27,12 +27,19 @@ def mock_client(monkeypatch):
     """Mock the Client class."""
 
     class MockClient:
-        class Audio:
+        class AudioPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return PredictionResponse(id="prediction1", status="completed")
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
@@ -46,7 +53,7 @@ def mock_client(monkeypatch):
             self.image = self.ImagePredictions(self)
             self.video = self.VideoPredictions(self)
             self.document = self.DocumentPredictions(self)
-            self.audio = self.Audio(self)
+            self.audio = self.AudioPredictions(self)
             self.feedback = self.Feedback(self)
 
         class Dataset:
@@ -111,16 +118,44 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def create(self, model, prompt, **kwargs):
-                return PredictionResponse(id="prediction1", status="running")
+                return PredictionResponse(
+                    id="prediction1",
+                    status="running",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at=None,
+                    response=None,
+                    usage={"total_tokens": 0}
+                )
 
             def list(self):
-                return [PredictionResponse(id="prediction1", status="running")]
+                return [PredictionResponse(
+                    id="prediction1",
+                    status="running",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at=None,
+                    response=None,
+                    usage={"total_tokens": 0}
+                )]
 
             def get(self, prediction_id):
-                return PredictionResponse(id=prediction_id, status="running")
+                return PredictionResponse(
+                    id=prediction_id,
+                    status="running",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at=None,
+                    response=None,
+                    usage={"total_tokens": 0}
+                )
                 
             def wait(self, prediction_id, timeout=60, sleep=1):
-                return PredictionResponse(id=prediction_id, status="completed")
+                return PredictionResponse(
+                    id=prediction_id,
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
         class Files:
             def __init__(self, client):
@@ -131,20 +166,28 @@ def mock_client(monkeypatch):
                     FileResponse(
                         id="file1",
                         filename="test.txt",
-                        size=100,
-                        created_at="2024-01-01",
+                        bytes=b"test content",
+                        purpose="assistants",
+                        created_at="2024-01-01T00:00:00Z"
                     )
                 ]
 
             def upload(self, file_path, purpose="fine-tune"):
-                return FileResponse(id="file1", filename=str(file_path))
+                return FileResponse(
+                    id="file1",
+                    filename=str(file_path),
+                    bytes=b"test content",
+                    purpose=purpose,
+                    created_at="2024-01-01T00:00:00Z"
+                )
 
             def get(self, file_id):
                 return FileResponse(
                     id=file_id,
                     filename="test.txt",
-                    size=100,
-                    created_at="2024-01-01",
+                    bytes=b"test content",
+                    purpose="assistants",
+                    created_at="2024-01-01T00:00:00Z"
                 )
 
             def get_content(self, file_id):
@@ -154,8 +197,9 @@ def mock_client(monkeypatch):
                 return FileResponse(
                     id=file_id,
                     filename="test.txt",
-                    size=100,
-                    created_at="2024-01-01",
+                    bytes=b"test content",
+                    purpose="assistants",
+                    created_at="2024-01-01T00:00:00Z"
                 )
 
         class Models:
@@ -200,31 +244,62 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return PredictionResponse(id="prediction1", status="completed")
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
         class VideoPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return PredictionResponse(id="prediction1", status="completed")
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
         class DocumentPredictions:
             def __init__(self, client):
                 self._client = client
 
             def generate(self, *args, **kwargs):
-                return PredictionResponse(id="prediction1", status="completed")
+                return PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00Z",
+                    completed_at="2024-01-01T00:00:01Z",
+                    response={"result": "test"},
+                    usage={"total_tokens": 100}
+                )
 
         class Feedback:
             def __init__(self, client):
                 self._client = client
 
             def submit(self, id, label=None, notes=None, flag=None):
-                return FeedbackSubmitResponse(id="file1")
+                return FeedbackSubmitResponse(
+                    id="feedback1",
+                    created_at="2024-01-01T00:00:00Z",
+                    request_id=id,
+                    response=label
+                )
 
             def get(self, id):
-                return FeedbackSubmitResponse(id="file1")
+                return FeedbackSubmitResponse(
+                    id="feedback1",
+                    created_at="2024-01-01T00:00:00Z",
+                    request_id=id,
+                    response=None
+                )
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)
     return MockClient()
