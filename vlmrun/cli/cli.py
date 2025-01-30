@@ -68,7 +68,7 @@ app.add_typer(fine_tuning_app, name="fine-tuning")
 app.add_typer(models_app, name="models")
 app.add_typer(generate_app, name="generate")
 app.add_typer(hub_app, name="hub")
-app.add_typer(dataset_app, name="dataset")
+app.add_typer(dataset_app, name="datasets")
 
 if __name__ == "__main__":
     app()

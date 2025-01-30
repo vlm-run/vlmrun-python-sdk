@@ -1,16 +1,15 @@
 """General utilities for VLMRun."""
 
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Union, Literal
 from loguru import logger
 
-import time
 import tarfile
-import tempfile
 import requests
 from PIL import Image
-from vlmrun.constants import VLMRUN_CACHE_DIR
+from vlmrun.constants import VLMRUN_TMP_DIR, VLMRUN_CACHE_DIR
 
 
 # HTTP request headers
@@ -80,12 +79,12 @@ def download_image(url: str) -> Image.Image:
     return remote_image(url)
 
 
-def create_archive(directory: Path) -> Path:
+def create_archive(directory: Path, name: str) -> Path:
     """Create a tar.gz archive from a directory.
 
     Args:
         directory: Path to directory to archive
-
+        name: Name of the archive
     Returns:
         str: Path to created archive file
 
@@ -99,12 +98,21 @@ def create_archive(directory: Path) -> Path:
         raise ValueError(f"Directory does not exist: {directory}")
 
     # Create archive in temp directory
-    temp_dir = tempfile.gettempdir()
-    archive_path = Path(temp_dir) / f"dataset_{int(time.time())}.tar.gz"
+    logger.debug(
+        f"Creating tar.gz file from directory [path={directory}, n_files={len(list(directory.iterdir()))}]"
+    )
+    date_str = datetime.now().strftime("%Y%m%d")
+    archive_name = f"{name}_{date_str}"
+    archive_path = VLMRUN_TMP_DIR / f"{archive_name}.tar.gz"
+
+    # Check if tar.gz file already exists
+    if archive_path.exists():
+        logger.debug(f"Tar.gz file already exists [path={archive_path}]")
+        return archive_path
 
     with tarfile.open(str(archive_path), "w:gz") as tar:
-        tar.add(directory, arcname=directory.name)
-
+        tar.add(directory, arcname=archive_name)
+    logger.debug(f"Created tar.gz file [path={archive_path}]")
     return archive_path
 
 

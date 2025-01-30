@@ -1,6 +1,5 @@
 """Tests for files operations."""
 
-from pathlib import Path
 from vlmrun.client.types import FileResponse
 
 
@@ -19,7 +18,7 @@ def test_upload_file(mock_client, tmp_path):
     # Create a temporary file
     test_file = tmp_path / "test.txt"
     test_file.write_text("test content")
-    
+
     response = mock_client.files.upload(test_file)
     assert isinstance(response, FileResponse)
     assert response.id == "file1"

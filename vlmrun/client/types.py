@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
 from datetime import datetime
 
 from typing import Dict, Any, Literal
 from typing import List
+
+JobStatus = Literal["pending", "running", "completed", "failed"]
 
 
 @dataclass
@@ -21,16 +23,24 @@ class FileResponse:
     id: str
     filename: str
     bytes: int
-    purpose: str
+    purpose: Literal[
+        "fine-tune",
+        "assistants",
+        "assistants_output",
+        "batch",
+        "batch_output",
+        "vision",
+        "datasets",
+    ]
     created_at: datetime
     object: str = "file"
 
 
 @dataclass
 class CreditUsage:
-    elements_processed: int
-    element_type: Literal["image", "page", "video", "audio"] | None
-    credits_used: int
+    elements_processed: int | None = None
+    element_type: Literal["image", "page", "video", "audio"] | None = None
+    credits_used: int | None = None
 
 
 @dataclass
@@ -67,13 +77,15 @@ class HubSchemaQueryResponse:
 
 
 @dataclass
-class DatasetResponse:
+class DatasetCreateResponse:
     dataset_id: str
-    dataset_uri: str
     dataset_type: str
+    dataset_name: str
     domain: str
     message: str
     created_at: datetime
+    status: JobStatus
+    usage: CreditUsage
 
 
 @dataclass
@@ -95,7 +107,7 @@ class FinetuningJobResponse:
     id: str
     created_at: datetime
     completed_at: datetime | None
-    status: Literal["pending", "running", "completed", "failed"]
+    status: JobStatus
     request: FinetuningJobRequest
     model: str
     usage: CreditUsage
