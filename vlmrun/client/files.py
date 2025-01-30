@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Union, Literal
 
+from loguru import logger
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import Client
 from vlmrun.client.types import FileResponse
@@ -39,6 +41,35 @@ class Files:
         )
         return [FileResponse(**file) for file in response]
 
+    def _check_file_exists(self, file: Union[Path, str]) -> FileResponse | None:
+        if isinstance(file, str):
+            file = Path(file)
+
+        # Compute the md5 hash of the file
+        logger.debug(f"Computing md5 hash for file [file={file}]")
+        file_hash = hashlib.md5()
+        with file.open("rb") as f:
+            while chunk := f.read(4 * 1024 * 1024):
+                file_hash.update(chunk)
+            file_hash = file_hash.hexdigest()
+        logger.debug(f"Computed md5 hash for file [file={file}, hash={file_hash}]")
+
+        # Check if the file exists in the database
+        logger.debug(
+            f"Checking if file exists in the database [file={file}, hash={file_hash}]"
+        )
+        try:
+            response, status_code, headers = self._requestor.request(
+                method="GET",
+                url=f"files/hash/{file_hash}",
+            )
+            return FileResponse(**response)
+        except Exception as exc:
+            logger.error(
+                f"Failed to check if file exists in the database [file={file}, hash={file_hash}, exc={exc}]"
+            )
+            return None
+
     def upload(
         self,
         file: Union[Path, str],
@@ -63,6 +94,12 @@ class Files:
         if isinstance(file, str):
             file = Path(file)
 
+        # Check if the file already exists in the database
+        cached_response = self._check_file_exists(file)
+        if cached_response:
+            return cached_response
+
+        # Upload the file
         with open(file, "rb") as f:
             files = {"file": (file.name, f)}
             response, status_code, headers = self._requestor.request(
