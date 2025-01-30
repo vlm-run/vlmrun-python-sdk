@@ -4,15 +4,17 @@ import pytest
 from typer.testing import CliRunner
 
 from datetime import datetime
+from typing import List
 from vlmrun.client.types import (
     ModelInfoResponse,
-    DatasetResponse,
+    DatasetCreateResponse,
     HubInfoResponse,
     HubDomainsResponse,
     HubSchemaQueryResponse,
     FileResponse,
     PredictionResponse,
     FeedbackSubmitResponse,
+    CreditUsage,
 )
 
 
@@ -38,7 +40,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at="2024-01-01T00:00:01Z",
                     response={"result": "test"},
-                    usage={"total_tokens": 100}
+                    usage={"total_tokens": 100},
                 )
 
         def __init__(self, api_key=None, base_url=None):
@@ -55,40 +57,6 @@ def mock_client(monkeypatch):
             self.document = self.DocumentPredictions(self)
             self.audio = self.AudioPredictions(self)
             self.feedback = self.Feedback(self)
-
-        class Dataset:
-            def __init__(self, client):
-                self._client = client
-
-            def create(
-                self,
-                file_id: str,
-                domain: str,
-                dataset_name: str,
-                dataset_type: str = "images",
-            ) -> DatasetResponse:
-                if dataset_type not in ["images", "videos", "documents"]:
-                    raise ValueError(
-                        "dataset_type must be one of: images, videos, documents"
-                    )
-                return DatasetResponse(
-                    dataset_id="dataset1",
-                    dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
-                    dataset_type=dataset_type,
-                    domain=domain,
-                    message="Dataset created successfully",
-                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
-                )
-
-            def get(self, dataset_id: str) -> DatasetResponse:
-                return DatasetResponse(
-                    dataset_id="dataset1",
-                    dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
-                    dataset_type="images",
-                    domain="test-domain",
-                    message="Dataset created successfully",
-                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
-                )
 
         class FineTuning:
             def __init__(self, client):
@@ -124,18 +92,20 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at=None,
                     response=None,
-                    usage={"total_tokens": 0}
+                    usage={"total_tokens": 0},
                 )
 
             def list(self):
-                return [PredictionResponse(
-                    id="prediction1",
-                    status="running",
-                    created_at="2024-01-01T00:00:00Z",
-                    completed_at=None,
-                    response=None,
-                    usage={"total_tokens": 0}
-                )]
+                return [
+                    PredictionResponse(
+                        id="prediction1",
+                        status="running",
+                        created_at="2024-01-01T00:00:00Z",
+                        completed_at=None,
+                        response=None,
+                        usage={"total_tokens": 0},
+                    )
+                ]
 
             def get(self, prediction_id):
                 return PredictionResponse(
@@ -144,9 +114,9 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at=None,
                     response=None,
-                    usage={"total_tokens": 0}
+                    usage={"total_tokens": 0},
                 )
-                
+
             def wait(self, prediction_id, timeout=60, sleep=1):
                 return PredictionResponse(
                     id=prediction_id,
@@ -154,7 +124,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at="2024-01-01T00:00:01Z",
                     response={"result": "test"},
-                    usage={"total_tokens": 100}
+                    usage={"total_tokens": 100},
                 )
 
         class Files:
@@ -166,9 +136,9 @@ def mock_client(monkeypatch):
                     FileResponse(
                         id="file1",
                         filename="test.txt",
-                        bytes=b"test content",
+                        bytes=10,
                         purpose="assistants",
-                        created_at="2024-01-01T00:00:00Z"
+                        created_at="2024-01-01T00:00:00Z",
                     )
                 ]
 
@@ -176,18 +146,18 @@ def mock_client(monkeypatch):
                 return FileResponse(
                     id="file1",
                     filename=str(file_path),
-                    bytes=b"test content",
+                    bytes=10,
                     purpose=purpose,
-                    created_at="2024-01-01T00:00:00Z"
+                    created_at="2024-01-01T00:00:00Z",
                 )
 
             def get(self, file_id):
                 return FileResponse(
                     id=file_id,
                     filename="test.txt",
-                    bytes=b"test content",
+                    bytes=10,
                     purpose="assistants",
-                    created_at="2024-01-01T00:00:00Z"
+                    created_at="2024-01-01T00:00:00Z",
                 )
 
             def get_content(self, file_id):
@@ -197,9 +167,9 @@ def mock_client(monkeypatch):
                 return FileResponse(
                     id=file_id,
                     filename="test.txt",
-                    bytes=b"test content",
+                    bytes=10,
                     purpose="assistants",
-                    created_at="2024-01-01T00:00:00Z"
+                    created_at="2024-01-01T00:00:00Z",
                 )
 
         class Models:
@@ -250,7 +220,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at="2024-01-01T00:00:01Z",
                     response={"result": "test"},
-                    usage={"total_tokens": 100}
+                    usage={"total_tokens": 100},
                 )
 
         class VideoPredictions:
@@ -264,7 +234,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at="2024-01-01T00:00:01Z",
                     response={"result": "test"},
-                    usage={"total_tokens": 100}
+                    usage={"total_tokens": 100},
                 )
 
         class DocumentPredictions:
@@ -278,8 +248,75 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00Z",
                     completed_at="2024-01-01T00:00:01Z",
                     response={"result": "test"},
-                    usage={"total_tokens": 100}
+                    usage={"total_tokens": 100},
                 )
+
+        class Dataset:
+            def __init__(self, client):
+                self._client = client
+
+            def create(
+                self,
+                file_id: str,
+                domain: str,
+                dataset_name: str,
+                dataset_type: str = "images",
+            ) -> DatasetCreateResponse:
+                if dataset_type not in ["images", "videos", "documents"]:
+                    raise ValueError(
+                        "dataset_type must be one of: images, videos, documents"
+                    )
+                return DatasetCreateResponse(
+                    dataset_id="dataset1",
+                    dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
+                    dataset_type=dataset_type,
+                    dataset_name=dataset_name,
+                    domain=domain,
+                    message="Dataset created successfully",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    status="pending",
+                    usage=CreditUsage(
+                        credits_used=10,
+                        elements_processed=10,
+                        element_type="image",
+                    ),
+                )
+
+            def get(self, dataset_id: str) -> DatasetCreateResponse:
+                return DatasetCreateResponse(
+                    dataset_id="dataset1",
+                    dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
+                    dataset_type="images",
+                    dataset_name="test-dataset",
+                    domain="test-domain",
+                    message="Dataset created successfully",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    status="completed",
+                    usage=CreditUsage(
+                        credits_used=10,
+                        elements_processed=10,
+                        element_type="image",
+                    ),
+                )
+
+            def list(self) -> List[DatasetCreateResponse]:
+                return [
+                    DatasetCreateResponse(
+                        dataset_id="dataset1",
+                        dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
+                        dataset_type="images",
+                        domain="test-domain",
+                        dataset_name="test-dataset",
+                        message="Dataset created successfully",
+                        created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        status="completed",
+                        usage=CreditUsage(
+                            credits_used=10,
+                            elements_processed=10,
+                            element_type="image",
+                        ),
+                    )
+                ]
 
         class Feedback:
             def __init__(self, client):
@@ -290,7 +327,7 @@ def mock_client(monkeypatch):
                     id="feedback1",
                     created_at="2024-01-01T00:00:00Z",
                     request_id=id,
-                    response=label
+                    response=label,
                 )
 
             def get(self, id):
@@ -298,7 +335,7 @@ def mock_client(monkeypatch):
                     id="feedback1",
                     created_at="2024-01-01T00:00:00Z",
                     request_id=id,
-                    response=None
+                    response=None,
                 )
 
     monkeypatch.setattr("vlmrun.cli.cli.Client", MockClient)

@@ -1,11 +1,18 @@
-import os
 import typer
 from typing import List
 from pathlib import Path
+from rich.table import Table
+from rich.console import Console
 
-from vlmrun.common.utils import create_archive
+from loguru import logger
+from vlmrun.client.types import DatasetCreateResponse
+from vlmrun.constants import VLMRUN_TMP_DIR
 
-app = typer.Typer(help="Dataset operations")
+app = typer.Typer(
+    help="Dataset operations",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 
 @app.command()
@@ -69,19 +76,11 @@ def create(
 
     typer.echo(f"Available files [n={len(files)}, dataset_type={dataset_type}]")
 
-    # Create archive
+    # Create dataset
     try:
-        archive_path = create_archive(directory)
-        typer.echo(f"Created archive: {archive_path}")
-
-        # Upload archive
-        file_response = client.files.upload(archive_path, purpose="dataset")
-        typer.echo(f"Uploaded archive with file ID: {file_response.id}")
-
-        # Create dataset
         dataset_response = client.dataset.create(
-            file_id=file_response.id,
             domain=domain,
+            dataset_directory=directory,
             dataset_name=dataset_name,
             dataset_type=dataset_type,
         )
@@ -92,68 +91,39 @@ def create(
         typer.echo(f"Dataset file ID: {dataset_info.file_id}")
 
     finally:
-        # Cleanup temporary archive
-        if "archive_path" in locals() and os.path.exists(archive_path):
-            os.unlink(archive_path)
-            typer.echo("Cleaned up temporary archive")
+        logger.debug(
+            f"Generated dataset [dataset_id={dataset_response.dataset_id}, tmp_dir={VLMRUN_TMP_DIR}]"
+        )
 
 
 @app.command()
-def generate(
+def list(
     ctx: typer.Context,
-    domain: str = typer.Argument(..., help="Domain for dataset"),
-    urls: List[str] = typer.Option(..., help="List of URLs"),
-    url_type: str = typer.Option(
-        ..., help="Type of URLs ('yt_playlist' or 'yt_video')", case_sensitive=False
-    ),
-    dataset_name: str = typer.Option(..., help="Name of the dataset"),
-    dataset_format: str = typer.Option(
-        "json", help="Format of the dataset ('json' or 'messages')"
-    ),
-    max_frames_per_video: int = typer.Option(
-        ..., help="Maximum number of frames to generate per video", min=1
-    ),
-    max_samples: int = typer.Option(
-        ...,
-        help="Maximum number of samples to generate (between 10 and 100,000)",
-        min=10,
-        max=100_000,
-    ),
+    skip: int = typer.Option(0, help="Skip the first N datasets"),
+    limit: int = typer.Option(10, help="Limit the number of datasets to list"),
 ) -> None:
-    """
-    Generate a dataset by calling /v1/dataset/generate.
-
-    This command allows you to generate datasets from YouTube playlists or videos.
-    The generated dataset will be saved according to the specified format and parameters.
-    """
+    """List datasets."""
     client = ctx.obj
+    datasets: List[DatasetCreateResponse] = client.datasets.list(skip=skip, limit=limit)
 
-    # Validate url_type
-    valid_url_types = ["yt_playlist", "yt_video"]
-    if url_type.lower() not in [t.lower() for t in valid_url_types]:
-        typer.echo(f"Error: url_type must be one of {valid_url_types}", err=True)
-        raise typer.Exit(1)
+    console = Console()
+    table = Table(show_header=True)
+    table.add_column("Dataset ID")
+    table.add_column("Dataset Name")
+    table.add_column("Dataset Type")
+    table.add_column("Domain")
+    table.add_column("Created At")
+    table.add_column("Status")
+    table.add_column("Credits Used")
 
-    # Make the request to the endpoint
-    response = client.api_request(
-        method="POST",
-        path="/v1/dataset/generate",
-        json={
-            "domain": domain,
-            "urls": urls,
-            "url_type": url_type,
-            "dataset_name": dataset_name,
-            "dataset_format": dataset_format,
-            "max_frames_per_video": max_frames_per_video,
-            "max_samples": max_samples,
-        },
-    )
-
-    # Extract dataset_uri from response and display it
-    if isinstance(response, dict) and "dataset_uri" in response:
-        typer.echo("Dataset generated successfully!")
-        typer.echo(f"Dataset URI: {response['dataset_uri']}")
-        if "elapsed_s" in response:
-            typer.echo(f"Generation time: {response['elapsed_s']:.2f} seconds")
-    else:
-        typer.echo(response)
+    for dataset in datasets:
+        table.add_row(
+            dataset.dataset_id,
+            dataset.dataset_name,
+            dataset.dataset_type,
+            dataset.domain,
+            dataset.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            dataset.status,
+            dataset.usage.credits_used,
+        )
+    console.print(table)

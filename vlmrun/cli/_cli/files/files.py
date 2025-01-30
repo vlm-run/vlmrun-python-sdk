@@ -1,12 +1,13 @@
 """Files API commands."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import typer
 from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
+from vlmrun.client.types import FileResponse
 
 app = typer.Typer(
     help="File operations",
@@ -20,20 +21,21 @@ def list(ctx: typer.Context) -> None:
     """List all files."""
     client = ctx.obj
 
-    files = client.files.list()
+    files: List[FileResponse] = client.files.list()
     console = Console()
-    table = Table(show_header=True, header_style="bold")
+    table = Table(show_header=True)
     table.add_column("File ID")
     table.add_column("Filename")
     table.add_column("Size")
     table.add_column("Created At")
-
+    table.add_column("Purpose")
     for file in files:
         table.add_row(
             file.id,
             file.filename,
-            str(len(file.bytes)),
-            file.created_at,
+            f"{file.bytes / 1024 / 1024:.2f} MB",
+            file.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            str(file.purpose),
         )
 
     console.print(table)

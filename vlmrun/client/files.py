@@ -74,6 +74,7 @@ class Files:
         self,
         file: Union[Path, str],
         purpose: Literal[
+            "datasets",
             "fine-tune",
             "assistants",
             "assistants_output",

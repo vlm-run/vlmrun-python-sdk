@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime
-from vlmrun.client.types import DatasetResponse
+from vlmrun.client.types import DatasetCreateResponse
 
 
 def test_dataset_create(mock_client):
@@ -13,7 +13,7 @@ def test_dataset_create(mock_client):
         dataset_name="test-dataset",
         dataset_type="images",
     )
-    assert isinstance(response, DatasetResponse)
+    assert isinstance(response, DatasetCreateResponse)
     assert response.dataset_id == "dataset1"
     assert response.domain == "test-domain"
     assert response.dataset_type == "images"
@@ -23,7 +23,7 @@ def test_dataset_create(mock_client):
 def test_dataset_get(mock_client):
     """Test dataset retrieval."""
     response = mock_client.dataset.get("dataset1")
-    assert isinstance(response, DatasetResponse)
+    assert isinstance(response, DatasetCreateResponse)
     assert response.dataset_id == "dataset1"
     assert response.domain == "test-domain"
     assert response.dataset_type == "images"
