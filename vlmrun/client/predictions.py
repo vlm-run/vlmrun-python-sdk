@@ -132,6 +132,14 @@ class ImagePredictions(Predictions):
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
+
+        if 'usage' not in response:
+            response['usage'] = {
+                'elements_processed': 0,
+                'element_type': 'image',
+                'credits_used': 0
+            }
+
         return PredictionResponse(**response)
 
 
