@@ -1,4 +1,3 @@
-import os
 import typer
 from typing import List
 from pathlib import Path
@@ -92,7 +91,9 @@ def create(
         typer.echo(f"Dataset file ID: {dataset_info.file_id}")
 
     finally:
-        logger.debug(f"Generated dataset [dataset_id={dataset_response.dataset_id}, tmp_dir={VLMRUN_TMP_DIR}]")
+        logger.debug(
+            f"Generated dataset [dataset_id={dataset_response.dataset_id}, tmp_dir={VLMRUN_TMP_DIR}]"
+        )
 
 
 @app.command()
@@ -104,7 +105,7 @@ def list(
     """List datasets."""
     client = ctx.obj
     datasets: List[DatasetCreateResponse] = client.datasets.list(skip=skip, limit=limit)
-    
+
     console = Console()
     table = Table(show_header=True)
     table.add_column("Dataset ID")

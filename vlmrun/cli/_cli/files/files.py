@@ -8,6 +8,7 @@ from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
 from vlmrun.client.types import FileResponse
+
 app = typer.Typer(
     help="File operations",
     add_completion=False,
