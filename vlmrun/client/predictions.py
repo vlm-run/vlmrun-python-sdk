@@ -25,7 +25,7 @@ class Predictions:
             client: VLM Run API client instance
         """
         self._client = client
-        self._requestor = APIRequestor(client)
+        self._requestor = APIRequestor(client, timeout=120)
 
     def list(self, skip: int = 0, limit: int = 10) -> list[PredictionResponse]:
         """List all predictions.
@@ -83,7 +83,7 @@ class ImagePredictions(Predictions):
 
     def generate(
         self,
-        image: str | Path | Image.Image,
+        images: list[Path | Image.Image],
         model: str,
         domain: str,
         json_schema: dict | None = None,
@@ -95,7 +95,7 @@ class ImagePredictions(Predictions):
         """Generate a document prediction.
 
         Args:
-            image: Image to generate prediction from
+            images: List of images to generate predictions from
             model: Model to use for prediction
             domain: Domain to use for prediction
             json_schema: JSON schema to use for prediction
@@ -108,19 +108,22 @@ class ImagePredictions(Predictions):
             PredictionResponse: Prediction response
         """
 
-        if isinstance(image, Path):
-            image = Image.open(image)
-        elif isinstance(image, str):
+        # Check if all images are of the same type
+        image_type = type(images[0])
+        if not all(isinstance(image, image_type) for image in images):
+            raise ValueError("All images must be of the same type")
+        if isinstance(images[0], Path):
+            images = [Image.open(image) for image in images]
+        elif isinstance(images[0], Image.Image):
+            pass
+        else:
             raise ValueError("Image must be a path or a PIL Image")
-
-        if not isinstance(image, Image.Image):
-            raise ValueError("Image must be a PIL Image")
 
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="image/generate",
             data={
-                "image": encode_image(image, format="jpeg"),
+                "image": encode_image(images[0], format="jpeg"),
                 "model": model,
                 "domain": domain,
                 "json_schema": json_schema,

@@ -78,7 +78,7 @@ class HubSchemaQueryResponse:
 
 @dataclass
 class DatasetCreateResponse:
-    dataset_id: str
+    id: str
     dataset_type: str
     dataset_name: str
     domain: str
@@ -89,27 +89,14 @@ class DatasetCreateResponse:
 
 
 @dataclass
-class FinetuningJobRequest:
-    dataset_uri: str
-    dataset_format: str
-    model: str
-    task_prompt: str
-    num_epochs: int
-    batch_size: int
-    learning_rate: float
-    use_lora: bool
-    track: bool
-    wandb_project: str
-
-
-@dataclass
-class FinetuningJobResponse:
+class FinetuningResponse:
     id: str
     created_at: datetime
     completed_at: datetime | None
     status: JobStatus
-    request: FinetuningJobRequest
+    message: str
     model: str
+    suffix: str | None
     usage: CreditUsage
 
 

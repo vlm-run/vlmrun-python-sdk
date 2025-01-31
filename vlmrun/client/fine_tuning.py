@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from pathlib import Path
+import re
+from typing import Dict, List, Literal
+
+from PIL import Image
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.client.types import FinetuningJobResponse
+from vlmrun.client.types import FinetuningResponse, PredictionResponse
 from vlmrun.types.abstract import Client
+from vlmrun.common.image import encode_image
 
 
 class Finetuning:
@@ -20,53 +25,158 @@ class Finetuning:
         """
         self._client = client
         self._requestor = APIRequestor(
-            client, base_url=f"{client.base_url}/experimental"
+            client, base_url=f"{client.base_url}/fine_tuning", timeout=300
         )
 
     def create(
         self,
-        training_file: str,
-        validation_file: str,
         model: str,
-        n_epochs: int = 1,
-        batch_size: int = 8,
+        training_file_id: str,
+        validation_file_id: str | None = None,
+        num_epochs: int = 1,
+        batch_size: int | Literal["auto"] = "auto",
         learning_rate: float = 2e-4,
-        use_lora: bool = True,
-        track: bool = True,
-        wandb_project: str | None = None,
+        suffix: str | None = None,
+        wandb_api_key: str | None = None,
+        wandb_base_url: str | None = None,
+        wandb_project_name: str | None = None,
         **kwargs,
-    ) -> FinetuningJobResponse:
+    ) -> FinetuningResponse:
         """Create a fine-tuning job.
 
         Args:
-            training_file: File ID for training data
             model: Base model to fine-tune
-            n_epochs: Number of epochs (default: 1)
-            batch_size: Batch size for training
-            learning_rate: Learning rate for training
+            training_file_id: File ID for training data
+            validation_file_id: File ID for validation data (default: None)
+            validation_file_id: File ID for validation data (default: None)
+            num_epochs: Number of epochs (default: 1)
+            batch_size: Batch size for training (default: "auto")
+            learning_rate: Learning rate for training (default: 2e-4)
+            suffix: Suffix for the fine-tuned model (default: None)
+            wandb_api_key: Weights & Biases API key (default: None)
+            wandb_base_url: Weights & Biases base URL (default: None)
+            wandb_project_name: Weights & Biases project name (default: None)
             **kwargs: Additional fine-tuning parameters
 
         Returns:
             FinetuningJobResponse: Created fine-tuning job
         """
+        if suffix:
+            # ensure suffix contains only alphanumeric, hyphens or underscores.
+            # no special characters like spaces, periods, etc.
+            if not re.match(r"^[a-zA-Z0-9_-]+$", suffix):
+                raise ValueError(
+                    "Suffix must be alphanumeric, hyphens or underscores without spaces"
+                )
+
         response, status_code, headers = self._requestor.request(
             method="POST",
-            url="fine_tuning/jobs/create",
-            json={
-                "training_file": training_file,
-                "validation_file": validation_file,
+            url="create",
+            data={
                 "model": model,
-                "num_epochs": n_epochs,
+                "training_file_id": training_file_id,
+                "validation_file_id": validation_file_id,
+                "num_epochs": num_epochs,
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,
-                "use_lora": use_lora,
-                "track": track,
-                "wandb_project": wandb_project,
+                "suffix": suffix,
+                "wandb_api_key": wandb_api_key,
+                "wandb_base_url": wandb_base_url,
+                "wandb_project_name": wandb_project_name,
             },
         )
-        return FinetuningJobResponse(**response)
+        return FinetuningResponse(**response)
 
-    def list(self, skip: int = 0, limit: int = 10) -> list[FinetuningJobResponse]:
+    def generate(
+        self,
+        images: list[Path | Image.Image],
+        model: str,
+        prompt: str | None = None,
+        domain: str | None = None,
+        json_schema: dict | None = None,
+        max_new_tokens: int = 1024,
+        temperature: float = 0.0,
+        detail: Literal["auto", "lo", "hi"] = "auto",
+        batch: bool = False,
+        metadata: dict = {},
+        callback_url: str = None,
+    ) -> PredictionResponse:
+        """Generate a document prediction.
+
+        Args:
+            images: List of images to generate predictions from
+            model: Model to use for prediction
+            prompt: Prompt to use for prediction
+            domain: Domain to use for prediction
+            json_schema: JSON schema to use for prediction
+            max_new_tokens: Maximum number of new tokens to generate
+            temperature: Temperature for prediction
+            detail: Detail level for prediction
+            batch: Whether to run prediction in batch mode
+            metadata: Metadata to include in prediction
+            callback_url: URL to call when prediction is complete
+
+        Returns:
+            PredictionResponse: Prediction response
+        """
+        # Check various parameters
+        if not json_schema:
+            raise ValueError("JSON schema is required for fine-tuned model predictions")
+        if not prompt:
+            raise ValueError("Prompt is required for fine-tuned model predictions")
+        if domain:
+            raise NotImplementedError(
+                "Domain is not supported for fine-tuned model predictions"
+            )
+        if detail != "auto":
+            raise NotImplementedError(
+                "Detail level is not supported for fine-tuned model predictions"
+            )
+        if batch:
+            raise NotImplementedError(
+                "Batch mode is not supported for fine-tuned models"
+            )
+        if callback_url:
+            raise NotImplementedError(
+                "Callback URL is not supported for fine-tuned model predictions"
+            )
+        if len(images) > 1:
+            raise ValueError(
+                "Only one image is supported for fine-tuned model predictions for now"
+            )
+
+        # Check if all images are of the same type
+        image_type = type(images[0])
+        if not all(isinstance(image, image_type) for image in images):
+            raise ValueError("All images must be of the same type")
+        if isinstance(images[0], Path):
+            images = [Image.open(image) for image in images]
+        elif isinstance(images[0], Image.Image):
+            pass
+        else:
+            raise ValueError("Image must be a path or a PIL Image")
+
+        response, status_code, headers = self._requestor.request(
+            method="POST",
+            url="generate",
+            data={
+                "image": encode_image(images[0], format="jpeg"),
+                "model": model,
+                "prompt": prompt,
+                "json_schema": json_schema,
+                "detail": detail,
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "metadata": metadata,
+                "batch": batch,
+                "callback_url": callback_url,
+            },
+        )
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
+        return PredictionResponse(**response)
+
+    def list(self, skip: int = 0, limit: int = 10) -> list[FinetuningResponse]:
         """List all fine-tuning jobs.
 
         Args:
@@ -78,10 +188,10 @@ class Finetuning:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url="fine_tuning/jobs",
+            url="jobs",
             params={"skip": skip, "limit": limit},
         )
-        return [FinetuningJobResponse(**job) for job in response]
+        return [FinetuningResponse(**job) for job in response]
 
     def list_models(self, skip: int = 0, limit: int = 10) -> List[str]:
         """List all fine-tuning models.
@@ -95,12 +205,12 @@ class Finetuning:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url="fine_tuning/models",
+            url="models",
             params={"skip": skip, "limit": limit},
         )
         return response
 
-    def get(self, job_id: str) -> FinetuningJobResponse:
+    def get(self, job_id: str) -> FinetuningResponse:
         """Get fine-tuning job details.
 
         Args:
@@ -111,9 +221,9 @@ class Finetuning:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"fine_tuning/jobs/{job_id}",
+            url=f"jobs/{job_id}",
         )
-        return FinetuningJobResponse(**response)
+        return FinetuningResponse(**response)
 
     def cancel(self, job_id: str) -> Dict:
         """Cancel a fine-tuning job.
