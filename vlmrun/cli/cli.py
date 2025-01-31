@@ -13,7 +13,7 @@ from vlmrun.cli._cli.fine_tuning import app as fine_tuning_app
 from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
-from vlmrun.cli._cli.dataset import app as dataset_app
+from vlmrun.cli._cli.datasets import app as dataset_app
 
 app = typer.Typer(
     name="vlmrun",
