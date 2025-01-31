@@ -267,7 +267,7 @@ def mock_client(monkeypatch):
                         "dataset_type must be one of: images, videos, documents"
                     )
                 return DatasetCreateResponse(
-                    dataset_id="dataset1",
+                    id="dataset1",
                     dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                     dataset_type=dataset_type,
                     dataset_name=dataset_name,
@@ -284,7 +284,7 @@ def mock_client(monkeypatch):
 
             def get(self, dataset_id: str) -> DatasetCreateResponse:
                 return DatasetCreateResponse(
-                    dataset_id="dataset1",
+                    id="dataset1",
                     dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                     dataset_type="images",
                     dataset_name="test-dataset",
@@ -302,7 +302,7 @@ def mock_client(monkeypatch):
             def list(self) -> List[DatasetCreateResponse]:
                 return [
                     DatasetCreateResponse(
-                        dataset_id="dataset1",
+                        id="dataset1",
                         dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                         dataset_type="images",
                         domain="test-domain",

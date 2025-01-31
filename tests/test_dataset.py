@@ -14,7 +14,7 @@ def test_dataset_create(mock_client):
         dataset_type="images",
     )
     assert isinstance(response, DatasetCreateResponse)
-    assert response.dataset_id == "dataset1"
+    assert response.id == "dataset1"
     assert response.domain == "test-domain"
     assert response.dataset_type == "images"
     assert isinstance(response.created_at, datetime)
@@ -24,7 +24,7 @@ def test_dataset_get(mock_client):
     """Test dataset retrieval."""
     response = mock_client.dataset.get("dataset1")
     assert isinstance(response, DatasetCreateResponse)
-    assert response.dataset_id == "dataset1"
+    assert response.id == "dataset1"
     assert response.domain == "test-domain"
     assert response.dataset_type == "images"
     assert isinstance(response.created_at, datetime)
