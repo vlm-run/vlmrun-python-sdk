@@ -15,16 +15,15 @@ app = typer.Typer(help="Generation operations")
 @app.command()
 def image(
     ctx: typer.Context,
-    prompt: str = typer.Argument(..., help="Image generation prompt"),
+    image: Path = typer.Argument(..., help="Input image file", exists=True, readable=True),
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Generate an image."""
     client: VLMRun = ctx.obj
     response = client.image.generate(
-        images=[],  # Empty list since we're using text-to-image
-        model="default",
-        domain="image",
-        json_schema={"prompt": prompt}  # Pass prompt in json_schema
+        images=[str(image)],
+        model="vlm-1",
+        domain="image"
     )
     if output and response and hasattr(response, "response"):
         if isinstance(response.response, bytes):
@@ -46,7 +45,7 @@ def video(
     client: VLMRun = ctx.obj
     response = client.video.generate(
         file_or_url=prompt,  # Using prompt as input text
-        model="default",
+        model="vlm-1",
         domain="video"
     )
     if output and response and hasattr(response, "response"):
@@ -69,7 +68,7 @@ def document(
     client: VLMRun = ctx.obj
     response = client.document.generate(
         file_or_url=prompt,  # Using prompt as input text
-        model="default",
+        model="vlm-1",
         domain="document"
     )
     if output and response and hasattr(response, "response"):

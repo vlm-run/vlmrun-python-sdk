@@ -2,18 +2,8 @@
 
 from pathlib import Path
 from typing import Optional, List
-from enum import Enum
 
 import typer
-
-class FilePurpose(str, Enum):
-    DATASETS = "datasets"
-    FINE_TUNE = "fine-tune"
-    ASSISTANTS = "assistants"
-    ASSISTANTS_OUTPUT = "assistants_output"
-    BATCH = "batch"
-    BATCH_OUTPUT = "batch_output"
-    VISION = "vision"
 from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
@@ -56,7 +46,7 @@ def list(ctx: typer.Context) -> None:
 def upload(
     ctx: typer.Context,
     file: Path = typer.Argument(..., help="File to upload", exists=True, readable=True),
-    purpose: FilePurpose = typer.Option(FilePurpose.FINE_TUNE, help="Purpose of the file"),
+    purpose: str = typer.Option("fine-tune", help="Purpose of the file"),
 ) -> None:
     """Upload a file."""
     client: VLMRun = ctx.obj

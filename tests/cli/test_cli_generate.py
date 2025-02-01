@@ -6,7 +6,9 @@ from vlmrun.cli.cli import app
 def test_generate_image(runner, mock_client, tmp_path):
     """Test generate image command."""
     client = mock_client
-    result = runner.invoke(app, ["generate", "image", "test prompt"])
+    test_image = tmp_path / "test.jpg"
+    test_image.write_bytes(b"test image data")
+    result = runner.invoke(app, ["generate", "image", str(test_image)])
     assert result.exit_code == 0
 
 

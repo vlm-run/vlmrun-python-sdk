@@ -175,11 +175,9 @@ def FilePredictions(route: Literal["document", "audio", "video"]):
                 logger.debug(
                     f"Uploading file [path={file_or_url}, size={file_or_url.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
                 )
-                upload_response, _, _ = self._requestor.request(
-                    method="POST",
-                    url="files/upload",
-                    files={"file": file_or_url},
-                    data={"purpose": "assistants"}
+                upload_response, _, _ = self._client.files.upload(
+                    file=file_or_url,
+                    purpose="assistants"
                 )
                 if not isinstance(upload_response, dict):
                     raise TypeError("Expected dict response")
