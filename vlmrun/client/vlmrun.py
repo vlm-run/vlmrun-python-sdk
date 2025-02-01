@@ -22,7 +22,7 @@ from vlmrun.client.feedback import Feedback
 
 
 @dataclass
-class Client:
+class VLMRun:
     """VLM Run API client.
 
     Attributes:
@@ -77,7 +77,7 @@ class Client:
         self.feedback = Feedback(self)
 
     def __repr__(self):
-        return f"Client(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
+        return f"VLMRun(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
 
     @property
     def version(self):
