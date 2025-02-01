@@ -1,8 +1,11 @@
 """VLM Run API requestor implementation."""
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, TYPE_CHECKING, Protocol
 from urllib.parse import urljoin
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from vlmrun.types.abstract import VLMRunProtocol
 
 import requests
 from tenacity import (
@@ -38,14 +41,14 @@ class APIRequestor:
 
     def __init__(
         self,
-        client,
+        client: "VLMRunProtocol",
         base_url: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         """Initialize API requestor.
 
         Args:
-            client: API client instance
+            client: VLMRun API instance
             base_url: Base URL for API
             timeout: Request timeout in seconds
         """

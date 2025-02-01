@@ -10,18 +10,18 @@ from PIL import Image
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.types import FinetuningResponse, PredictionResponse
-from vlmrun.types.abstract import Client
+from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.common.image import encode_image
 
 
 class Finetuning:
     """Fine-tuning resource for VLM Run API."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize FineTuning resource with client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize FineTuning resource with VLMRun instance.
 
         Args:
-            client: VLM Run API client instance
+            client: VLM Run API instance
         """
         self._client = client
         self._requestor = APIRequestor(
@@ -99,7 +99,7 @@ class Finetuning:
         detail: Literal["auto", "lo", "hi"] = "auto",
         batch: bool = False,
         metadata: dict = {},
-        callback_url: str = None,
+        callback_url: str | None = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
 
@@ -150,7 +150,7 @@ class Finetuning:
         if not all(isinstance(image, image_type) for image in images):
             raise ValueError("All images must be of the same type")
         if isinstance(images[0], Path):
-            images = [Image.open(image) for image in images]
+            images = [Image.open(str(image)) for image in images]
         elif isinstance(images[0], Image.Image):
             pass
         else:
@@ -160,7 +160,7 @@ class Finetuning:
             method="POST",
             url="generate",
             data={
-                "image": encode_image(images[0], format="jpeg"),
+                "image": encode_image(images[0], format="JPEG"),
                 "model": model,
                 "prompt": prompt,
                 "json_schema": json_schema,
@@ -208,7 +208,9 @@ class Finetuning:
             url="models",
             params={"skip": skip, "limit": limit},
         )
-        return response
+        if not isinstance(response, list):
+            raise TypeError("Expected list response")
+        return [str(model) for model in response]
 
     def get(self, job_id: str) -> FinetuningResponse:
         """Get fine-tuning job details.

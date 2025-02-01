@@ -7,7 +7,7 @@ from typing import Optional
 import typer
 from rich import print as rprint
 
-from vlmrun.client import Client
+from vlmrun.client import VLMRun
 from vlmrun.cli._cli.files import app as files_app
 from vlmrun.cli._cli.fine_tuning import app as fine_tuning_app
 from vlmrun.cli._cli.models import app as models_app
@@ -59,7 +59,7 @@ def main(
     ),
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
-    ctx.obj = Client(api_key=api_key, base_url=base_url)
+    ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
 
 
 # Add subcommands

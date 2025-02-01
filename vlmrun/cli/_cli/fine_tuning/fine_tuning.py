@@ -1,11 +1,12 @@
 """Fine-tuning API commands."""
 
 import typer
+from typing import List
 from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
 
-from vlmrun.client import Client
+from vlmrun.client import VLMRun
 from vlmrun.client.types import FinetuningResponse
 
 app = typer.Typer(
@@ -28,7 +29,7 @@ def create(
     wandb_project_name: str = typer.Option(None, help="Weights & Biases project name"),
 ) -> None:
     """Create a fine-tuning job."""
-    client: Client = ctx.obj
+    client: VLMRun = ctx.obj
     result: FinetuningResponse = client.fine_tuning.create(
         model=model,
         training_file_id=training_file_id,
@@ -45,8 +46,8 @@ def create(
 @app.command()
 def list(ctx: typer.Context) -> None:
     """List all fine-tuning jobs."""
-    client: Client = ctx.obj
-    jobs: list[FinetuningResponse] = client.fine_tuning.list()
+    client: VLMRun = ctx.obj
+    jobs: List[FinetuningResponse] = client.fine_tuning.list()
     console = Console()
     table = Table(show_header=True, header_style="bold")
     table.add_column("Job ID")
@@ -71,7 +72,7 @@ def get(
     job_id: str = typer.Argument(..., help="ID of the fine-tuning job"),
 ) -> None:
     """Get fine-tuning job details."""
-    client: Client = ctx.obj
+    client: VLMRun = ctx.obj
     job: FinetuningResponse = client.fine_tuning.get(job_id)
     rprint(job)
 
@@ -82,6 +83,6 @@ def cancel(
     job_id: str = typer.Argument(..., help="ID of the fine-tuning job to cancel"),
 ) -> None:
     """Cancel a fine-tuning job."""
-    client: Client = ctx.obj
+    client: VLMRun = ctx.obj
     client.fine_tuning.cancel(job_id)
     rprint(f"Cancelled fine-tuning job {job_id}")

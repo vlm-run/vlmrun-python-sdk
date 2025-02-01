@@ -1,4 +1,4 @@
-"""VLM Run Hub API client implementation."""
+"""VLM Run Hub API implementation."""
 
 from typing import TYPE_CHECKING
 
@@ -10,20 +10,20 @@ from vlmrun.client.types import (
 )
 
 if TYPE_CHECKING:
-    from vlmrun.client.client import Client
+    from vlmrun.types.abstract import VLMRunProtocol
 
 
 class Hub:
-    """Hub API client for VLM Run.
+    """Hub API for VLM Run.
 
-    This client provides access to the hub routes for managing schemas and domains.
+    This module provides access to the hub routes for managing schemas and domains.
     """
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Hub client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize Hub resource with VLMRun instance.
 
         Args:
-            client: API client instance
+            client: VLM Run API instance
         """
         self._client = client
 
@@ -73,7 +73,8 @@ class Hub:
             response, _, _ = self._client.requestor.request(
                 method="GET", url="/hub/domains", raw_response=False
             )
-            return HubDomainsResponse(**response)
+            domains = HubDomainsResponse(**response)
+            return domains.domains
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 
