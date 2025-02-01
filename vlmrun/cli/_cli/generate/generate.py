@@ -19,8 +19,8 @@ def image(
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Generate an image."""
-    vlm: VLMRun = ctx.obj
-    response = vlm.image.generate(
+    client: VLMRun = ctx.obj
+    response = client.image.generate(
         images=[],  # Empty list since we're using text-to-image
         model="default",
         domain="image",
@@ -43,8 +43,8 @@ def video(
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Generate a video."""
-    vlm: VLMRun = ctx.obj
-    response = vlm.video.generate(
+    client: VLMRun = ctx.obj
+    response = client.video.generate(
         file_or_url=prompt,  # Using prompt as input text
         model="default",
         domain="video"
@@ -66,8 +66,8 @@ def document(
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Generate a document."""
-    vlm: VLMRun = ctx.obj
-    response = vlm.document.generate(
+    client: VLMRun = ctx.obj
+    response = client.document.generate(
         file_or_url=prompt,  # Using prompt as input text
         model="default",
         domain="document"

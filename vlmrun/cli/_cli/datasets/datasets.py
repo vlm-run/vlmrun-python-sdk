@@ -39,7 +39,7 @@ def create(
     2. Upload the archive
     3. Create a dataset using the uploaded file
     """
-    vlm: VLMRun = ctx.obj
+    client: VLMRun = ctx.obj
 
     valid_types = {"images": "images", "pdfs": "documents", "videos": "videos"}
     if dataset_type not in valid_types:
@@ -81,7 +81,7 @@ def create(
 
     # Create dataset
     try:
-        dataset_response = vlm.datasets.create(
+        dataset_response = client.datasets.create(
             domain=domain,
             dataset_directory=directory,
             dataset_name=dataset_name,
@@ -90,7 +90,7 @@ def create(
         typer.echo(f"Dataset created successfully! ID: {dataset_response.id}")
 
         # Verify dataset creation
-        dataset_info = vlm.datasets.get(dataset_response.id)
+        dataset_info = client.datasets.get(dataset_response.id)
         typer.echo(f"Dataset created with ID: {dataset_info.id}")
 
     finally:
@@ -106,8 +106,8 @@ def list(
     limit: int = typer.Option(10, help="Limit the number of datasets to list"),
 ) -> None:
     """List datasets."""
-    vlm: VLMRun = ctx.obj
-    datasets: List[DatasetCreateResponse] = vlm.datasets.list(skip=skip, limit=limit)
+    client: VLMRun = ctx.obj
+    datasets: List[DatasetCreateResponse] = client.datasets.list(skip=skip, limit=limit)
 
     console = Console()
     table = Table(show_header=True)

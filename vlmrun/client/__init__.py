@@ -1,1 +1,1 @@
-from .vlmrun import VLMRun  # noqa: F401
+from .client import VLMRun  # noqa: F401

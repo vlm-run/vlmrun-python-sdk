@@ -52,10 +52,10 @@ from vlmrun.client import VLMRun
 from vlmrun.hub.schemas.document.invoice import Invoice
 
 # Initialize VLM Run instance
-vlm = VLMRun(api_key="your-api-key")
+client = VLMRun(api_key="your-api-key")
 
 # Process an image
-response = vlm.image.generate(
+response = client.image.generate(
     image="https://example.com/invoice.jpg",
     model="vlm-1",
     domain="document.invoice",
@@ -85,8 +85,8 @@ image = download_image("https://example.com/image.jpg")
 
 ```bash
 vlmrun/
-├── client/               # VLM Run API implementation
-│   ├── vlmrun.py         # VLMRun class implementation
+├── client/               # Client implementation
+│   ├── client.py         # Main VLMRun class
 │   ├── base_requestor.py # Low-level request logic
 │   ├── files.py          # File operations
 │   ├── models.py         # Model operations

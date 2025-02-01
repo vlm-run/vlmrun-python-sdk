@@ -30,9 +30,9 @@ app = typer.Typer(
 @app.command()
 def list(ctx: typer.Context) -> None:
     """List all files."""
-    vlm: VLMRun = ctx.obj
+    client: VLMRun = ctx.obj
 
-    files: List[FileResponse] = vlm.files.list()
+    files: List[FileResponse] = client.files.list()
     console = Console()
     table = Table(show_header=True)
     table.add_column("File ID")
@@ -59,8 +59,8 @@ def upload(
     purpose: FilePurpose = typer.Option(FilePurpose.FINE_TUNE, help="Purpose of the file"),
 ) -> None:
     """Upload a file."""
-    vlm: VLMRun = ctx.obj
-    result = vlm.files.upload(str(file), purpose=purpose)
+    client: VLMRun = ctx.obj
+    result = client.files.upload(str(file), purpose=purpose)
     rprint(f"Uploaded file {result.filename} with ID: {result.id}")
 
 
@@ -70,8 +70,8 @@ def delete(
     file_id: str = typer.Argument(..., help="ID of the file to delete"),
 ) -> None:
     """Delete a file."""
-    vlm: VLMRun = ctx.obj
-    vlm.files.delete(file_id)
+    client: VLMRun = ctx.obj
+    client.files.delete(file_id)
     rprint(f"Deleted file {file_id}")
 
 
@@ -82,8 +82,8 @@ def get(
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Get file content."""
-    vlm: VLMRun = ctx.obj
-    content = vlm.files.get_content(file_id)
+    client: VLMRun = ctx.obj
+    content = client.files.get_content(file_id)
     if output:
         output.write_bytes(content)
         rprint(f"File content written to {output}")

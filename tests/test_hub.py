@@ -9,8 +9,8 @@ from vlmrun.client.types import (
 
 def test_hub_info(mock_client):
     """Test hub info retrieval."""
-    vlm = mock_client
-    response = vlm.hub.info()
+    client = mock_client
+    response = client.hub.info()
     assert isinstance(response, HubInfoResponse)
     assert isinstance(response.version, str)
     assert response.version == "0.1.0"
@@ -18,8 +18,8 @@ def test_hub_info(mock_client):
 
 def test_hub_list_domains(mock_client):
     """Test listing hub domains."""
-    vlm = mock_client
-    response = vlm.hub.list_domains()
+    client = mock_client
+    response = client.hub.list_domains()
     assert isinstance(response, HubDomainsResponse)
     assert isinstance(response.domains, list)
     assert all(isinstance(domain, str) for domain in response.domains)
@@ -28,9 +28,9 @@ def test_hub_list_domains(mock_client):
 
 def test_hub_get_schema(mock_client):
     """Test schema retrieval for a domain."""
-    vlm = mock_client
+    client = mock_client
     domain = "document.invoice"
-    response = vlm.hub.get_schema(domain)
+    response = client.hub.get_schema(domain)
     assert isinstance(response, HubSchemaQueryResponse)
     assert isinstance(response.schema_json, dict)
     assert isinstance(response.schema_version, str)
