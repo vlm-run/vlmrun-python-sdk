@@ -9,7 +9,11 @@ from typing import Dict, List, Literal
 from PIL import Image
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.client.types import FinetuningResponse, PredictionResponse
+from vlmrun.client.types import (
+    FinetuningResponse,
+    PredictionResponse,
+    FinetuningProvisionResponse,
+)
 from vlmrun.types.abstract import Client
 from vlmrun.common.image import encode_image
 
@@ -86,6 +90,23 @@ class Finetuning:
             },
         )
         return FinetuningResponse(**response)
+
+    def provision(
+        self, model: str, duration: int = 10 * 60, concurrency: int = 1
+    ) -> Dict:
+        """Provision a fine-tuning model.
+
+        Args:
+            model: Model to provision
+            duration: Duration for the provisioned model (in seconds)
+            concurrency: Concurrency for the provisioned model
+        """
+        response, status_code, headers = self._requestor.request(
+            method="POST",
+            url="provision",
+            data={"model": model, "duration": duration, "concurrency": concurrency},
+        )
+        return FinetuningProvisionResponse(**response)
 
     def generate(
         self,

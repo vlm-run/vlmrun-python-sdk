@@ -101,6 +101,15 @@ class FinetuningResponse:
 
 
 @dataclass
+class FinetuningProvisionResponse:
+    id: str
+    created_at: datetime
+    completed_at: datetime | None
+    model: str
+    message: str
+
+
+@dataclass
 class FeedbackSubmitResponse:
     id: str
     created_at: datetime
