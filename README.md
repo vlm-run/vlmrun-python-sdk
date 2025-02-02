@@ -51,7 +51,7 @@ The package provides optional features that can be installed based on your needs
 from vlmrun.client import VLMRun
 from vlmrun.hub.schemas.document.invoice import Invoice
 
-# Initialize VLM Run instance
+# Initialize the client
 client = VLMRun(api_key="your-api-key")
 
 # Process an image

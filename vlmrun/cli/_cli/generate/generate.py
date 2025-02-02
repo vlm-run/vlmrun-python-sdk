@@ -21,7 +21,7 @@ def image(
     """Generate an image."""
     client: VLMRun = ctx.obj
     response = client.image.generate(
-        images=[str(image)],
+        images=[image],
         model="vlm-1",
         domain="image"
     )

@@ -1,7 +1,7 @@
 """Files API commands."""
 
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 import typer
 from rich.table import Table
@@ -46,7 +46,7 @@ def list(ctx: typer.Context) -> None:
 def upload(
     ctx: typer.Context,
     file: Path = typer.Argument(..., help="File to upload", exists=True, readable=True),
-    purpose: str = typer.Option("fine-tune", help="Purpose of the file"),
+    purpose: Literal["datasets", "fine-tune", "assistants", "assistants_output", "batch", "batch_output", "vision"] = typer.Option("fine-tune", help="Purpose of the file"),
 ) -> None:
     """Upload a file."""
     client: VLMRun = ctx.obj

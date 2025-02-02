@@ -93,19 +93,24 @@ class Finetuning:
 
     def provision(
         self, model: str, duration: int = 10 * 60, concurrency: int = 1
-    ) -> Dict:
+    ) -> FinetuningProvisionResponse:
         """Provision a fine-tuning model.
 
         Args:
             model: Model to provision
             duration: Duration for the provisioned model (in seconds)
             concurrency: Concurrency for the provisioned model
+
+        Returns:
+            FinetuningProvisionResponse: Response containing provisioning details
         """
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="provision",
             data={"model": model, "duration": duration, "concurrency": concurrency},
         )
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
         return FinetuningProvisionResponse(**response)
 
     def generate(

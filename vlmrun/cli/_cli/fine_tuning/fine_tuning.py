@@ -75,7 +75,11 @@ def provision(
 ) -> None:
     """Provision a fine-tuning model."""
     client: VLMRun = ctx.obj
-    result: FinetuningProvisionResponse = client.fine_tuning.provision(model)
+    result: FinetuningProvisionResponse = client.fine_tuning.provision(
+        model=model,
+        duration=duration,
+        concurrency=concurrency
+    )
     rprint(f"Provisioned fine-tuning model\n{result}")
 
 
