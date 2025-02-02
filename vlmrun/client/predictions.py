@@ -7,8 +7,6 @@ from loguru import logger
 
 import time
 from tqdm import tqdm
-from typing import Literal
-
 from vlmrun.common.image import encode_image
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -87,7 +85,7 @@ class ImagePredictions(Predictions):
         model: str,
         domain: str,
         json_schema: dict | None = None,
-        detail: Literal["auto", "lo", "hi"] = "auto",
+        detail: str = "auto",
         batch: bool = False,
         metadata: dict = {},
         callback_url: str | None = None,
@@ -138,7 +136,7 @@ class ImagePredictions(Predictions):
         return PredictionResponse(**response)
 
 
-def FilePredictions(route: Literal["document", "audio", "video"]):
+def FilePredictions(route: str):
     """File prediction resource for VLM Run API."""
 
     class _FilePredictions(Predictions):
@@ -150,7 +148,7 @@ def FilePredictions(route: Literal["document", "audio", "video"]):
             model: str,
             domain: str,
             json_schema: dict | None = None,
-            detail: Literal["auto", "lo", "hi"] = "auto",
+            detail: str = "auto",
             batch: bool = False,
             metadata: dict = {},
             callback_url: str | None = None,

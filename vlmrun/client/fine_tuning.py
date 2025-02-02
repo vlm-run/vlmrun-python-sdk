@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Dict, List, Literal
+from typing import Dict, List
 
 from PIL import Image
 
@@ -38,7 +38,7 @@ class Finetuning:
         training_file_id: str,
         validation_file_id: str | None = None,
         num_epochs: int = 1,
-        batch_size: int | Literal["auto"] = "auto",
+        batch_size: int | str = "auto",
         learning_rate: float = 2e-4,
         suffix: str | None = None,
         wandb_api_key: str | None = None,
@@ -122,7 +122,7 @@ class Finetuning:
         json_schema: dict | None = None,
         max_new_tokens: int = 1024,
         temperature: float = 0.0,
-        detail: Literal["auto", "lo", "hi"] = "auto",
+        detail: str = "auto",
         batch: bool = False,
         metadata: dict = {},
         callback_url: str | None = None,
