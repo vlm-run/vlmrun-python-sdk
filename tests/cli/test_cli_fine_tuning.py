@@ -23,6 +23,13 @@ def test_list_finetune(runner, mock_client):
     assert "test-model" in result.stdout
 
 
+def test_provision_finetune(runner, mock_client):
+    """Test provision fine-tuning command."""
+    result = runner.invoke(app, ["fine-tuning", "provision", "test-model"])
+    assert result.exit_code == 0
+    assert "provisioned" in result.stdout
+
+
 def test_get_finetune(runner, mock_client):
     """Test get fine-tuning command."""
     client = mock_client

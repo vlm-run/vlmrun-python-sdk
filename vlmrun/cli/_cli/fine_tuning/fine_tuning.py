@@ -7,7 +7,7 @@ from rich.console import Console
 from rich import print as rprint
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import FinetuningResponse
+from vlmrun.client.types import FinetuningResponse, FinetuningProvisionResponse
 
 app = typer.Typer(
     help="Fine-tuning operations",
@@ -64,6 +64,19 @@ def list(ctx: typer.Context) -> None:
         )
 
     console.print(table)
+
+
+@app.command()
+def provision(
+    ctx: typer.Context,
+    model: str = typer.Argument(..., help="Model to provision"),
+    duration: int = typer.Option(10 * 60, help="Duration for the provisioned model"),
+    concurrency: int = typer.Option(1, help="Concurrency for the provisioned model"),
+) -> None:
+    """Provision a fine-tuning model."""
+    client: VLMRun = ctx.obj
+    result: FinetuningProvisionResponse = client.fine_tuning.provision(model)
+    rprint(f"Provisioned fine-tuning model\n{result}")
 
 
 @app.command()
