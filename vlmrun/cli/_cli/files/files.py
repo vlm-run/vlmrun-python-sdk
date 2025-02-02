@@ -46,7 +46,7 @@ def list(ctx: typer.Context) -> None:
 def upload(
     ctx: typer.Context,
     file: Path = typer.Argument(..., help="File to upload", exists=True, readable=True),
-    purpose: Literal["datasets", "fine-tune", "assistants", "assistants_output", "batch", "batch_output", "vision"] = typer.Option("fine-tune", help="Purpose of the file"),
+    purpose: str = typer.Option("fine-tune", help="Purpose of the file (one of: datasets, fine-tune, assistants, assistants_output, batch, batch_output, vision)"),
 ) -> None:
     """Upload a file."""
     client: VLMRun = ctx.obj
