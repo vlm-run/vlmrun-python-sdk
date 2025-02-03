@@ -5,18 +5,18 @@ from __future__ import annotations
 from typing import List
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.types.abstract import Client
+from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import ModelInfoResponse
 
 
 class Models:
     """Models resource for VLM Run API."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Models resource with client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize Models resource with VLMRun instance.
 
         Args:
-            client: VLM Run API client instance
+            client: VLM Run API instance
         """
         self._client = client
         self._requestor = APIRequestor(client)

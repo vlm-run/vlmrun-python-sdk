@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Union, Literal
+from typing import Union
 
 from loguru import logger
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.types.abstract import Client
+from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import FileResponse
 
 
 class Files:
     """Files resource for VLM Run API."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Files resource with client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize Files resource with VLMRun instance.
 
         Args:
-            client: VLM Run API client instance
+            client: VLM Run API instance
         """
         self._client = client
         self._requestor = APIRequestor(client)
@@ -73,15 +73,7 @@ class Files:
     def upload(
         self,
         file: Union[Path, str],
-        purpose: Literal[
-            "datasets",
-            "fine-tune",
-            "assistants",
-            "assistants_output",
-            "batch",
-            "batch_output",
-            "vision",
-        ] = "assistants",
+        purpose: str = "assistants",
     ) -> FileResponse:
         """Upload a file.
 

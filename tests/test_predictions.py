@@ -6,7 +6,8 @@ from vlmrun.client.types import PredictionResponse
 
 def test_list_predictions(mock_client):
     """Test listing predictions."""
-    response = mock_client.prediction.list()
+    client = mock_client
+    response = client.prediction.list()
     assert isinstance(response, list)
     assert all(isinstance(pred, PredictionResponse) for pred in response)
     assert len(response) > 0
@@ -16,7 +17,8 @@ def test_list_predictions(mock_client):
 
 def test_get_prediction(mock_client):
     """Test getting prediction by ID."""
-    response = mock_client.prediction.get("prediction1")
+    client = mock_client
+    response = client.prediction.get("prediction1")
     assert isinstance(response, PredictionResponse)
     assert response.id == "prediction1"
     assert response.status == "running"
@@ -24,7 +26,8 @@ def test_get_prediction(mock_client):
 
 def test_wait_prediction(mock_client):
     """Test waiting for prediction completion."""
-    response = mock_client.prediction.wait("prediction1", timeout=1)
+    client = mock_client
+    response = client.prediction.wait("prediction1", timeout=1)
     assert isinstance(response, PredictionResponse)
     assert response.id == "prediction1"
     assert response.status == "completed"
@@ -37,7 +40,8 @@ def test_image_generate(mock_client, tmp_path):
     img = Image.new("RGB", (100, 100), color="red")
     img.save(img_path)
 
-    response = mock_client.image.generate(
+    client = mock_client
+    response = client.image.generate(
         image=img_path,
         model="test-model",
         domain="test-domain",
@@ -51,7 +55,8 @@ def test_document_generate(mock_client, tmp_path):
     doc_path = tmp_path / "test.pdf"
     doc_path.write_bytes(b"test content")
 
-    response = mock_client.document.generate(
+    client = mock_client
+    response = client.document.generate(
         file_or_url=doc_path,
         model="test-model",
         domain="test-domain",
@@ -65,7 +70,8 @@ def test_video_generate(mock_client, tmp_path):
     video_path = tmp_path / "test.mp4"
     video_path.write_bytes(b"test content")
 
-    response = mock_client.video.generate(
+    client = mock_client
+    response = client.video.generate(
         file_or_url=video_path,
         model="test-model",
         domain="test-domain",
@@ -79,7 +85,8 @@ def test_audio_generate(mock_client, tmp_path):
     audio_path = tmp_path / "test.mp3"
     audio_path.write_bytes(b"test content")
 
-    response = mock_client.audio.generate(
+    client = mock_client
+    response = client.audio.generate(
         file_or_url=audio_path,
         model="test-model",
         domain="test-domain",

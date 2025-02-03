@@ -7,22 +7,20 @@ from loguru import logger
 
 import time
 from tqdm import tqdm
-from typing import Literal
-
 from vlmrun.common.image import encode_image
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.types.abstract import Client
+from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import PredictionResponse, FileResponse
 
 
 class Predictions:
     """Predictions resource for VLM Run API."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Predictions resource with client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize Predictions resource with VLMRun instance.
 
         Args:
-            client: VLM Run API client instance
+            client: VLM Run API instance
         """
         self._client = client
         self._requestor = APIRequestor(client, timeout=120)
@@ -87,10 +85,10 @@ class ImagePredictions(Predictions):
         model: str,
         domain: str,
         json_schema: dict | None = None,
-        detail: Literal["auto", "lo", "hi"] = "auto",
+        detail: str = "auto",
         batch: bool = False,
         metadata: dict = {},
-        callback_url: str = None,
+        callback_url: str | None = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
 
@@ -113,7 +111,7 @@ class ImagePredictions(Predictions):
         if not all(isinstance(image, image_type) for image in images):
             raise ValueError("All images must be of the same type")
         if isinstance(images[0], Path):
-            images = [Image.open(image) for image in images]
+            images = [Image.open(str(image)) for image in images]
         elif isinstance(images[0], Image.Image):
             pass
         else:
@@ -123,7 +121,7 @@ class ImagePredictions(Predictions):
             method="POST",
             url="image/generate",
             data={
-                "image": encode_image(images[0], format="jpeg"),
+                "image": encode_image(images[0], format="JPEG"),
                 "model": model,
                 "domain": domain,
                 "json_schema": json_schema,
@@ -138,7 +136,7 @@ class ImagePredictions(Predictions):
         return PredictionResponse(**response)
 
 
-def FilePredictions(route: Literal["document", "audio", "video"]):
+def FilePredictions(route: str):
     """File prediction resource for VLM Run API."""
 
     class _FilePredictions(Predictions):
@@ -150,10 +148,10 @@ def FilePredictions(route: Literal["document", "audio", "video"]):
             model: str,
             domain: str,
             json_schema: dict | None = None,
-            detail: Literal["auto", "lo", "hi"] = "auto",
+            detail: str = "auto",
             batch: bool = False,
             metadata: dict = {},
-            callback_url: str = None,
+            callback_url: str | None = None,
         ) -> PredictionResponse:
             """Generate a document prediction.
 
@@ -175,9 +173,13 @@ def FilePredictions(route: Literal["document", "audio", "video"]):
                 logger.debug(
                     f"Uploading file [path={file_or_url}, size={file_or_url.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
                 )
-                response: FileResponse = self._client.files.upload(
-                    file_or_url, purpose="assistants"
+                upload_response, _, _ = self._client.files.upload(
+                    file=file_or_url,
+                    purpose="assistants"
                 )
+                if not isinstance(upload_response, dict):
+                    raise TypeError("Expected dict response")
+                response = FileResponse(**upload_response)
                 logger.debug(
                     f"Uploaded file [file_id={response.id}, name={response.filename}]"
                 )

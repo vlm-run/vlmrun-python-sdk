@@ -1,12 +1,13 @@
 """Files API commands."""
 
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 import typer
 from rich.table import Table
 from rich.console import Console
 from rich import print as rprint
+from vlmrun.client import VLMRun
 from vlmrun.client.types import FileResponse
 
 app = typer.Typer(
@@ -19,7 +20,7 @@ app = typer.Typer(
 @app.command()
 def list(ctx: typer.Context) -> None:
     """List all files."""
-    client = ctx.obj
+    client: VLMRun = ctx.obj
 
     files: List[FileResponse] = client.files.list()
     console = Console()
@@ -45,10 +46,10 @@ def list(ctx: typer.Context) -> None:
 def upload(
     ctx: typer.Context,
     file: Path = typer.Argument(..., help="File to upload", exists=True, readable=True),
-    purpose: str = typer.Option("fine-tune", help="Purpose of the file"),
+    purpose: str = typer.Option("fine-tune", help="Purpose of the file (one of: datasets, fine-tune, assistants, assistants_output, batch, batch_output, vision)"),
 ) -> None:
     """Upload a file."""
-    client = ctx.obj
+    client: VLMRun = ctx.obj
     result = client.files.upload(str(file), purpose=purpose)
     rprint(f"Uploaded file {result.filename} with ID: {result.id}")
 
@@ -59,7 +60,7 @@ def delete(
     file_id: str = typer.Argument(..., help="ID of the file to delete"),
 ) -> None:
     """Delete a file."""
-    client = ctx.obj
+    client: VLMRun = ctx.obj
     client.files.delete(file_id)
     rprint(f"Deleted file {file_id}")
 
@@ -71,7 +72,7 @@ def get(
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Get file content."""
-    client = ctx.obj
+    client: VLMRun = ctx.obj
     content = client.files.get_content(file_id)
     if output:
         output.write_bytes(content)

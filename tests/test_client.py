@@ -2,14 +2,14 @@ import os
 import requests
 import pytest
 from functools import lru_cache
-from vlmrun.client import Client
+from vlmrun.client import VLMRun
 
 
 def test_client_with_api_key(monkeypatch):
     """Test client initialization with API key provided in constructor."""
     monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
-    client = Client(api_key="test-key")
+    client = VLMRun(api_key="test-key")
     assert client.api_key == "test-key"
     assert client.base_url == "https://api.vlm.run/v1"  # Default URL with /v1 suffix
 
@@ -18,14 +18,14 @@ def test_client_with_env_api_key(monkeypatch):
     """Test client initialization with API key from environment variable."""
     monkeypatch.setenv("VLMRUN_API_KEY", "env-key")
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
-    client = Client()
+    client = VLMRun()
     assert client.api_key == "env-key"
     assert client.base_url == "https://api.vlm.run/v1"  # Default URL with /v1 suffix
 
 
 def test_client_with_base_url():
     """Test client initialization with custom base URL."""
-    client = Client(api_key="test-key", base_url="https://custom.api")
+    client = VLMRun(api_key="test-key", base_url="https://custom.api")
     assert client.api_key == "test-key"
     assert client.base_url == "https://custom.api"
 
@@ -33,7 +33,7 @@ def test_client_with_base_url():
 def test_client_with_env_base_url(monkeypatch):
     """Test client initialization with base URL from environment variable."""
     monkeypatch.setenv("VLMRUN_BASE_URL", "https://env.api")
-    client = Client(api_key="test-key")
+    client = VLMRun(api_key="test-key")
     assert client.api_key == "test-key"
     assert client.base_url == "https://env.api"
 
@@ -43,7 +43,7 @@ def test_client_missing_api_key(monkeypatch):
     monkeypatch.delenv("VLMRUN_API_KEY", raising=False)  # Ensure no API key in env
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     with pytest.raises(ValueError) as exc_info:
-        Client()
+        VLMRun()
     assert "API key must be provided" in str(exc_info.value)
 
 
@@ -52,7 +52,7 @@ def test_client_env_precedence(monkeypatch):
     monkeypatch.setenv("VLMRUN_API_KEY", "env-key")
     monkeypatch.setenv("VLMRUN_BASE_URL", "https://env.api")
 
-    client = Client(api_key="test-key", base_url="https://custom.api")
+    client = VLMRun(api_key="test-key", base_url="https://custom.api")
     assert client.api_key == "test-key"  # Constructor value
     assert client.base_url == "https://custom.api"  # Constructor value
 
@@ -75,7 +75,7 @@ def _healthcheck():
 @pytest.mark.skipif(not _healthcheck(), reason="API is not healthy")
 def test_client_health():
     """Test client health check."""
-    client = Client()
+    client = VLMRun()
     assert client.healthcheck()
     assert len(client.models.list()) > 0, "No models found"
 
@@ -87,7 +87,7 @@ def test_client_health():
 )
 @pytest.mark.skipif(not _healthcheck(), reason="API is not healthy")
 def test_client_openai():
-    """Test client OpenAI client."""
-    client = Client()
+    """Test client OpenAI integration."""
+    client = VLMRun()
     assert client.openai is not None
     assert client.openai.models.list() is not None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Dict, List, Literal
+from typing import Dict, List
 
 from PIL import Image
 
@@ -14,18 +14,18 @@ from vlmrun.client.types import (
     PredictionResponse,
     FinetuningProvisionResponse,
 )
-from vlmrun.types.abstract import Client
+from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.common.image import encode_image
 
 
 class Finetuning:
     """Fine-tuning resource for VLM Run API."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize FineTuning resource with client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize FineTuning resource with VLMRun instance.
 
         Args:
-            client: VLM Run API client instance
+            client: VLM Run API instance
         """
         self._client = client
         self._requestor = APIRequestor(
@@ -38,7 +38,7 @@ class Finetuning:
         training_file_id: str,
         validation_file_id: str | None = None,
         num_epochs: int = 1,
-        batch_size: int | Literal["auto"] = "auto",
+        batch_size: int | str = "auto",
         learning_rate: float = 2e-4,
         suffix: str | None = None,
         wandb_api_key: str | None = None,
@@ -93,19 +93,24 @@ class Finetuning:
 
     def provision(
         self, model: str, duration: int = 10 * 60, concurrency: int = 1
-    ) -> Dict:
+    ) -> FinetuningProvisionResponse:
         """Provision a fine-tuning model.
 
         Args:
             model: Model to provision
             duration: Duration for the provisioned model (in seconds)
             concurrency: Concurrency for the provisioned model
+
+        Returns:
+            FinetuningProvisionResponse: Response containing provisioning details
         """
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="provision",
             data={"model": model, "duration": duration, "concurrency": concurrency},
         )
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
         return FinetuningProvisionResponse(**response)
 
     def generate(
@@ -117,10 +122,10 @@ class Finetuning:
         json_schema: dict | None = None,
         max_new_tokens: int = 1024,
         temperature: float = 0.0,
-        detail: Literal["auto", "lo", "hi"] = "auto",
+        detail: str = "auto",
         batch: bool = False,
         metadata: dict = {},
-        callback_url: str = None,
+        callback_url: str | None = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
 
@@ -171,7 +176,7 @@ class Finetuning:
         if not all(isinstance(image, image_type) for image in images):
             raise ValueError("All images must be of the same type")
         if isinstance(images[0], Path):
-            images = [Image.open(image) for image in images]
+            images = [Image.open(str(image)) for image in images]
         elif isinstance(images[0], Image.Image):
             pass
         else:
@@ -181,7 +186,7 @@ class Finetuning:
             method="POST",
             url="generate",
             data={
-                "image": encode_image(images[0], format="jpeg"),
+                "image": encode_image(images[0], format="JPEG"),
                 "model": model,
                 "prompt": prompt,
                 "json_schema": json_schema,
@@ -229,7 +234,9 @@ class Finetuning:
             url="models",
             params={"skip": skip, "limit": limit},
         )
-        return response
+        if not isinstance(response, list):
+            raise TypeError("Expected list response")
+        return [str(model) for model in response]
 
     def get(self, job_id: str) -> FinetuningResponse:
         """Get fine-tuning job details.

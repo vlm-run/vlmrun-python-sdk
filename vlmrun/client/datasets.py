@@ -6,7 +6,7 @@ from loguru import logger
 from pathlib import Path
 from typing import List, Literal
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.types.abstract import Client
+from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import DatasetCreateResponse, FileResponse
 from vlmrun.common.utils import create_archive
 
@@ -14,11 +14,11 @@ from vlmrun.common.utils import create_archive
 class Datasets:
     """Datasets resource for VLM Run API."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Datasets resource with client.
+    def __init__(self, client: "VLMRunProtocol") -> None:
+        """Initialize Datasets resource with VLMRun instance.
 
         Args:
-            client: VLM Run API client instance
+            client: VLM Run API instance
         """
         self._client = client
         self._requestor = APIRequestor(client, base_url=f"{client.base_url}")
@@ -26,7 +26,7 @@ class Datasets:
     def create(
         self,
         domain: str,
-        dataset_directory: str | Path,
+        dataset_directory: Path,
         dataset_name: str,
         dataset_type: Literal["images", "videos", "documents"],
     ) -> DatasetCreateResponse:
@@ -51,9 +51,15 @@ class Datasets:
         )
 
         # Upload tar.gz file
-        file_response: FileResponse = self._client.files.upload(
-            tar_path, purpose="datasets"
+        upload_response, _, _ = self._requestor.request(
+            method="POST",
+            url="files/upload",
+            files={"file": tar_path},
+            data={"purpose": "datasets"}
         )
+        if not isinstance(upload_response, dict):
+            raise TypeError("Expected dict response")
+        file_response = FileResponse(**upload_response)
         logger.debug(
             f"Uploaded tar.gz file [path={tar_path}, file_id={file_response.id}, size={file_response.bytes / 1024 / 1024:.2f} MB]"
         )

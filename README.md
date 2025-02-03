@@ -15,7 +15,7 @@
 </p>
 </div>
 
-The [VLM Run Python SDK](https://pypi.org/project/vlmrun/) is the official Python client for [VLM Run API platform](https://docs.vlm.run), providing a convenient way to interacting with our REST APIs.
+The [VLM Run Python SDK](https://pypi.org/project/vlmrun/) is the official Python SDK for [VLM Run API platform](https://docs.vlm.run), providing a convenient way to interact with our REST APIs.
 
 
 ## 🚀 Getting Started
@@ -48,11 +48,11 @@ The package provides optional features that can be installed based on your needs
 ### Basic Usage
 
 ```python
-from vlmrun.client import Client
+from vlmrun.client import VLMRun
 from vlmrun.hub.schemas.document.invoice import Invoice
 
 # Initialize the client
-client = Client(api_key="your-api-key")
+client = VLMRun(api_key="your-api-key")
 
 # Process an image
 response = client.image.generate(
@@ -86,12 +86,12 @@ image = download_image("https://example.com/image.jpg")
 ```bash
 vlmrun/
 ├── client/               # Client implementation
-│   ├── client.py         # Main Client class
+│   ├── client.py         # Main VLMRun class
 │   ├── base_requestor.py # Low-level request logic
 │   ├── files.py          # File operations
 │   ├── models.py         # Model operations
 │   ├── finetune.py       # Fine-tuning operations
-│   └── types.py          # Client type definitions
+│   └── types.py          # Type definitions
 ├── common/              # Common utilities
 │   ├── auth.py          # Authentication utilities
 │   └── image.py         # Image processing utilities
