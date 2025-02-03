@@ -1,13 +1,12 @@
 """Generation API commands."""
 
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 import typer
 from rich import print as rprint
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import PredictionResponse
 
 app = typer.Typer(help="Generation operations")
 
@@ -15,16 +14,14 @@ app = typer.Typer(help="Generation operations")
 @app.command()
 def image(
     ctx: typer.Context,
-    image: Path = typer.Argument(..., help="Input image file", exists=True, readable=True),
+    image: Path = typer.Argument(
+        ..., help="Input image file", exists=True, readable=True
+    ),
     output: Optional[Path] = typer.Option(None, help="Output file path"),
 ) -> None:
     """Generate an image."""
     client: VLMRun = ctx.obj
-    response = client.image.generate(
-        images=[image],
-        model="vlm-1",
-        domain="image"
-    )
+    response = client.image.generate(images=[image], model="vlm-1", domain="image")
     if output and response and hasattr(response, "response"):
         if isinstance(response.response, bytes):
             output.write_bytes(response.response)
@@ -44,9 +41,7 @@ def video(
     """Generate a video."""
     client: VLMRun = ctx.obj
     response = client.video.generate(
-        file_or_url=prompt,  # Using prompt as input text
-        model="vlm-1",
-        domain="video"
+        file_or_url=prompt, model="vlm-1", domain="video"  # Using prompt as input text
     )
     if output and response and hasattr(response, "response"):
         if isinstance(response.response, bytes):
@@ -69,7 +64,7 @@ def document(
     response = client.document.generate(
         file_or_url=prompt,  # Using prompt as input text
         model="vlm-1",
-        domain="document"
+        domain="document",
     )
     if output and response and hasattr(response, "response"):
         if isinstance(response.response, bytes):

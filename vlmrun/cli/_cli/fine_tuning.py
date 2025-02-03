@@ -50,17 +50,18 @@ def list(ctx: typer.Context) -> None:
     jobs: List[FinetuningResponse] = client.fine_tuning.list()
     console = Console()
     table = Table(show_header=True, header_style="bold")
-    table.add_column("Job ID")
-    table.add_column("Model")
-    table.add_column("Status")
-    table.add_column("Created At")
-
+    table.add_column("id", min_width=40)
+    table.add_column("model")
+    table.add_column("status")
+    table.add_column("created_at")
+    table.add_column("completed_at")
     for job in jobs:
         table.add_row(
             job.id,
             job.model,
             job.status,
             job.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            job.completed_at.strftime("%Y-%m-%d %H:%M:%S") if job.completed_at else "",
         )
 
     console.print(table)
@@ -76,9 +77,7 @@ def provision(
     """Provision a fine-tuning model."""
     client: VLMRun = ctx.obj
     result: FinetuningProvisionResponse = client.fine_tuning.provision(
-        model=model,
-        duration=duration,
-        concurrency=concurrency
+        model=model, duration=duration, concurrency=concurrency
     )
     rprint(f"Provisioned fine-tuning model\n{result}")
 

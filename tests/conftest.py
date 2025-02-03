@@ -40,7 +40,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
                     response={"result": "test"},
-                    usage=CreditUsage(credits_used=100)
+                    usage=CreditUsage(credits_used=100),
                 )
 
         def __init__(self, api_key=None, base_url=None):
@@ -92,7 +92,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at=None,
                     response=None,
-                    usage=CreditUsage(credits_used=0)
+                    usage=CreditUsage(credits_used=0),
                 )
 
             def list(self):
@@ -103,7 +103,7 @@ def mock_client(monkeypatch):
                         created_at="2024-01-01T00:00:00+00:00",
                         completed_at=None,
                         response=None,
-                        usage=CreditUsage(credits_used=0)
+                        usage=CreditUsage(credits_used=0),
                     )
                 ]
 
@@ -114,7 +114,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at=None,
                     response=None,
-                    usage=CreditUsage(credits_used=0)
+                    usage=CreditUsage(credits_used=0),
                 )
 
             def wait(self, prediction_id, timeout=60, sleep=1):
@@ -124,7 +124,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
                     response={"result": "test"},
-                    usage=CreditUsage(credits_used=100)
+                    usage=CreditUsage(credits_used=100),
                 )
 
         class Files:
@@ -138,7 +138,7 @@ def mock_client(monkeypatch):
                         filename="test.txt",
                         bytes=10,
                         purpose="assistants",
-                        created_at="2024-01-01T00:00:00+00:00"
+                        created_at="2024-01-01T00:00:00+00:00",
                     )
                 ]
 
@@ -148,7 +148,7 @@ def mock_client(monkeypatch):
                     filename=str(file_path),
                     bytes=10,
                     purpose=purpose,
-                    created_at="2024-01-01T00:00:00+00:00"
+                    created_at="2024-01-01T00:00:00+00:00",
                 )
 
             def get(self, file_id):
@@ -157,7 +157,7 @@ def mock_client(monkeypatch):
                     filename="test.txt",
                     bytes=10,
                     purpose="assistants",
-                    created_at="2024-01-01T00:00:00+00:00"
+                    created_at="2024-01-01T00:00:00+00:00",
                 )
 
             def get_content(self, file_id):
@@ -169,7 +169,7 @@ def mock_client(monkeypatch):
                     filename="test.txt",
                     bytes=10,
                     purpose="assistants",
-                    created_at="2024-01-01T00:00:00+00:00"
+                    created_at="2024-01-01T00:00:00+00:00",
                 )
 
         class Models:
@@ -220,7 +220,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
                     response={"result": "test"},
-                    usage=CreditUsage(credits_used=100)
+                    usage=CreditUsage(credits_used=100),
                 )
 
         class VideoPredictions:
@@ -234,7 +234,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
                     response={"result": "test"},
-                    usage=CreditUsage(credits_used=100)
+                    usage=CreditUsage(credits_used=100),
                 )
 
         class DocumentPredictions:
@@ -248,7 +248,7 @@ def mock_client(monkeypatch):
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
                     response={"result": "test"},
-                    usage=CreditUsage(credits_used=100)
+                    usage=CreditUsage(credits_used=100),
                 )
 
         class Dataset:

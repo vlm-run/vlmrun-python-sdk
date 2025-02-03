@@ -1,7 +1,7 @@
 """Files API commands."""
 
 from pathlib import Path
-from typing import Optional, List, Literal
+from typing import Optional, List
 
 import typer
 from rich.table import Table
@@ -25,11 +25,11 @@ def list(ctx: typer.Context) -> None:
     files: List[FileResponse] = client.files.list()
     console = Console()
     table = Table(show_header=True)
-    table.add_column("File ID")
-    table.add_column("Filename")
-    table.add_column("Size")
-    table.add_column("Created At")
-    table.add_column("Purpose")
+    table.add_column("id", min_width=40)
+    table.add_column("filename")
+    table.add_column("bytes")
+    table.add_column("created_at")
+    table.add_column("purpose")
     for file in files:
         table.add_row(
             file.id,
@@ -46,7 +46,10 @@ def list(ctx: typer.Context) -> None:
 def upload(
     ctx: typer.Context,
     file: Path = typer.Argument(..., help="File to upload", exists=True, readable=True),
-    purpose: str = typer.Option("fine-tune", help="Purpose of the file (one of: datasets, fine-tune, assistants, assistants_output, batch, batch_output, vision)"),
+    purpose: str = typer.Option(
+        "fine-tune",
+        help="Purpose of the file (one of: datasets, fine-tune, assistants, assistants_output, batch, batch_output, vision)",
+    ),
 ) -> None:
     """Upload a file."""
     client: VLMRun = ctx.obj

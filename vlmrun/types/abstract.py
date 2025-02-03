@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, Any, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass

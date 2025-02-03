@@ -55,7 +55,7 @@ class Datasets:
             method="POST",
             url="files/upload",
             files={"file": tar_path},
-            data={"purpose": "datasets"}
+            data={"purpose": "datasets"},
         )
         if not isinstance(upload_response, dict):
             raise TypeError("Expected dict response")
