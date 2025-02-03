@@ -6,7 +6,6 @@ from pydantic.dataclasses import dataclass
 from datetime import datetime
 
 from typing import Dict, Any, Literal
-from typing import List
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
@@ -65,8 +64,8 @@ class HubInfoResponse:
 
 
 @dataclass
-class HubDomainsResponse:
-    domains: List[str]
+class HubDomainInfo:
+    domain: str
 
 
 @dataclass

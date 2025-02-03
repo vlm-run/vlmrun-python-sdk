@@ -9,7 +9,7 @@ from vlmrun.client.types import (
     ModelInfoResponse,
     DatasetCreateResponse,
     HubInfoResponse,
-    HubDomainsResponse,
+    HubDomainInfo,
     HubSchemaQueryResponse,
     FileResponse,
     PredictionResponse,
@@ -188,13 +188,11 @@ def mock_client(monkeypatch):
                 return HubInfoResponse(version="0.1.0")
 
             def list_domains(self):
-                return HubDomainsResponse(
-                    domains=[
-                        "document.invoice",
-                        "document.receipt",
-                        "document.utility_bill",
-                    ]
-                )
+                return [
+                    HubDomainInfo(domain="document.invoice"),
+                    HubDomainInfo(domain="document.receipt"),
+                    HubDomainInfo(domain="document.utility_bill"),
+                ]
 
             def get_schema(self, domain):
                 return HubSchemaQueryResponse(
