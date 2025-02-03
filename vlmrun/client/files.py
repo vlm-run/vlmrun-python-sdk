@@ -41,10 +41,17 @@ class Files:
         )
         return [FileResponse(**file) for file in response]
 
-    def _check_file_exists(self, file: Union[Path, str]) -> FileResponse | None:
+    def get_cached_file(self, file: Union[Path, str]) -> FileResponse | None:
+        """Get a cached file from the database, if it exists.
+
+        Args:
+            file: Path to file to check
+
+        Returns:
+            FileResponse: File object if it exists, None otherwise
+        """
         if isinstance(file, str):
             file = Path(file)
-
         # Compute the md5 hash of the file
         logger.debug(f"Computing md5 hash for file [file={file}]")
         file_hash = hashlib.md5()
@@ -63,10 +70,13 @@ class Files:
                 method="GET",
                 url=f"files/hash/{file_hash}",
             )
-            return FileResponse(**response)
+            if status_code == 200:
+                return FileResponse(**response)
+            else:
+                return None
         except Exception as exc:
-            logger.error(
-                f"Failed to check if file exists in the database [file={file}, hash={file_hash}, exc={exc}]"
+            logger.debug(
+                f"File hash does not exist in the database [file={file}, hash={file_hash}, exc={exc}]"
             )
             return None
 
@@ -88,7 +98,7 @@ class Files:
             file = Path(file)
 
         # Check if the file already exists in the database
-        cached_response = self._check_file_exists(file)
+        cached_response: FileResponse | None = self.get_cached_file(file)
         if cached_response:
             return cached_response
 

@@ -24,8 +24,8 @@ def list(ctx: typer.Context) -> None:
     models: List[ModelInfoResponse] = client.models.list()
     console = Console()
     table = Table(show_header=True, header_style="bold")
-    table.add_column("Model")
-    table.add_column("Domain")
+    table.add_column("model")
+    table.add_column("domain")
 
     for model in models:
         table.add_row(

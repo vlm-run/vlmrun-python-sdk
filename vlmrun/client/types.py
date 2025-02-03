@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, Literal
 from typing import List
 
-JobStatus = Literal["pending", "running", "completed", "failed"]
+JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
 
 @dataclass
@@ -49,7 +49,7 @@ class PredictionResponse:
     created_at: datetime
     completed_at: datetime | None
     response: Any | None
-    status: str
+    status: JobStatus
     usage: CreditUsage
 
 

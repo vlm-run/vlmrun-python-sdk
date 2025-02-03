@@ -1,6 +1,6 @@
 """VLM Run API requestor implementation."""
 
-from typing import Any, Dict, Tuple, TYPE_CHECKING, Protocol
+from typing import Any, Dict, Tuple, TYPE_CHECKING
 from urllib.parse import urljoin
 from dataclasses import dataclass
 
