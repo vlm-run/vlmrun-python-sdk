@@ -1,12 +1,12 @@
 """VLM Run Hub API implementation."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from vlmrun.client.base_requestor import APIError
 from vlmrun.client.types import (
-    HubSchemaQueryResponse,
+    HubSchemaResponse,
     HubInfoResponse,
-    HubDomainsResponse,
+    HubDomainInfo,
 )
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ class Hub:
         except Exception as e:
             raise APIError(f"Failed to check hub health: {str(e)}")
 
-    def list_domains(self) -> list[str]:
+    def list_domains(self) -> List[HubDomainInfo]:
         """Get the list of supported domains.
 
         Returns:
@@ -73,12 +73,13 @@ class Hub:
             response, _, _ = self._client.requestor.request(
                 method="GET", url="/hub/domains", raw_response=False
             )
-            domains = HubDomainsResponse(**response)
-            return domains.domains
+            if not isinstance(response, list):
+                raise TypeError("Expected list response")
+            return [HubDomainInfo(**domain) for domain in response]
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 
-    def get_schema(self, domain: str) -> HubSchemaQueryResponse:
+    def get_schema(self, domain: str) -> HubSchemaResponse:
         """Get the JSON schema for a given domain.
 
         Args:
@@ -112,6 +113,6 @@ class Hub:
             )
             if not isinstance(response, dict):
                 raise APIError("Expected dict response from schema query")
-            return HubSchemaQueryResponse(**response)
+            return HubSchemaResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to get schema for domain {domain}: {str(e)}")

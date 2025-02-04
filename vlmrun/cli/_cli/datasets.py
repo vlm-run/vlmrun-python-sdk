@@ -111,13 +111,13 @@ def list(
 
     console = Console()
     table = Table(show_header=True)
-    table.add_column("Dataset ID")
-    table.add_column("Dataset Name")
-    table.add_column("Dataset Type")
-    table.add_column("Domain")
-    table.add_column("Created At")
-    table.add_column("Status")
-    table.add_column("Credits Used")
+    table.add_column("id")
+    table.add_column("dataset_name")
+    table.add_column("dataset_type")
+    table.add_column("domain")
+    table.add_column("created_at")
+    table.add_column("status")
+    table.add_column("usage.credits_used")
 
     for dataset in datasets:
         table.add_row(

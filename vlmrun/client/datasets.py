@@ -51,15 +51,9 @@ class Datasets:
         )
 
         # Upload tar.gz file
-        upload_response, _, _ = self._requestor.request(
-            method="POST",
-            url="files/upload",
-            files={"file": tar_path},
-            data={"purpose": "datasets"},
+        file_response: FileResponse = self._client.files.upload(
+            tar_path, purpose="datasets"
         )
-        if not isinstance(upload_response, dict):
-            raise TypeError("Expected dict response")
-        file_response = FileResponse(**upload_response)
         logger.debug(
             f"Uploaded tar.gz file [path={tar_path}, file_id={file_response.id}, size={file_response.bytes / 1024 / 1024:.2f} MB]"
         )
