@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 from datetime import datetime
 
@@ -17,8 +18,7 @@ class APIError(Exception):
     headers: Dict[str, str] | None = None
 
 
-@dataclass
-class FileResponse:
+class FileResponse(BaseModel):
     id: str
     filename: str
     bytes: int
@@ -35,15 +35,13 @@ class FileResponse:
     object: str = "file"
 
 
-@dataclass
-class CreditUsage:
+class CreditUsage(BaseModel):
     elements_processed: int | None = None
     element_type: Literal["image", "page", "video", "audio"] | None = None
     credits_used: int | None = None
 
 
-@dataclass
-class PredictionResponse:
+class PredictionResponse(BaseModel):
     id: str
     created_at: datetime
     completed_at: datetime | None
@@ -52,31 +50,26 @@ class PredictionResponse:
     usage: CreditUsage
 
 
-@dataclass
-class ModelInfoResponse:
+class ModelInfoResponse(BaseModel):
     model: str
     domain: str
 
 
-@dataclass
-class HubInfoResponse:
+class HubInfoResponse(BaseModel):
     version: str
 
 
-@dataclass
-class HubDomainInfo:
+class HubDomainInfo(BaseModel):
     domain: str
 
 
-@dataclass
-class HubSchemaQueryResponse:
-    schema_json: Dict[str, Any]
+class HubSchemaResponse(BaseModel):
+    json_schema: Dict[str, Any]
     schema_version: str
     schema_hash: str
 
 
-@dataclass
-class DatasetCreateResponse:
+class DatasetCreateResponse(BaseModel):
     id: str
     dataset_type: str
     dataset_name: str
@@ -87,8 +80,7 @@ class DatasetCreateResponse:
     usage: CreditUsage
 
 
-@dataclass
-class FinetuningResponse:
+class FinetuningResponse(BaseModel):
     id: str
     created_at: datetime
     completed_at: datetime | None
@@ -99,8 +91,7 @@ class FinetuningResponse:
     usage: CreditUsage
 
 
-@dataclass
-class FinetuningProvisionResponse:
+class FinetuningProvisionResponse(BaseModel):
     id: str
     created_at: datetime
     completed_at: datetime | None
@@ -108,8 +99,7 @@ class FinetuningProvisionResponse:
     message: str
 
 
-@dataclass
-class FeedbackSubmitResponse:
+class FeedbackSubmitResponse(BaseModel):
     id: str
     created_at: datetime
     request_id: str

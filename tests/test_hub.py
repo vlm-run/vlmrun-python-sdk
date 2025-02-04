@@ -2,7 +2,7 @@
 
 from vlmrun.client.types import (
     HubInfoResponse,
-    HubSchemaQueryResponse,
+    HubSchemaResponse,
     HubDomainInfo,
 )
 
@@ -30,8 +30,8 @@ def test_hub_get_schema(mock_client):
     client = mock_client
     domain = "document.invoice"
     response = client.hub.get_schema(domain)
-    assert isinstance(response, HubSchemaQueryResponse)
-    assert isinstance(response.schema_json, dict)
+    assert isinstance(response, HubSchemaResponse)
+    assert isinstance(response.json_schema, dict)
     assert isinstance(response.schema_version, str)
     assert isinstance(response.schema_hash, str)
     assert len(response.schema_hash) == 8

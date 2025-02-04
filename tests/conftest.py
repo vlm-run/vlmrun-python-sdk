@@ -10,7 +10,7 @@ from vlmrun.client.types import (
     DatasetCreateResponse,
     HubInfoResponse,
     HubDomainInfo,
-    HubSchemaQueryResponse,
+    HubSchemaResponse,
     FileResponse,
     PredictionResponse,
     FeedbackSubmitResponse,
@@ -195,8 +195,8 @@ def mock_client(monkeypatch):
                 ]
 
             def get_schema(self, domain):
-                return HubSchemaQueryResponse(
-                    schema_json={
+                return HubSchemaResponse(
+                    json_schema={
                         "type": "object",
                         "properties": {
                             "invoice_number": {"type": "string"},
