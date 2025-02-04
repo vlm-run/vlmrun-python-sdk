@@ -20,6 +20,7 @@ app = typer.Typer(
     name="vlmrun",
     help="CLI for VLM Run (https://app.vlm.run)",
     add_completion=True,
+    no_args_is_help=True,
 )
 
 

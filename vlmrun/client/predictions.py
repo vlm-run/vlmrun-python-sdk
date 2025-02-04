@@ -87,7 +87,6 @@ class ImagePredictions(Predictions):
     def generate(
         self,
         images: list[Path | Image.Image],
-        model: str,
         domain: str,
         batch: bool = False,
         metadata: RequestMetadata | None = None,
@@ -98,7 +97,6 @@ class ImagePredictions(Predictions):
 
         Args:
             images: List of images to generate predictions from
-            model: Model to use for prediction
             domain: Domain to use for prediction
             batch: Whether to run prediction in batch mode
             config: GenerateConfig to use for prediction
@@ -130,7 +128,6 @@ class ImagePredictions(Predictions):
             url="image/generate",
             data={
                 "image": encode_image(images[0], format="JPEG"),
-                "model": model,
                 "domain": domain,
                 "batch": batch,
                 "callback_url": callback_url,
@@ -150,9 +147,9 @@ def FilePredictions(route: str):
 
         def generate(
             self,
-            file_or_url: str | Path,
-            model: str,
-            domain: str,
+            file: Path | str | None = None,
+            url: str | None = None,
+            domain: str | None = None,
             batch: bool = False,
             config: GenerationConfig | None = GenerationConfig(),
             metadata: RequestMetadata | None = RequestMetadata(),
@@ -161,8 +158,8 @@ def FilePredictions(route: str):
             """Generate a document prediction.
 
             Args:
-                file_or_url: File (pathlib.Path) or file_id or URL to generate prediction from
-                model: Model to use for prediction
+                file: File (pathlib.Path) or file_id to generate prediction from
+                url: URL to generate prediction from
                 domain: Domain to use for prediction
                 batch: Whether to run prediction in batch mode
                 config: GenerateConfig to use for prediction
@@ -173,22 +170,33 @@ def FilePredictions(route: str):
                 PredictionResponse: Prediction response
             """
             is_url = False
-            if isinstance(file_or_url, Path):
-                logger.debug(
-                    f"Uploading file [path={file_or_url}, size={file_or_url.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
-                )
-                upload_response, _, _ = self._client.files.upload(
-                    file=file_or_url, purpose="assistants"
-                )
-                if not isinstance(upload_response, dict):
-                    raise TypeError("Expected dict response")
-                response = FileResponse(**upload_response)
-                logger.debug(
-                    f"Uploaded file [file_id={response.id}, name={response.filename}]"
-                )
-                file_or_url = response.id
-            elif isinstance(file_or_url, str):
-                is_url = str(file_or_url).startswith(("http://", "https://"))
+            if not file and not url:
+                raise ValueError("Either `file` or `url` must be provided")
+            if file and url:
+                raise ValueError("Only one of `file` or `url` can be provided")
+            if file:
+                if isinstance(file, Path) or (
+                    isinstance(file, str) and Path(file).suffix
+                ):
+                    logger.debug(
+                        f"Uploading file [path={file}, size={file.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
+                    )
+                    response: FileResponse = self._client.files.upload(
+                        file=Path(file), purpose="assistants"
+                    )
+                    logger.debug(
+                        f"Uploaded file [file_id={response.id}, name={response.filename}]"
+                    )
+                    file_or_url = response.id
+                elif isinstance(file, str):
+                    logger.debug(f"Using file_id [file_id={file}]")
+                    assert not Path(file).suffix, "File must not have an extension"
+                    file_or_url = file
+                else:
+                    raise ValueError("File must be a pathlib.Path or a string")
+            elif url:
+                is_url = True
+                file_or_url = url
             else:
                 raise ValueError(
                     "File or URL must be a pathlib.Path, str, or AnyHttpUrl"
@@ -204,7 +212,6 @@ def FilePredictions(route: str):
                 url=f"{route}/generate",
                 data={
                     "url" if is_url else "file_id": file_or_url,
-                    "model": model,
                     "domain": domain,
                     "batch": batch,
                     "callback_url": callback_url,

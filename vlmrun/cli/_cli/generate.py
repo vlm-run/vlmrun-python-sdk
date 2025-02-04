@@ -1,14 +1,15 @@
 """Generation API commands."""
 
 from pathlib import Path
-from typing import Optional
 
 import typer
+from PIL import Image
 from rich import print as rprint
 
 from vlmrun.client import VLMRun
+from vlmrun.client.types import PredictionResponse
 
-app = typer.Typer(help="Generation operations")
+app = typer.Typer(help="Generation operations", no_args_is_help=True)
 
 
 @app.command()
@@ -17,60 +18,34 @@ def image(
     image: Path = typer.Argument(
         ..., help="Input image file", exists=True, readable=True
     ),
-    output: Optional[Path] = typer.Option(None, help="Output file path"),
+    domain: str = typer.Option(
+        ..., help="Domain to use for generation (e.g. `document.invoice`)"
+    ),
 ) -> None:
     """Generate an image."""
     client: VLMRun = ctx.obj
-    response = client.image.generate(images=[image], model="vlm-1", domain="image")
-    if output and response and hasattr(response, "response"):
-        if isinstance(response.response, bytes):
-            output.write_bytes(response.response)
-            rprint(f"Image saved to {output}")
-        else:
-            rprint("Error: Response does not contain valid image data")
-    else:
-        rprint("Image data generated (use --output to save to file)")
+    if not Path(image).is_file():
+        raise typer.Abort(f"Image file does not exist: {image}")
 
-
-@app.command()
-def video(
-    ctx: typer.Context,
-    prompt: str = typer.Argument(..., help="Video generation prompt"),
-    output: Optional[Path] = typer.Option(None, help="Output file path"),
-) -> None:
-    """Generate a video."""
-    client: VLMRun = ctx.obj
-    response = client.video.generate(
-        file_or_url=prompt, model="vlm-1", domain="video"  # Using prompt as input text
-    )
-    if output and response and hasattr(response, "response"):
-        if isinstance(response.response, bytes):
-            output.write_bytes(response.response)
-            rprint(f"Video saved to {output}")
-        else:
-            rprint("Error: Response does not contain valid video data")
-    else:
-        rprint("Video data generated (use --output to save to file)")
+    img: Image.Image = Image.open(image)
+    response: PredictionResponse = client.image.generate(images=[img], domain=domain)
+    rprint(response)
 
 
 @app.command()
 def document(
     ctx: typer.Context,
-    prompt: str = typer.Argument(..., help="Document generation prompt"),
-    output: Optional[Path] = typer.Option(None, help="Output file path"),
+    path: Path = typer.Argument(
+        ..., help="Path to the document file", exists=True, readable=True
+    ),
+    domain: str = typer.Option(
+        ..., help="Domain to use for generation (e.g. `document.invoice`)"
+    ),
 ) -> None:
     """Generate a document."""
     client: VLMRun = ctx.obj
-    response = client.document.generate(
-        file_or_url=prompt,  # Using prompt as input text
-        model="vlm-1",
-        domain="document",
-    )
-    if output and response and hasattr(response, "response"):
-        if isinstance(response.response, bytes):
-            output.write_bytes(response.response)
-            rprint(f"Document saved to {output}")
-        else:
-            rprint("Error: Response does not contain valid document data")
-    else:
-        rprint("Document data generated (use --output to save to file)")
+    if not Path(path).is_file():
+        raise typer.Abort(f"Document file does not exist: {path}")
+
+    response = client.document.generate(file=path, domain=domain)
+    rprint(response)
