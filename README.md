@@ -51,7 +51,6 @@ The package provides optional features that can be installed based on your needs
 from PIL import Image
 from vlmrun.client import VLMRun
 from vlmrun.client.types import GenerationConfig
-from vlmrun.hub.schemas.document.invoice import Invoice
 
 # Initialize the client
 client = VLMRun(api_key="<your-api-key>")
@@ -60,8 +59,7 @@ client = VLMRun(api_key="<your-api-key>")
 image: Image.Image = Image.open("image.jpg")
 response = client.image.generate(
     images=[image],
-    domain="document.invoice",
-    config=GenerationConfig(json_schema=Invoice.model_json_schema()),
+    domain="document.invoice"
 )
 print(response)
 ```
