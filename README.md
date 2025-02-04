@@ -48,55 +48,23 @@ The package provides optional features that can be installed based on your needs
 ### Basic Usage
 
 ```python
+from PIL import Image
 from vlmrun.client import VLMRun
+from vlmrun.client.types import GenerationConfig
 from vlmrun.hub.schemas.document.invoice import Invoice
 
 # Initialize the client
 client = VLMRun(api_key="your-api-key")
 
 # Process an image
+image: Image.Image = Image.open("image.jpg")
 response = client.image.generate(
-    image="https://example.com/invoice.jpg",
+    images=[image],
     model="vlm-1",
     domain="document.invoice",
-    json_schema=Invoice.model_json_schema(),
+    config=GenerationConfig(json_schema=Invoice.model_json_schema()),
 )
-```
-
-### Image Utilities
-
-```python
-from vlmrun.common.image import encode_image
-from vlmrun.common.utils import download_image
-from PIL import Image
-
-# Convert image to base64 or binary
-image = Image.open("image.jpg")
-base64_str = encode_image(image, format="PNG")  # or format="JPEG"
-binary_data = encode_image(image, format="binary")
-
-# Download image from URL
-image = download_image("https://example.com/image.jpg")
-```
-
-</details>
-
-## 📂 Directory Structure
-
-```bash
-vlmrun/
-├── client/               # Client implementation
-│   ├── client.py         # Main VLMRun class
-│   ├── base_requestor.py # Low-level request logic
-│   ├── files.py          # File operations
-│   ├── models.py         # Model operations
-│   ├── finetune.py       # Fine-tuning operations
-│   └── types.py          # Type definitions
-├── common/              # Common utilities
-│   ├── auth.py          # Authentication utilities
-│   └── image.py         # Image processing utilities
-└── types/              # Type definitions
-    └── abstract.py     # Abstract base classes
+print(response)
 ```
 
 ## 🔗 Quick Links

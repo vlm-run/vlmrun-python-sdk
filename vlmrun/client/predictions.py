@@ -10,7 +10,12 @@ from tqdm import tqdm
 from vlmrun.common.image import encode_image
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.client.types import PredictionResponse, FileResponse
+from vlmrun.client.types import (
+    PredictionResponse,
+    FileResponse,
+    GenerationConfig,
+    RequestMetadata,
+)
 
 
 class Predictions:
@@ -84,10 +89,9 @@ class ImagePredictions(Predictions):
         images: list[Path | Image.Image],
         model: str,
         domain: str,
-        json_schema: dict | None = None,
-        detail: str = "auto",
         batch: bool = False,
-        metadata: dict = {},
+        metadata: RequestMetadata | None = None,
+        config: GenerationConfig | None = None,
         callback_url: str | None = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
@@ -96,9 +100,8 @@ class ImagePredictions(Predictions):
             images: List of images to generate predictions from
             model: Model to use for prediction
             domain: Domain to use for prediction
-            json_schema: JSON schema to use for prediction
-            detail: Detail level for prediction
             batch: Whether to run prediction in batch mode
+            config: GenerateConfig to use for prediction
             metadata: Metadata to include in prediction
             callback_url: URL to call when prediction is complete
 
@@ -117,6 +120,11 @@ class ImagePredictions(Predictions):
         else:
             raise ValueError("Image must be a path or a PIL Image")
 
+        additional_kwargs = {}
+        if config:
+            additional_kwargs["config"] = config.model_dump()
+        if metadata:
+            additional_kwargs["metadata"] = metadata.model_dump()
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="image/generate",
@@ -124,11 +132,9 @@ class ImagePredictions(Predictions):
                 "image": encode_image(images[0], format="JPEG"),
                 "model": model,
                 "domain": domain,
-                "json_schema": json_schema,
-                "detail": detail,
                 "batch": batch,
-                "metadata": metadata,
                 "callback_url": callback_url,
+                **additional_kwargs,
             },
         )
         if not isinstance(response, dict):
@@ -147,10 +153,9 @@ def FilePredictions(route: str):
             file_or_url: str | Path,
             model: str,
             domain: str,
-            json_schema: dict | None = None,
-            detail: str = "auto",
             batch: bool = False,
-            metadata: dict = {},
+            config: GenerationConfig | None = GenerationConfig(),
+            metadata: RequestMetadata | None = RequestMetadata(),
             callback_url: str | None = None,
         ) -> PredictionResponse:
             """Generate a document prediction.
@@ -159,9 +164,8 @@ def FilePredictions(route: str):
                 file_or_url: File (pathlib.Path) or file_id or URL to generate prediction from
                 model: Model to use for prediction
                 domain: Domain to use for prediction
-                json_schema: JSON schema to use for prediction
-                detail: Detail level for prediction
                 batch: Whether to run prediction in batch mode
+                config: GenerateConfig to use for prediction
                 metadata: Metadata to include in prediction
                 callback_url: URL to call when prediction is complete
 
@@ -190,6 +194,11 @@ def FilePredictions(route: str):
                     "File or URL must be a pathlib.Path, str, or AnyHttpUrl"
                 )
 
+            additional_kwargs = {}
+            if config:
+                additional_kwargs["config"] = config.model_dump()
+            if metadata:
+                additional_kwargs["metadata"] = metadata.model_dump()
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url=f"{route}/generate",
@@ -197,11 +206,9 @@ def FilePredictions(route: str):
                     "url" if is_url else "file_id": file_or_url,
                     "model": model,
                     "domain": domain,
-                    "json_schema": json_schema,
-                    "detail": detail,
                     "batch": batch,
-                    "metadata": metadata,
                     "callback_url": callback_url,
+                    **additional_kwargs,
                 },
             )
             if not isinstance(response, dict):

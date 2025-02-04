@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic.dataclasses import dataclass
 from datetime import datetime
 
@@ -104,3 +104,17 @@ class FeedbackSubmitResponse(BaseModel):
     created_at: datetime
     request_id: str
     response: Any
+
+
+class GenerationConfig(BaseModel):
+    detail: Literal["auto", "lo", "hi"] = Field(default="auto")
+    json_schema: Dict[str, Any] | None = Field(default=None)
+
+    confidence: bool = Field(default=False)
+    grounding: bool = Field(default=False)
+
+
+class RequestMetadata(BaseModel):
+    environment: Literal["dev", "staging", "prod"] = Field(default="dev")
+    session_id: str | None = Field(default=None)
+    allow_training: bool = Field(default=True)
