@@ -40,6 +40,11 @@ The package provides optional features that can be installed based on your needs
   pip install "vlmrun[doc]"
   ```
 
+- Hub schemas (required for using predefined schemas like Invoice):
+  ```bash
+  pip install vlmrun-hub
+  ```
+
 - All optional features:
   ```bash
   pip install "vlmrun[all]"
