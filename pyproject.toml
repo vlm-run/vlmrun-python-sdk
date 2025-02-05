@@ -39,10 +39,14 @@ video = [
 doc = [
     "pypdfium2>=4.30.0"
 ]
+hub = [
+    "vlmrun-hub>=0.1.19a"
+]
 all = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
-    "pypdfium2>=4.30.0"
+    "pypdfium2>=4.30.0",
+    "vlmrun-hub>=0.1.19a"
 ]
 
 [tool.setuptools.dynamic]
@@ -51,6 +55,8 @@ dependencies = {file = ["requirements/requirements.txt"]}
 
 [tool.setuptools.packages.find]
 include = ["vlmrun*"]
+namespaces = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
