@@ -5,8 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from pydantic.dataclasses import dataclass
 from datetime import datetime
-
-from typing import Dict, Any, Literal
+from typing import Dict, Any, Literal, Optional
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
@@ -14,8 +13,8 @@ JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "pa
 @dataclass
 class APIError(Exception):
     message: str
-    http_status: int | None = None
-    headers: Dict[str, str] | None = None
+    http_status: Optional[int] = None
+    headers: Optional[Dict[str, str]] = None
 
 
 class FileResponse(BaseModel):
@@ -36,16 +35,16 @@ class FileResponse(BaseModel):
 
 
 class CreditUsage(BaseModel):
-    elements_processed: int | None = None
-    element_type: Literal["image", "page", "video", "audio"] | None = None
-    credits_used: int | None = None
+    elements_processed: Optional[int] = None
+    element_type: Optional[Literal["image", "page", "video", "audio"]] = None
+    credits_used: Optional[int] = None
 
 
 class PredictionResponse(BaseModel):
     id: str
     created_at: datetime
-    completed_at: datetime | None
-    response: Any | None
+    completed_at: Optional[datetime] = None
+    response: Optional[Any] = None
     status: JobStatus
     usage: CreditUsage
 
@@ -83,18 +82,18 @@ class DatasetCreateResponse(BaseModel):
 class FinetuningResponse(BaseModel):
     id: str
     created_at: datetime
-    completed_at: datetime | None
+    completed_at: Optional[datetime] = None
     status: JobStatus
     message: str
     model: str
-    suffix: str | None
+    suffix: Optional[str] = None
     usage: CreditUsage
 
 
 class FinetuningProvisionResponse(BaseModel):
     id: str
     created_at: datetime
-    completed_at: datetime | None
+    completed_at: Optional[datetime] = None
     model: str
     message: str
 
@@ -108,7 +107,7 @@ class FeedbackSubmitResponse(BaseModel):
 
 class GenerationConfig(BaseModel):
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
-    json_schema: Dict[str, Any] | None = Field(default=None)
+    json_schema: Optional[Dict[str, Any]] = Field(default=None)
 
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
@@ -116,5 +115,5 @@ class GenerationConfig(BaseModel):
 
 class RequestMetadata(BaseModel):
     environment: Literal["dev", "staging", "prod"] = Field(default="dev")
-    session_id: str | None = Field(default=None)
+    session_id: Optional[str] = Field(default=None)
     allow_training: bool = Field(default=True)

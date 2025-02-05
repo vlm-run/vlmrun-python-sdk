@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Any, TypeVar
+from typing import Protocol, Any, TypeVar, Optional
 
 T = TypeVar("T")
 
@@ -12,7 +12,7 @@ T = TypeVar("T")
 class VLMRunProtocol(Protocol):
     """VLM Run API interface."""
 
-    api_key: str | None
+    api_key: Optional[str]
     base_url: str
     timeout: float
     files: Any

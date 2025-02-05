@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from pathlib import Path
+from typing import List, Optional, Union
 from PIL import Image
 from loguru import logger
 
@@ -86,12 +87,12 @@ class ImagePredictions(Predictions):
 
     def generate(
         self,
-        images: list[Path | Image.Image],
+        images: List[Union[Path, Image.Image]],
         domain: str,
         batch: bool = False,
-        metadata: RequestMetadata | None = None,
-        config: GenerationConfig | None = None,
-        callback_url: str | None = None,
+        metadata: Optional[RequestMetadata] = None,
+        config: Optional[GenerationConfig] = None,
+        callback_url: Optional[str] = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
 
@@ -147,13 +148,13 @@ def FilePredictions(route: str):
 
         def generate(
             self,
-            file: Path | str | None = None,
-            url: str | None = None,
-            domain: str | None = None,
+            file: Optional[Union[Path, str]] = None,
+            url: Optional[str] = None,
+            domain: Optional[str] = None,
             batch: bool = False,
-            config: GenerationConfig | None = GenerationConfig(),
-            metadata: RequestMetadata | None = RequestMetadata(),
-            callback_url: str | None = None,
+            config: Optional[GenerationConfig] = GenerationConfig(),
+            metadata: Optional[RequestMetadata] = RequestMetadata(),
+            callback_url: Optional[str] = None,
         ) -> PredictionResponse:
             """Generate a document prediction.
 
