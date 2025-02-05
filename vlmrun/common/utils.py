@@ -3,7 +3,7 @@
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Union, Literal
+from typing import Union, Literal, Dict, Any
 from loguru import logger
 
 import tarfile
@@ -118,7 +118,7 @@ def create_archive(directory: Path, name: str) -> Path:
 
 def download_artifact(
     url: str, format: Literal["image", "json", "file"]
-) -> Union[Image.Image, dict, Path]:
+) -> Union[Image.Image, Dict[str, Any], Path]:
     if not url.startswith("http"):
         raise ValueError(f"Invalid URL: {url}")
     if format == "image":

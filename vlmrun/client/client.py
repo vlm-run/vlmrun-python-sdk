@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import os
 from functools import cached_property
+from typing import Optional
 
 from vlmrun.version import __version__
 from vlmrun.client.base_requestor import APIRequestor
@@ -36,8 +37,8 @@ class VLMRun:
         finetune: Fine-tuning resource for model fine-tuning
     """
 
-    api_key: str | None = None
-    base_url: str | None = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
     timeout: float = 120.0
 
     def __post_init__(self):

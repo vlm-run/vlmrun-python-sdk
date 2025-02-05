@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Literal, Tuple
+from typing import Iterable, Literal, Tuple, Optional, Union
 
 from PIL import Image
 
@@ -18,9 +18,9 @@ class Page:
 def pdf_images(
     path: Path,
     dpi: int = 150,
-    pages: Tuple[int] | None = None,
+    pages: Optional[Tuple[int]] = None,
     backend: Literal["pypdfium2"] = "pypdfium2",
-) -> Iterable[Image.Image | Page]:
+) -> Iterable[Union[Image.Image, Page]]:
     """Extract images from a PDF file."""
     if path.suffix not in (".pdf",):
         raise ValueError(
@@ -30,26 +30,26 @@ def pdf_images(
     logger.debug(
         f"Extracting images from PDF [path={path}, dpi={dpi}, size={path.stat().st_size / 1024 / 1024:.2f} MB]"
     )
-    match backend:
-        case "pypdfium2":
-            import pypdfium2 as pdfium
 
-            logger.debug(f"Opening PDF document [path={path}]")
-            doc = pdfium.PdfDocument(str(path))
+    if backend == "pypdfium2":
+        import pypdfium2 as pdfium
 
-            if pages is None:
-                pages = range(len(doc))
+        logger.debug(f"Opening PDF document [path={path}]")
+        doc = pdfium.PdfDocument(str(path))
 
-            def iterator():
-                for idx in pages:
-                    page = doc[idx]
-                    bitmap = page.render(scale=dpi / 72)
-                    image: Image.Image = bitmap.to_pil()
-                    yield Page(image=image, page_number=idx)
+        if pages is None:
+            pages = range(len(doc))
 
-            yield from iterator()
+        def iterator():
+            for idx in pages:
+                page = doc[idx]
+                bitmap = page.render(scale=dpi / 72)
+                image: Image.Image = bitmap.to_pil()
+                yield Page(image=image, page_number=idx)
 
-            logger.debug(f"Closing PDF document [path={path}]")
-            doc.close()
-        case _:
-            raise ValueError(f"Unsupported backend: {backend}")
+        yield from iterator()
+
+        logger.debug(f"Closing PDF document [path={path}]")
+        doc.close()
+    else:
+        raise ValueError(f"Unsupported backend: {backend}")

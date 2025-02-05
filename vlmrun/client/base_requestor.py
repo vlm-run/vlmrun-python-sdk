@@ -1,6 +1,6 @@
 """VLM Run API requestor implementation."""
 
-from typing import Any, Dict, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Tuple, TYPE_CHECKING, Union, Optional
 from urllib.parse import urljoin
 from dataclasses import dataclass
 
@@ -27,8 +27,8 @@ class APIError(Exception):
     """Base exception for API errors."""
 
     message: str
-    http_status: int | None = None
-    headers: Dict[str, str] | None = None
+    http_status: Optional[int] = None
+    headers: Optional[Dict[str, str]] = None
 
     def __post_init__(self):
         super().__init__(self.message)
@@ -42,7 +42,7 @@ class APIRequestor:
     def __init__(
         self,
         client: "VLMRunProtocol",
-        base_url: str | None = None,
+        base_url: Optional[str] = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         """Initialize API requestor.
@@ -70,12 +70,14 @@ class APIRequestor:
         self,
         method: str,
         url: str,
-        params: Dict[str, Any] | None = None,
-        data: Dict[str, Any] | None = None,
-        files: Dict[str, Any] | None = None,
-        headers: Dict[str, str] | None = None,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        files: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
         raw_response: bool = False,
-    ) -> Tuple[Dict[str, Any], int, Dict[str, str]] | Tuple[bytes, int, Dict[str, str]]:
+    ) -> Union[
+        Tuple[Dict[str, Any], int, Dict[str, str]], Tuple[bytes, int, Dict[str, str]]
+    ]:
         """Make an API request with retry logic.
 
         Args:

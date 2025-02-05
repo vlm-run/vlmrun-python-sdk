@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 from PIL import Image
 
@@ -36,14 +36,14 @@ class Finetuning:
         self,
         model: str,
         training_file_id: str,
-        validation_file_id: str | None = None,
+        validation_file_id: Optional[str] = None,
         num_epochs: int = 1,
-        batch_size: int | str = "auto",
+        batch_size: Union[int, str] = "auto",
         learning_rate: float = 2e-4,
-        suffix: str | None = None,
-        wandb_api_key: str | None = None,
-        wandb_base_url: str | None = None,
-        wandb_project_name: str | None = None,
+        suffix: Optional[str] = None,
+        wandb_api_key: Optional[str] = None,
+        wandb_base_url: Optional[str] = None,
+        wandb_project_name: Optional[str] = None,
         **kwargs,
     ) -> FinetuningResponse:
         """Create a fine-tuning job.
@@ -51,7 +51,6 @@ class Finetuning:
         Args:
             model: Base model to fine-tune
             training_file_id: File ID for training data
-            validation_file_id: File ID for validation data (default: None)
             validation_file_id: File ID for validation data (default: None)
             num_epochs: Number of epochs (default: 1)
             batch_size: Batch size for training (default: "auto")
@@ -115,17 +114,17 @@ class Finetuning:
 
     def generate(
         self,
-        images: list[Path | Image.Image],
+        images: List[Union[Path, Image.Image]],
         model: str,
-        prompt: str | None = None,
-        domain: str | None = None,
-        json_schema: dict | None = None,
+        prompt: Optional[str] = None,
+        domain: Optional[str] = None,
+        json_schema: Optional[dict] = None,
         max_new_tokens: int = 1024,
         temperature: float = 0.0,
         detail: str = "auto",
         batch: bool = False,
         metadata: dict = {},
-        callback_url: str | None = None,
+        callback_url: Optional[str] = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
 

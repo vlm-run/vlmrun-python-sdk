@@ -1,5 +1,6 @@
 """VLM Run API Feedback resource."""
 
+from typing import Optional
 from pydantic import BaseModel
 
 from vlmrun.client.base_requestor import APIRequestor
@@ -24,9 +25,9 @@ class Feedback:
     def submit(
         self,
         id: str,
-        label: BaseModel | None = None,
-        notes: str | None = None,
-        flag: bool | None = None,
+        label: Optional[BaseModel] = None,
+        notes: Optional[str] = None,
+        flag: Optional[bool] = None,
     ) -> FeedbackSubmitResponse:
         """Create feedback for a prediction.
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union, List
 
 from loguru import logger
 from vlmrun.client.base_requestor import APIRequestor
@@ -24,7 +24,7 @@ class Files:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def list(self, skip: int = 0, limit: int = 10) -> list[FileResponse]:
+    def list(self, skip: int = 0, limit: int = 10) -> List[FileResponse]:
         """List all files.
 
         Args:
@@ -41,7 +41,7 @@ class Files:
         )
         return [FileResponse(**file) for file in response]
 
-    def get_cached_file(self, file: Union[Path, str]) -> FileResponse | None:
+    def get_cached_file(self, file: Union[Path, str]) -> Optional[FileResponse]:
         """Get a cached file from the database, if it exists.
 
         Args:
@@ -98,7 +98,7 @@ class Files:
             file = Path(file)
 
         # Check if the file already exists in the database
-        cached_response: FileResponse | None = self.get_cached_file(file)
+        cached_response: Optional[FileResponse] = self.get_cached_file(file)
         if cached_response:
             return cached_response
 
