@@ -40,13 +40,13 @@ doc = [
     "pypdfium2>=4.30.0"
 ]
 hub = [
-    "vlmrun-hub>=0.1.19a"
+    "vlmrun-hub>=0.1.20"
 ]
 all = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
     "pypdfium2>=4.30.0",
-    "vlmrun-hub>=0.1.19a"
+    "vlmrun-hub>=0.1.20"
 ]
 
 [tool.setuptools.dynamic]
