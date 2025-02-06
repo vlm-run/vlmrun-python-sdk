@@ -50,13 +50,13 @@ The package provides optional features that can be installed based on your needs
 ```python
 from PIL import Image
 from vlmrun.client import VLMRun
-from vlmrun.client.types import GenerationConfig
+from vlmrun.common.utils import remote_image
 
 # Initialize the client
 client = VLMRun(api_key="<your-api-key>")
 
 # Process an image
-image: Image.Image = Image.open("image.jpg")
+image: Image.Image = remote_image("https://storage.googleapis.com/vlm-data-public-prod/hub/examples/document.invoice/invoice_1.jpg")
 response = client.image.generate(
     images=[image],
     domain="document.invoice"
