@@ -6,4 +6,4 @@ requests
 rich
 tenacity
 tqdm
-typer[all]>=0.9.0
+typer>=0.9.0
