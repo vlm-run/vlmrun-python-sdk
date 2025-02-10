@@ -55,10 +55,17 @@ from vlmrun.common.utils import remote_image
 # Initialize the client
 client = VLMRun(api_key="<your-api-key>")
 
-# Process an image
+# Process an image using local file or remote URL
 image: Image.Image = remote_image("https://storage.googleapis.com/vlm-data-public-prod/hub/examples/document.invoice/invoice_1.jpg")
 response = client.image.generate(
     images=[image],
+    domain="document.invoice"
+)
+print(response)
+
+# Or process an image directly from URL
+response = client.image.generate(
+    urls=["https://storage.googleapis.com/vlm-data-public-prod/hub/examples/document.invoice/invoice_1.jpg"],
     domain="document.invoice"
 )
 print(response)
