@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from typing import Optional
+import os
 
 import typer
 from rich import print as rprint
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from vlmrun.client import VLMRun
 from vlmrun.cli._cli.files import app as files_app
@@ -23,6 +27,8 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+console = Console()
+
 
 def version_callback(value: bool) -> None:
     """Print version and exit."""
@@ -33,23 +39,53 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def check_credentials(
+    ctx: typer.Context, api_key: Optional[str], base_url: str
+) -> None:
+    """Check if API key is present and show helpful message if missing."""
+    if not api_key:
+        console.print("\n[red bold]Error:[/] API key not found! 🔑\n")
+        console.print(
+            Panel(
+                Text.from_markup(
+                    "To use the VLM Run CLI, you need to provide an API key. You can either:\n\n"
+                    "1. Set it as an environment variable:\n"
+                    "   [green]export VLMRUN_API_KEY='your-api-key'[/]\n\n"
+                    "2. Pass it directly as an argument:\n"
+                    "   [green]vlmrun --api-key 'your-api-key' ...[/]\n\n"
+                    "Get your API key at: [blue]https://app.vlm.run/dashboard[/]"
+                ),
+                title="API Key Required",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    is_default_url = base_url == "https://api.vlm.run/v1" and not os.getenv(
+        "VLMRUN_BASE_URL"
+    )
+    if is_default_url and not ctx.meta.get("has_shown_base_url_notice"):
+        console.print(
+            f"[yellow]Note:[/] Using default API endpoint: [blue]{base_url}[/]\n"
+            "To use a different endpoint, set [green]VLMRUN_BASE_URL[/] or use [green]--base-url[/]"
+        )
+        ctx.meta["has_shown_base_url_notice"] = True
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
-    base_url: Optional[str] = typer.Option(
-        None,
-        help="Base URL. Defaults to environment variable VLMRUN_BASE_URL",
-        envvar="VLMRUN_BASE_URL",
-    ),
     api_key: Optional[str] = typer.Option(
         None,
-        help="API Key. Defaults to environment variable VLMRUN_API_KEY",
+        "--api-key",
         envvar="VLMRUN_API_KEY",
+        help="VLM Run API key. Can also be set via VLMRUN_API_KEY environment variable.",
     ),
-    debug: Optional[bool] = typer.Option(
-        False,
-        "--debug",
-        help="Enable debug mode",
+    base_url: Optional[str] = typer.Option(
+        "https://api.vlm.run/v1",
+        "--base-url",
+        envvar="VLMRUN_BASE_URL",
+        help="VLM Run API base URL. Can also be set via VLMRUN_BASE_URL environment variable.",
     ),
     version: Optional[bool] = typer.Option(
         None,
@@ -59,9 +95,16 @@ def main(
         callback=version_callback,
         is_eager=True,
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Enable debug mode.",
+    ),
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
-    ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
+    if ctx.invoked_subcommand is not None:
+        check_credentials(ctx, api_key, base_url)
+        ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
 
 
 # Add subcommands
