@@ -211,7 +211,11 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, *args, **kwargs):
+            def generate(self, domain: str, images=None, urls=None, **kwargs):
+                if not images and not urls:
+                    raise ValueError("Either `images` or `urls` must be provided")
+                if images and urls:
+                    raise ValueError("Only one of `images` or `urls` can be provided")
                 return PredictionResponse(
                     id="prediction1",
                     status="completed",
