@@ -50,6 +50,10 @@ def list(
             rprint("[red]Error:[/] Invalid date format for --until. Use YYYY-MM-DD")
             raise typer.Exit(1)
 
+    if not predictions:
+        rprint("[yellow]No predictions found[/]")
+        return
+
     console = Console()
     table = Table(show_header=True)
     table.add_column("id", min_width=40)

@@ -48,7 +48,7 @@ def mock_client(monkeypatch):
             self.base_url = base_url or "https://api.vlm.run"
             self.dataset = self.Dataset(self)
             self.fine_tuning = self.FineTuning(self)
-            self.prediction = self.Prediction(self)
+            self.predictions = self.Prediction(self)
             self.files = self.Files(self)
             self.models = self.Models(self)
             self.hub = self.Hub(self)
@@ -95,7 +95,7 @@ def mock_client(monkeypatch):
                     usage=CreditUsage(credits_used=0),
                 )
 
-            def list(self):
+            def list(self, skip: int = 0, limit: int = 10):
                 return [
                     PredictionResponse(
                         id="prediction1",
