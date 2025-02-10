@@ -79,7 +79,7 @@ def test_image_generate_validation(mock_client):
         )
     
     # Test empty urls list
-    with pytest.raises(ValueError, match="URLs list cannot be empty"):
+    with pytest.raises(ValueError, match="Either `images` or `urls` must be provided"):
         client.image.generate(domain="test-domain", urls=[])
 
 
