@@ -1,14 +1,14 @@
-import pytest
 """Tests for predictions operations."""
 
 from PIL import Image
+import pytest
 from vlmrun.client.types import PredictionResponse
 
 
 def test_list_predictions(mock_client):
     """Test listing predictions."""
     client = mock_client
-    response = client.prediction.list()
+    response = client.predictions.list()
     assert isinstance(response, list)
     assert all(isinstance(pred, PredictionResponse) for pred in response)
     assert len(response) > 0
@@ -19,7 +19,7 @@ def test_list_predictions(mock_client):
 def test_get_prediction(mock_client):
     """Test getting prediction by ID."""
     client = mock_client
-    response = client.prediction.get("prediction1")
+    response = client.predictions.get("prediction1")
     assert isinstance(response, PredictionResponse)
     assert response.id == "prediction1"
     assert response.status == "running"
@@ -28,7 +28,7 @@ def test_get_prediction(mock_client):
 def test_wait_prediction(mock_client):
     """Test waiting for prediction completion."""
     client = mock_client
-    response = client.prediction.wait("prediction1", timeout=1)
+    response = client.predictions.wait("prediction1", timeout=1)
     assert isinstance(response, PredictionResponse)
     assert response.id == "prediction1"
     assert response.status == "completed"
@@ -64,20 +64,22 @@ def test_image_generate_with_url(mock_client):
 def test_image_generate_validation(mock_client):
     """Test validation of image generate parameters."""
     client = mock_client
-    
+
     # Test missing both images and urls
     with pytest.raises(ValueError, match="Either `images` or `urls` must be provided"):
         client.image.generate(domain="test-domain")
-    
+
     # Test providing both images and urls
     img = Image.new("RGB", (100, 100), color="red")
-    with pytest.raises(ValueError, match="Only one of `images` or `urls` can be provided"):
+    with pytest.raises(
+        ValueError, match="Only one of `images` or `urls` can be provided"
+    ):
         client.image.generate(
             domain="test-domain",
             images=[img],
             urls=["https://example.com/image.jpg"],
         )
-    
+
     # Test empty urls list
     with pytest.raises(ValueError, match="Either `images` or `urls` must be provided"):
         client.image.generate(domain="test-domain", urls=[])
