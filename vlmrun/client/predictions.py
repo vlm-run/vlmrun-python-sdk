@@ -87,8 +87,9 @@ class ImagePredictions(Predictions):
 
     def generate(
         self,
-        images: List[Union[Path, Image.Image]],
         domain: str,
+        images: Optional[List[Union[Path, Image.Image]]] = None,
+        urls: Optional[List[str]] = None,
         batch: bool = False,
         metadata: Optional[RequestMetadata] = None,
         config: Optional[GenerationConfig] = None,
@@ -97,7 +98,8 @@ class ImagePredictions(Predictions):
         """Generate a document prediction.
 
         Args:
-            images: List of images to generate predictions from
+            images: List of images to generate predictions from. Either images or urls must be provided.
+            urls: List of image URLs to generate predictions from. Either images or urls must be provided.
             domain: Domain to use for prediction
             batch: Whether to run prediction in batch mode
             config: GenerateConfig to use for prediction
@@ -106,18 +108,38 @@ class ImagePredictions(Predictions):
 
         Returns:
             PredictionResponse: Prediction response
-        """
 
-        # Check if all images are of the same type
-        image_type = type(images[0])
-        if not all(isinstance(image, image_type) for image in images):
-            raise ValueError("All images must be of the same type")
-        if isinstance(images[0], Path):
-            images = [Image.open(str(image)) for image in images]
-        elif isinstance(images[0], Image.Image):
-            pass
+        Raises:
+            ValueError: If neither images nor urls are provided, or if both are provided
+        """
+        # Input validation
+        if not images and not urls:
+            raise ValueError("Either `images` or `urls` must be provided")
+        if images and urls:
+            raise ValueError("Only one of `images` or `urls` can be provided")
+
+        image_data = None
+        if images:
+            # Check if all images are of the same type
+            image_type = type(images[0])
+            if not all(isinstance(image, image_type) for image in images):
+                raise ValueError("All images must be of the same type")
+            if isinstance(images[0], Path):
+                images = [Image.open(str(image)) for image in images]
+            elif isinstance(images[0], Image.Image):
+                pass
+            else:
+                raise ValueError("Image must be a path or a PIL Image")
+            image_data = encode_image(images[0], format="JPEG")
         else:
-            raise ValueError("Image must be a path or a PIL Image")
+            # URL handling
+            if not urls:
+                raise ValueError("URLs list cannot be empty")
+            if not isinstance(urls[0], str):
+                raise ValueError("URLs must be strings")
+            if not all(isinstance(url, str) for url in urls):
+                raise ValueError("All URLs must be strings")
+            image_data = urls[0]
 
         additional_kwargs = {}
         if config:
@@ -128,7 +150,7 @@ class ImagePredictions(Predictions):
             method="POST",
             url="image/generate",
             data={
-                "image": encode_image(images[0], format="JPEG"),
+                "image" if images else "url": image_data,
                 "domain": domain,
                 "batch": batch,
                 "callback_url": callback_url,
