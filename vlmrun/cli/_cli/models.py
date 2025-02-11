@@ -33,16 +33,14 @@ def list(
     console = Console()
     table = Table(
         show_header=True,
-        header_style="bold cyan",
-        title="Available Models",
-        title_style="bold",
-        border_style="blue",
+        header_style="white",
+        border_style="white",
         expand=True,
     )
 
-    table.add_column("Category", style="bold yellow")
-    table.add_column("Model", style="magenta")
-    table.add_column("Domain", style="green")
+    table.add_column("Category")
+    table.add_column("Model")
+    table.add_column("Domain")
 
     domain_groups = {}
     for model in models:
@@ -55,11 +53,11 @@ def list(
         first_in_category = True
         for model in sorted(domain_groups[category], key=lambda x: x.domain):
             if first_in_category:
-                table.add_row(category, model.model, model.domain)
+                table.add_row(category, model.model, model.domain, style="white")
                 first_in_category = False
             else:
-                table.add_row("", model.model, model.domain)
+                table.add_row("", model.model, model.domain, style="white")
         if category != sorted(domain_groups.keys())[-1]:
-            table.add_row("", "", "", style="dim")
+            table.add_row("", "", "", style="dim white")
 
     console.print(table)

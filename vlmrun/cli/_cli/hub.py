@@ -2,7 +2,6 @@
 
 import typer
 import json
-from rich import print as rprint
 from rich.table import Table
 from rich.console import Console
 from rich.syntax import Syntax
@@ -23,9 +22,11 @@ def version(ctx: typer.Context) -> None:
     """Get hub version."""
     client: VLMRun = ctx.obj
     info = client.hub.info()
-    rprint(f"[bold cyan]Hub version:[/] [green]{info.version}[/]")
-    rprint(
-        "\nVisit [link=https://github.com/vlm-run/vlmrun-hub]github.com/vlm-run/vlmrun-hub[/link] for more information"
+    console = Console()
+    console.print(f"Hub version: {info.version}", style="white")
+    console.print(
+        "\nVisit https://github.com/vlm-run/vlmrun-hub for more information",
+        style="white",
     )
 
 
@@ -46,15 +47,15 @@ def list_domains(
     console = Console()
     table = Table(
         show_header=True,
-        header_style="bold cyan",
+        header_style="white",
         title="Available Domains",
-        title_style="bold",
-        border_style="blue",
+        title_style="white",
+        border_style="white",
         expand=True,
     )
 
-    table.add_column("Category", style="bold yellow")
-    table.add_column("Domain", style="green")
+    table.add_column("Category")
+    table.add_column("Domain")
 
     domain_groups = {}
     for domain in domains:
@@ -67,12 +68,12 @@ def list_domains(
         first_in_category = True
         for domain in sorted(domain_groups[category], key=lambda x: x.domain):
             if first_in_category:
-                table.add_row(category, domain.domain)
+                table.add_row(category, domain.domain, style="white")
                 first_in_category = False
             else:
-                table.add_row("", domain.domain)
+                table.add_row("", domain.domain, style="white")
         if category != sorted(domain_groups.keys())[-1]:
-            table.add_row("", "", style="dim")
+            table.add_row("", "", style="white")
 
     console.print(table)
 
@@ -90,13 +91,13 @@ def schema(
 
     console = Console()
 
-    console.print("\n[bold magenta]Schema Information:[/]")
+    console.print("\nSchema Information:", style="white")
     meta_table = Table(show_header=False, box=None)
-    meta_table.add_row("[cyan]Domain:[/]", domain)
-    meta_table.add_row("[cyan]Version:[/]", response.schema_version)
+    meta_table.add_row("Domain:", domain, style="white")
+    meta_table.add_row("Version:", response.schema_version, style="white")
     console.print(meta_table)
 
-    console.print("\n[bold magenta]JSON Schema:[/]")
+    console.print("\nJSON Schema:", style="white")
     json_str = json.dumps(response.json_schema, indent=2)
-    syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
-    console.print(Panel(syntax, expand=False))
+    syntax = Syntax(json_str, "json", theme="default", line_numbers=True)
+    console.print(Panel(syntax, expand=False, border_style="white"))

@@ -55,7 +55,7 @@ def list(
         return
 
     console = Console()
-    table = Table(show_header=True)
+    table = Table(show_header=True, header_style="white", border_style="white")
     table.add_column("id", min_width=40)
     table.add_column("created_at")
     table.add_column("status")
@@ -70,6 +70,7 @@ def list(
             str(prediction.usage.elements_processed),
             str(prediction.usage.element_type),
             str(prediction.usage.credits_used),
+            style="white",
         )
 
     console.print(table)
@@ -92,7 +93,7 @@ def get(
 
     console = Console()
 
-    console.print("\n[bold magenta]Prediction Details:[/]\n")
+    console.print("\nPrediction Details:\n", style="white")
 
     details = {
         "ID": prediction.id,
@@ -113,23 +114,12 @@ def get(
             details["Credits Used"] = prediction.usage.credits_used
 
     for key, value in details.items():
-        if key == "Status":
-            style = {
-                "enqueued": "yellow",
-                "pending": "yellow",
-                "running": "blue",
-                "completed": "green",
-                "failed": "red",
-                "paused": "dim",
-            }.get(value, "white")
-            console.print(f"[cyan]{key}:[/] [{style}]{value}[/{style}]")
-        else:
-            console.print(f"[cyan]{key}:[/] {value}")
+        console.print(f"{key}: {value}", style="white")
 
     if prediction.response:
-        console.print("\n[bold cyan]Response:[/]")
-        rprint(prediction.response)
+        console.print("\nResponse:", style="white")
+        console.print(prediction.response, style="white")
 
     if prediction.status == "failed" and prediction.error:
-        console.print("\n[bold red]Error:[/]")
-        console.print(prediction.error)
+        console.print("\nError:", style="white")
+        console.print(prediction.error, style="white")
