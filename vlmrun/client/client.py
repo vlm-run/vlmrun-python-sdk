@@ -20,6 +20,7 @@ from vlmrun.client.predictions import (
     AudioPredictions,
 )
 from vlmrun.client.feedback import Feedback
+from vlmrun.constants import DEFAULT_BASE_URL
 
 
 @dataclass
@@ -53,13 +54,17 @@ class VLMRun:
             self.api_key = os.getenv("VLMRUN_API_KEY", None)
             if not self.api_key:  # Still None or empty after env check
                 raise ValueError(
-                    "API key must be provided either through constructor "
-                    "or VLMRUN_API_KEY environment variable"
+                    "Missing API key. Please provide your VLM Run API key:\n\n"
+                    "1. Set it in your code:\n"
+                    "   client = VLMRun(api_key='your-api-key')\n\n"
+                    "2. Or set the environment variable:\n"
+                    "   export VLMRUN_API_KEY='your-api-key'\n\n"
+                    "Get your API key at https://app.vlm.run/dashboard"
                 )
 
         # Handle base URL
         if self.base_url is None:
-            self.base_url = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
+            self.base_url = os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)
 
         # Initialize resources
         self.datasets = Datasets(self)
