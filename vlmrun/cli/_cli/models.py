@@ -35,6 +35,8 @@ def list(
         show_header=True,
         header_style="white",
         border_style="white",
+        title="Available Models",
+        title_style="white",
         expand=True,
     )
 
