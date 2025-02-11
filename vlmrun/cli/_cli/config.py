@@ -12,15 +12,29 @@ def get_config() -> dict:
     if not CONFIG_FILE.exists():
         return {}
 
-    with CONFIG_FILE.open("rb") as f:
-        return tomli.load(f)
+    try:
+        with CONFIG_FILE.open("rb") as f:
+            return tomli.load(f)
+    except (PermissionError, OSError) as e:
+        rprint(f"[red]Error reading config file:[/] {e}")
+        return {}
+    except tomli.TOMLDecodeError:
+        rprint("[red]Error:[/] Invalid TOML format in config file")
+        return {}
 
 
 def save_config(config: dict) -> None:
     """Save configuration to ~/.vlmrun.toml"""
-    with CONFIG_FILE.open("w") as f:
-        for key, value in config.items():
-            f.write(f'{key} = "{value}"\n')
+    config = {k: v for k, v in config.items() if v is not None}
+
+    try:
+        with CONFIG_FILE.open("w") as f:
+            for key, value in config.items():
+                escaped_value = str(value).replace('"', '\\"')
+                f.write(f'{key} = "{escaped_value}"\n')
+    except (PermissionError, OSError) as e:
+        rprint(f"[red]Error saving config file:[/] {e}")
+        raise typer.Exit(1)
 
 
 app = typer.Typer(
