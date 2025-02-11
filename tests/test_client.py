@@ -44,7 +44,7 @@ def test_client_missing_api_key(monkeypatch):
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
     with pytest.raises(ValueError) as exc_info:
         VLMRun()
-    assert "API key must be provided" in str(exc_info.value)
+    assert "Missing API key" in str(exc_info.value)
 
 
 def test_client_env_precedence(monkeypatch):
