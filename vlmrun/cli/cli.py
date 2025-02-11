@@ -19,6 +19,7 @@ from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.datasets import app as dataset_app
 from vlmrun.cli._cli.predictions import app as predictions_app
+from vlmrun.constants import DEFAULT_BASE_URL
 
 app = typer.Typer(
     name="vlmrun",
@@ -61,9 +62,7 @@ def check_credentials(
         )
         raise typer.Exit(1)
 
-    is_default_url = base_url == "https://api.vlm.run/v1" and not os.getenv(
-        "VLMRUN_BASE_URL"
-    )
+    is_default_url = base_url == DEFAULT_BASE_URL and not os.getenv("VLMRUN_BASE_URL")
     if is_default_url and not ctx.meta.get("has_shown_base_url_notice"):
         console.print(
             f"[yellow]Note:[/] Using default API endpoint: [blue]{base_url}[/]\n"
@@ -82,7 +81,7 @@ def main(
         help="VLM Run API key. Can also be set via VLMRUN_API_KEY environment variable.",
     ),
     base_url: Optional[str] = typer.Option(
-        "https://api.vlm.run/v1",
+        DEFAULT_BASE_URL,
         "--base-url",
         envvar="VLMRUN_BASE_URL",
         help="VLM Run API base URL. Can also be set via VLMRUN_BASE_URL environment variable.",
