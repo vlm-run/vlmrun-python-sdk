@@ -1,8 +1,13 @@
 from pathlib import Path
 from typing import Optional
+import sys
 import typer
-import tomli
 from rich import print as rprint
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 CONFIG_FILE = Path.home() / ".vlmrun.toml"
 
@@ -14,11 +19,11 @@ def get_config() -> dict:
 
     try:
         with CONFIG_FILE.open("rb") as f:
-            return tomli.load(f)
+            return tomllib.load(f)
     except (PermissionError, OSError) as e:
         rprint(f"[red]Error reading config file:[/] {e}")
         return {}
-    except tomli.TOMLDecodeError:
+    except tomllib.TOMLDecodeError:
         rprint("[red]Error:[/] Invalid TOML format in config file")
         return {}
 
