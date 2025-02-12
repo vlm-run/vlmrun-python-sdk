@@ -9,7 +9,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-CONFIG_FILE = Path.home() / ".vlmrun.toml"
+CONFIG_FILE = Path.home() / ".vlmrun" / "config.toml"
 
 
 def get_config() -> dict:
@@ -29,10 +29,12 @@ def get_config() -> dict:
 
 
 def save_config(config: dict) -> None:
-    """Save configuration to ~/.vlmrun.toml"""
+    """Save configuration to ~/.vlmrun/config.toml"""
     config = {k: v for k, v in config.items() if v is not None}
 
     try:
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
         with CONFIG_FILE.open("w") as f:
             for key, value in config.items():
                 escaped_value = str(value).replace('"', '\\"')

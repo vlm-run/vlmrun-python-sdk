@@ -7,7 +7,9 @@ from vlmrun.cli.cli import app
 @pytest.fixture
 def config_file(tmp_path, monkeypatch):
     """Create a temporary config file."""
-    config_path = tmp_path / ".vlmrun.toml"
+    config_dir = tmp_path / ".vlmrun"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
     monkeypatch.setattr("vlmrun.cli._cli.config.CONFIG_FILE", config_path)
     return config_path
 
@@ -66,7 +68,9 @@ def test_unset_no_values(runner, config_file):
 
 def test_config_file_permissions(runner, tmp_path, monkeypatch):
     """Test handling of permission errors."""
-    config_path = tmp_path / ".vlmrun.toml"
+    config_dir = tmp_path / ".vlmrun"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
     config_path.touch(mode=0o444)
     monkeypatch.setattr("vlmrun.cli._cli.config.CONFIG_FILE", config_path)
 
