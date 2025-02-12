@@ -46,8 +46,8 @@ def check_credentials(
 ) -> None:
     """Check if API key is present and show helpful message if missing."""
     config = get_config()
-    api_key = api_key or config.get("api_key")
-    base_url = base_url or config.get("base_url", DEFAULT_BASE_URL)
+    api_key = api_key or config.api_key
+    base_url = base_url or config.base_url
 
     if not api_key:
         console.print("\n[red bold]Error:[/] API key not found! 🔑\n")

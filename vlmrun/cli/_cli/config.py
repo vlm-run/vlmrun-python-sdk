@@ -3,7 +3,9 @@ from typing import Optional
 import sys
 import typer
 from rich import print as rprint
-from pydantic import BaseModel, Field
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+from dataclasses import asdict
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -13,7 +15,8 @@ else:
 CONFIG_FILE = Path.home() / ".vlmrun" / "config.toml"
 
 
-class Config(BaseModel):
+@dataclass
+class Config:
     """VLM Run configuration."""
 
     api_key: Optional[str] = Field(default=None, description="VLM Run API key")
@@ -39,7 +42,7 @@ def get_config() -> Config:
 
 def save_config(config: Config) -> None:
     """Save configuration to ~/.vlmrun/config.toml"""
-    config_dict = {k: v for k, v in config.model_dump().items() if v is not None}
+    config_dict = {k: v for k, v in asdict(config).items() if v is not None}
 
     try:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -65,11 +68,11 @@ def show_config() -> None:
     """Show current configuration."""
     config = get_config()
 
-    if not any(getattr(config, field) for field in config.model_fields):
+    if not any(getattr(config, field) for field in asdict(config).keys()):
         rprint("[yellow]No configuration values set[/]")
         return
 
-    display_config = config.model_dump()
+    display_config = asdict(config)
     if config.api_key:
         key = config.api_key
         display_config["api_key"] = f"{key[:4]}...{key[-4:]}"
