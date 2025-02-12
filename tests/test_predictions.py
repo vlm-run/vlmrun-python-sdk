@@ -3,7 +3,6 @@
 import pytest
 
 from PIL import Image
-import pytest
 from vlmrun.client.types import PredictionResponse
 
 

@@ -9,7 +9,7 @@ def config_file(tmp_path, monkeypatch):
     """Create a temporary config file."""
     config_dir = tmp_path / ".vlmrun"
     config_dir.mkdir()
-    config_path = config_dir / "config.toml"
+    config_path = config_dir / "config.toml.test"
     monkeypatch.setattr("vlmrun.cli._cli.config.CONFIG_FILE", config_path)
     return config_path
 
