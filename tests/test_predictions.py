@@ -1,5 +1,6 @@
-import pytest
 """Tests for predictions operations."""
+
+import pytest
 
 from PIL import Image
 from vlmrun.client.types import PredictionResponse
@@ -64,20 +65,22 @@ def test_image_generate_with_url(mock_client):
 def test_image_generate_validation(mock_client):
     """Test validation of image generate parameters."""
     client = mock_client
-    
+
     # Test missing both images and urls
     with pytest.raises(ValueError, match="Either `images` or `urls` must be provided"):
         client.image.generate(domain="test-domain")
-    
+
     # Test providing both images and urls
     img = Image.new("RGB", (100, 100), color="red")
-    with pytest.raises(ValueError, match="Only one of `images` or `urls` can be provided"):
+    with pytest.raises(
+        ValueError, match="Only one of `images` or `urls` can be provided"
+    ):
         client.image.generate(
             domain="test-domain",
             images=[img],
             urls=["https://example.com/image.jpg"],
         )
-    
+
     # Test empty urls list
     with pytest.raises(ValueError, match="Either `images` or `urls` must be provided"):
         client.image.generate(domain="test-domain", urls=[])

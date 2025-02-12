@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from pydantic.dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, Literal, Optional
+from typing import Dict, Any, Literal, Optional, Type
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
@@ -106,9 +106,14 @@ class FeedbackSubmitResponse(BaseModel):
 
 
 class GenerationConfig(BaseModel):
-    detail: Literal["auto", "lo", "hi"] = Field(default="auto")
+    prompt: Optional[str] = Field(default=None)
+    response_model: Optional[Type[BaseModel]] = Field(default=None)
     json_schema: Optional[Dict[str, Any]] = Field(default=None)
+    max_retries: int = Field(default=3)
+    max_tokens: int = Field(default=4096)
+    temperature: float = Field(default=0.0)
 
+    detail: Literal["auto", "lo", "hi"] = Field(default="auto")
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
 

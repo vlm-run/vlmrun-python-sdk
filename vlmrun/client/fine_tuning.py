@@ -13,6 +13,8 @@ from vlmrun.client.types import (
     FinetuningResponse,
     PredictionResponse,
     FinetuningProvisionResponse,
+    GenerationConfig,
+    RequestMetadata,
 )
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.common.image import encode_image
@@ -116,14 +118,9 @@ class Finetuning:
         self,
         images: List[Union[Path, Image.Image]],
         model: str,
-        prompt: Optional[str] = None,
-        domain: Optional[str] = None,
-        json_schema: Optional[dict] = None,
-        max_new_tokens: int = 1024,
-        temperature: float = 0.0,
-        detail: str = "auto",
         batch: bool = False,
-        metadata: dict = {},
+        config: Optional[GenerationConfig] = GenerationConfig(),
+        metadata: Optional[RequestMetadata] = RequestMetadata(),
         callback_url: Optional[str] = None,
     ) -> PredictionResponse:
         """Generate a document prediction.
@@ -131,32 +128,18 @@ class Finetuning:
         Args:
             images: List of images to generate predictions from
             model: Model to use for prediction
-            prompt: Prompt to use for prediction
-            domain: Domain to use for prediction
-            json_schema: JSON schema to use for prediction
-            max_new_tokens: Maximum number of new tokens to generate
-            temperature: Temperature for prediction
-            detail: Detail level for prediction
             batch: Whether to run prediction in batch mode
+            config: GenerateConfig to use for prediction
             metadata: Metadata to include in prediction
             callback_url: URL to call when prediction is complete
 
         Returns:
             PredictionResponse: Prediction response
         """
-        # Check various parameters
-        if not json_schema:
+        if not config.json_schema:
             raise ValueError("JSON schema is required for fine-tuned model predictions")
-        if not prompt:
+        if not config.prompt:
             raise ValueError("Prompt is required for fine-tuned model predictions")
-        if domain:
-            raise NotImplementedError(
-                "Domain is not supported for fine-tuned model predictions"
-            )
-        if detail != "auto":
-            raise NotImplementedError(
-                "Detail level is not supported for fine-tuned model predictions"
-            )
         if batch:
             raise NotImplementedError(
                 "Batch mode is not supported for fine-tuned models"
@@ -165,9 +148,9 @@ class Finetuning:
             raise NotImplementedError(
                 "Callback URL is not supported for fine-tuned model predictions"
             )
-        if len(images) > 1:
+        if len(images) > 16:
             raise ValueError(
-                "Only one image is supported for fine-tuned model predictions for now"
+                "Maximum of 16 images are supported for fine-tuned model predictions for now"
             )
 
         # Check if all images are of the same type
@@ -185,15 +168,11 @@ class Finetuning:
             method="POST",
             url="generate",
             data={
-                "image": encode_image(images[0], format="JPEG"),
+                "images": [encode_image(image, format="JPEG") for image in images],
                 "model": model,
-                "prompt": prompt,
-                "json_schema": json_schema,
-                "detail": detail,
-                "max_new_tokens": max_new_tokens,
-                "temperature": temperature,
-                "metadata": metadata,
                 "batch": batch,
+                "config": config.model_dump(),
+                "metadata": metadata.model_dump(),
                 "callback_url": callback_url,
             },
         )
