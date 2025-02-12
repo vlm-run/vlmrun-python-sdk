@@ -61,7 +61,6 @@ class Predictions:
             method="GET",
             url=f"predictions/{id}",
         )
-
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
         return PredictionResponse(**response)
@@ -118,7 +117,6 @@ class ImagePredictions(Predictions):
         if images and urls:
             raise ValueError("Only one of `images` or `urls` can be provided")
 
-        image_data = None
         if images:
             # Check if all images are of the same type
             image_type = type(images[0])
@@ -130,7 +128,7 @@ class ImagePredictions(Predictions):
                 pass
             else:
                 raise ValueError("Image must be a path or a PIL Image")
-            image_data = encode_image(images[0], format="JPEG")
+            images_data = [encode_image(image, format="JPEG") for image in images]
         else:
             # URL handling
             if not urls:
@@ -139,7 +137,7 @@ class ImagePredictions(Predictions):
                 raise ValueError("URLs must be strings")
             if not all(isinstance(url, str) for url in urls):
                 raise ValueError("All URLs must be strings")
-            image_data = urls[0]
+            images_data = urls
 
         additional_kwargs = {}
         if config:
@@ -150,7 +148,7 @@ class ImagePredictions(Predictions):
             method="POST",
             url="image/generate",
             data={
-                "image" if images else "url": image_data,
+                "images": images_data,
                 "domain": domain,
                 "batch": batch,
                 "callback_url": callback_url,
