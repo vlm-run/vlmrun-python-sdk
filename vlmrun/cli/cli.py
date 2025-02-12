@@ -19,6 +19,7 @@ from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.datasets import app as dataset_app
 from vlmrun.cli._cli.predictions import app as predictions_app
+from vlmrun.cli._cli.config import app as config_app, get_config
 from vlmrun.constants import DEFAULT_BASE_URL
 
 app = typer.Typer(
@@ -44,15 +45,21 @@ def check_credentials(
     ctx: typer.Context, api_key: Optional[str], base_url: str
 ) -> None:
     """Check if API key is present and show helpful message if missing."""
+    config = get_config()
+    api_key = api_key or config.get("api_key")
+    base_url = base_url or config.get("base_url", DEFAULT_BASE_URL)
+
     if not api_key:
         console.print("\n[red bold]Error:[/] API key not found! 🔑\n")
         console.print(
             Panel(
                 Text.from_markup(
                     "To use the VLM Run CLI, you need to provide an API key. You can either:\n\n"
-                    "1. Set it as an environment variable:\n"
+                    "1. Set it in your config:\n"
+                    "   [green]vlmrun config set --api-key 'your-api-key'[/]\n\n"
+                    "2. Set it as an environment variable:\n"
                     "   [green]export VLMRUN_API_KEY='your-api-key'[/]\n\n"
-                    "2. Pass it directly as an argument:\n"
+                    "3. Pass it directly as an argument:\n"
                     "   [green]vlmrun --api-key 'your-api-key' ...[/]\n\n"
                     "Get your API key at: [blue]https://app.vlm.run/dashboard[/]"
                 ),
@@ -81,7 +88,7 @@ def main(
         help="VLM Run API key. Can also be set via VLMRUN_API_KEY environment variable.",
     ),
     base_url: Optional[str] = typer.Option(
-        DEFAULT_BASE_URL,
+        None,
         "--base-url",
         envvar="VLMRUN_BASE_URL",
         help="VLM Run API base URL. Can also be set via VLMRUN_BASE_URL environment variable.",
@@ -114,6 +121,7 @@ app.add_typer(models_app, name="models")
 app.add_typer(generate_app, name="generate")
 app.add_typer(hub_app, name="hub")
 app.add_typer(dataset_app, name="datasets")
+app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
     app()
