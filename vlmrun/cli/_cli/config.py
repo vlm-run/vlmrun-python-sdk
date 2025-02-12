@@ -3,6 +3,7 @@ from typing import Optional
 import sys
 import typer
 from rich import print as rprint
+from pydantic import BaseModel, Field
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -12,31 +13,39 @@ else:
 CONFIG_FILE = Path.home() / ".vlmrun" / "config.toml"
 
 
-def get_config() -> dict:
-    """Load configuration from ~/.vlmrun.toml"""
+class Config(BaseModel):
+    """VLM Run configuration."""
+
+    api_key: Optional[str] = Field(default=None, description="VLM Run API key")
+    base_url: Optional[str] = Field(default=None, description="VLM Run API base URL")
+
+
+def get_config() -> Config:
+    """Load configuration from ~/.vlmrun/config.toml"""
     if not CONFIG_FILE.exists():
-        return {}
+        return Config()
 
     try:
         with CONFIG_FILE.open("rb") as f:
-            return tomllib.load(f)
+            data = tomllib.load(f)
+            return Config(**data)
     except (PermissionError, OSError) as e:
         rprint(f"[red]Error reading config file:[/] {e}")
-        return {}
+        return Config()
     except tomllib.TOMLDecodeError:
         rprint("[red]Error:[/] Invalid TOML format in config file")
-        return {}
+        return Config()
 
 
-def save_config(config: dict) -> None:
+def save_config(config: Config) -> None:
     """Save configuration to ~/.vlmrun/config.toml"""
-    config = {k: v for k, v in config.items() if v is not None}
+    config_dict = {k: v for k, v in config.model_dump().items() if v is not None}
 
     try:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
         with CONFIG_FILE.open("w") as f:
-            for key, value in config.items():
+            for key, value in config_dict.items():
                 escaped_value = str(value).replace('"', '\\"')
                 f.write(f'{key} = "{escaped_value}"\n')
     except (PermissionError, OSError) as e:
@@ -56,17 +65,18 @@ def show_config() -> None:
     """Show current configuration."""
     config = get_config()
 
-    if not config:
+    if not any(getattr(config, field) for field in config.model_fields):
         rprint("[yellow]No configuration values set[/]")
         return
 
-    display_config = config.copy()
-    if "api_key" in display_config:
-        key = display_config["api_key"]
+    display_config = config.model_dump()
+    if config.api_key:
+        key = config.api_key
         display_config["api_key"] = f"{key[:4]}...{key[-4:]}"
 
     for key, value in display_config.items():
-        rprint(f"{key}: {value}")
+        if value is not None:
+            rprint(f"{key}: {value}")
 
 
 @app.command(name="set")
@@ -80,11 +90,11 @@ def set_value(
     config = get_config()
 
     if api_key:
-        config["api_key"] = api_key
+        config.api_key = api_key
         rprint("[green]✓[/] Set API key")
 
     if base_url:
-        config["base_url"] = base_url
+        config.base_url = base_url
         rprint(f"[green]✓[/] Set base URL: {base_url}")
 
     if not (api_key or base_url):
@@ -102,12 +112,12 @@ def unset(
     """Remove configuration values."""
     config = get_config()
 
-    if api_key and "api_key" in config:
-        del config["api_key"]
+    if api_key and config.api_key:
+        config.api_key = None
         rprint("[green]✓[/] Removed API key")
 
-    if base_url and "base_url" in config:
-        del config["base_url"]
+    if base_url and config.base_url:
+        config.base_url = None
         rprint("[green]✓[/] Removed base URL")
 
     if not (api_key or base_url):
