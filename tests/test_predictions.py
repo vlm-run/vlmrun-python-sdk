@@ -1,9 +1,16 @@
 """Tests for predictions operations."""
 
 import pytest
-
+from pydantic import BaseModel
 from PIL import Image
-from vlmrun.client.types import PredictionResponse
+from vlmrun.client.types import PredictionResponse, GenerationConfig
+
+
+class MockInvoiceSchema(BaseModel):
+    """Mock invoice schema for testing."""
+
+    invoice_number: str
+    total_amount: float
 
 
 def test_list_predictions(mock_client):
@@ -129,3 +136,53 @@ def test_audio_generate(mock_client, tmp_path):
         json_schema={"type": "object"},
     )
     assert isinstance(response, PredictionResponse)
+
+
+def test_schema_casting_with_domain(mock_client):
+    """Test response casting using domain schema."""
+
+    def mock_get_schema(domain):
+        return MockInvoiceSchema
+
+    mock_client.hub.get_pydantic_model = mock_get_schema
+
+    response = mock_client.image.generate(
+        domain="document.invoice", urls=["https://example.com/test.jpg"]
+    )
+
+    assert isinstance(response.response, MockInvoiceSchema)
+
+
+def test_schema_casting_with_custom_schema(mock_client):
+    """Test response casting using custom schema from GenerationConfig."""
+    response = mock_client.image.generate(
+        domain="document.invoice",
+        urls=["https://example.com/test.jpg"],
+        config=GenerationConfig(json_schema=MockInvoiceSchema.model_json_schema()),
+    )
+
+    assert response.response.invoice_number == "INV-001"
+    assert response.response.total_amount == 100.0
+
+
+@pytest.mark.parametrize("prediction_type", ["image", "document", "video", "audio"])
+def test_schema_casting_across_prediction_types(mock_client, prediction_type):
+    """Test schema casting works consistently across different prediction types."""
+
+    def mock_get_schema(domain):
+        return MockInvoiceSchema
+
+    mock_client.hub.get_pydantic_model = mock_get_schema
+
+    pred_client = getattr(mock_client, prediction_type)
+
+    if prediction_type == "image":
+        response = pred_client.generate(
+            domain="document.invoice", urls=["https://example.com/test.jpg"]
+        )
+    else:
+        response = pred_client.generate(
+            domain="document.invoice", url="https://example.com/test.file"
+        )
+
+    assert isinstance(response.response, MockInvoiceSchema)

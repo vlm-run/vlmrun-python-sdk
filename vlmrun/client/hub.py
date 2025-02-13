@@ -1,6 +1,7 @@
 """VLM Run Hub API implementation."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Type
+from pydantic import BaseModel
 
 from vlmrun.client.base_requestor import APIError
 from vlmrun.client.types import (
@@ -8,6 +9,7 @@ from vlmrun.client.types import (
     HubInfoResponse,
     HubDomainInfo,
 )
+from vlmrun.hub.registry import registry
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
@@ -116,3 +118,20 @@ class Hub:
             return HubSchemaResponse(**response)
         except Exception as e:
             raise APIError(f"Failed to get schema for domain {domain}: {str(e)}")
+
+    def get_pydantic_model(self, domain: str) -> Type[BaseModel]:
+        """Get the Pydantic model for a given domain.
+
+        Args:
+            domain: Domain identifier (e.g. "document.invoice")
+
+        Returns:
+            Type[BaseModel]: The Pydantic model class for the domain
+
+        Raises:
+            APIError: If the domain is not found
+        """
+        try:
+            return registry[domain]
+        except KeyError:
+            raise APIError(f"Domain not found: {domain}")

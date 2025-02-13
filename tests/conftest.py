@@ -10,12 +10,12 @@ from vlmrun.client.types import (
     DatasetCreateResponse,
     HubInfoResponse,
     HubDomainInfo,
-    HubSchemaResponse,
     FileResponse,
     PredictionResponse,
     FeedbackSubmitResponse,
     CreditUsage,
 )
+from vlmrun.client.predictions import SchemaCastMixin
 
 
 @pytest.fixture
@@ -29,19 +29,21 @@ def mock_client(monkeypatch):
     """Mock the VLMRun class."""
 
     class MockVLMRun:
-        class AudioPredictions:
+        class AudioPredictions(SchemaCastMixin):
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, *args, **kwargs):
-                return PredictionResponse(
+            def generate(self, domain: str = None, **kwargs):
+                prediction = PredictionResponse(
                     id="prediction1",
                     status="completed",
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
-                    response={"result": "test"},
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
                     usage=CreditUsage(credits_used=100),
                 )
+                self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
+                return prediction
 
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
@@ -191,23 +193,20 @@ def mock_client(monkeypatch):
                 return [
                     HubDomainInfo(domain="document.invoice"),
                     HubDomainInfo(domain="document.receipt"),
-                    HubDomainInfo(domain="document.utility_bill"),
                 ]
 
-            def get_schema(self, domain):
-                return HubSchemaResponse(
-                    json_schema={
-                        "type": "object",
-                        "properties": {
-                            "invoice_number": {"type": "string"},
-                            "total_amount": {"type": "number"},
-                        },
-                    },
-                    schema_version="1.0.0",
-                    schema_hash="abcd1234",
-                )
+            def get_pydantic_model(self, domain: str):
+                """Mock implementation for schema lookup."""
+                from pydantic import BaseModel
 
-        class ImagePredictions:
+                class MockInvoiceSchema(BaseModel):
+                    invoice_number: str
+                    total_amount: float
+
+                schemas = {"document.invoice": MockInvoiceSchema, "general": None}
+                return schemas.get(domain)
+
+        class ImagePredictions(SchemaCastMixin):
             def __init__(self, client):
                 self._client = client
 
@@ -216,42 +215,50 @@ def mock_client(monkeypatch):
                     raise ValueError("Either `images` or `urls` must be provided")
                 if images and urls:
                     raise ValueError("Only one of `images` or `urls` can be provided")
-                return PredictionResponse(
+
+                prediction = PredictionResponse(
                     id="prediction1",
                     status="completed",
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
-                    response={"result": "test"},
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
                     usage=CreditUsage(credits_used=100),
                 )
 
-        class VideoPredictions:
+                self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
+                return prediction
+
+        class VideoPredictions(SchemaCastMixin):
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, *args, **kwargs):
-                return PredictionResponse(
+            def generate(self, domain: str = None, **kwargs):
+                prediction = PredictionResponse(
                     id="prediction1",
                     status="completed",
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
-                    response={"result": "test"},
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
                     usage=CreditUsage(credits_used=100),
                 )
+                self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
+                return prediction
 
-        class DocumentPredictions:
+        class DocumentPredictions(SchemaCastMixin):
             def __init__(self, client):
                 self._client = client
 
-            def generate(self, *args, **kwargs):
-                return PredictionResponse(
+            def generate(self, domain: str = None, **kwargs):
+                prediction = PredictionResponse(
                     id="prediction1",
                     status="completed",
                     created_at="2024-01-01T00:00:00+00:00",
                     completed_at="2024-01-01T00:00:01+00:00",
-                    response={"result": "test"},
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
                     usage=CreditUsage(credits_used=100),
                 )
+                self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
+                return prediction
 
         class Dataset:
             def __init__(self, client):
