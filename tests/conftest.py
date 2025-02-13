@@ -9,6 +9,7 @@ from vlmrun.client.types import (
     ModelInfoResponse,
     DatasetCreateResponse,
     HubInfoResponse,
+    HubSchemaResponse,
     HubDomainInfo,
     FileResponse,
     PredictionResponse,
@@ -193,7 +194,21 @@ def mock_client(monkeypatch):
                 return [
                     HubDomainInfo(domain="document.invoice"),
                     HubDomainInfo(domain="document.receipt"),
+                    HubDomainInfo(domain="document.utility_bill"),
                 ]
+
+            def get_schema(self, domain):
+                return HubSchemaResponse(
+                    json_schema={
+                        "type": "object",
+                        "properties": {
+                            "invoice_number": {"type": "string"},
+                            "total_amount": {"type": "number"},
+                        },
+                    },
+                    schema_version="1.0.0",
+                    schema_hash="abcd1234",
+                )
 
             def get_pydantic_model(self, domain: str):
                 """Mock implementation for schema lookup."""
