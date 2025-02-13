@@ -27,18 +27,22 @@ def create(
     learning_rate: float = typer.Option(2e-4, help="Learning rate"),
     suffix: str = typer.Option(None, help="Suffix for the fine-tuned model"),
     wandb_project_name: str = typer.Option(None, help="Weights & Biases project name"),
+    wandb_api_key: str = typer.Option(None, help="Weights & Biases API key"),
+    wandb_base_url: str = typer.Option(None, help="Weights & Biases base URL"),
 ) -> None:
     """Create a fine-tuning job."""
     client: VLMRun = ctx.obj
     result: FinetuningResponse = client.fine_tuning.create(
         model=model,
+        suffix=suffix,
         training_file_id=training_file_id,
         validation_file_id=validation_file_id,
         num_epochs=num_epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,
         wandb_project_name=wandb_project_name,
-        suffix=suffix,
+        wandb_api_key=wandb_api_key,
+        wandb_base_url=wandb_base_url,
     )
     rprint(f"Created fine-tuning job with ID: {result.id}")
 
@@ -55,6 +59,7 @@ def list(ctx: typer.Context) -> None:
     table.add_column("status")
     table.add_column("created_at")
     table.add_column("completed_at")
+    table.add_column("wandb_url")
     for job in jobs:
         table.add_row(
             job.id,
@@ -62,6 +67,7 @@ def list(ctx: typer.Context) -> None:
             job.status,
             job.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             job.completed_at.strftime("%Y-%m-%d %H:%M:%S") if job.completed_at else "",
+            job.wandb_base_url,
         )
 
     console.print(table)
