@@ -87,6 +87,8 @@ class FinetuningResponse(BaseModel):
     message: str
     model: str
     suffix: Optional[str] = None
+    wandb_base_url: Optional[str] = None
+    wandb_project_name: Optional[str] = None
     usage: CreditUsage
 
 
