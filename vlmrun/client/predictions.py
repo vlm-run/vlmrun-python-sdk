@@ -17,7 +17,7 @@ from vlmrun.client.types import (
     GenerationConfig,
     RequestMetadata,
 )
-from vlmrun.common.pydantic import schema_to_pydantic_model
+from vlmrun.hub.utils import jsonschema_to_model
 
 
 class SchemaCastMixin:
@@ -39,7 +39,7 @@ class SchemaCastMixin:
         if prediction.status == "completed" and prediction.response:
             try:
                 if config and hasattr(config, "json_schema"):
-                    schema = schema_to_pydantic_model(config.json_schema)
+                    schema = jsonschema_to_model(config.json_schema)
                 else:
                     schema = self._client.hub.get_pydantic_model(domain)
 

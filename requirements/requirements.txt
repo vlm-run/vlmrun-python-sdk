@@ -7,4 +7,4 @@ rich
 tenacity
 tqdm
 typer>=0.9.0
-vlmrun-hub
+vlmrun-hub>=0.1.28
