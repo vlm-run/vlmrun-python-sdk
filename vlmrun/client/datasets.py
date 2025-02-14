@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from loguru import logger
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.client.types import DatasetCreateResponse, FileResponse
+from vlmrun.client.types import DatasetResponse, FileResponse
 from vlmrun.common.utils import create_archive
 
 
@@ -29,7 +29,10 @@ class Datasets:
         dataset_directory: Path,
         dataset_name: str,
         dataset_type: Literal["images", "videos", "documents"],
-    ) -> DatasetCreateResponse:
+        wandb_base_url: Optional[str] = "https://api.wandb.ai",
+        wandb_project_name: Optional[str] = None,
+        wandb_api_key: Optional[str] = None,
+    ) -> DatasetResponse:
         """Create a dataset from an uploaded file.
 
         Args:
@@ -37,6 +40,9 @@ class Datasets:
             domain: Domain for the dataset
             dataset_name: Name of the dataset
             dataset_type: Type of dataset (images, videos, or documents)
+            wandb_base_url: Base URL for Weights & Biases
+            wandb_project_name: Project name for Weights & Biases
+            wandb_api_key: API key for Weights & Biases
 
         Returns:
             DatasetResponse: Dataset creation response containing dataset_id and file_id
@@ -67,13 +73,16 @@ class Datasets:
                 "domain": domain,
                 "dataset_name": dataset_name,
                 "dataset_type": dataset_type,
+                "wandb_base_url": wandb_base_url,
+                "wandb_project_name": wandb_project_name,
+                "wandb_api_key": wandb_api_key,
             },
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
-        return DatasetCreateResponse(**response)
+        return DatasetResponse(**response)
 
-    def get(self, dataset_id: str) -> DatasetCreateResponse:
+    def get(self, dataset_id: str) -> DatasetResponse:
         """Get dataset information by ID.
 
         Args:
@@ -88,9 +97,9 @@ class Datasets:
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
-        return DatasetCreateResponse(**response)
+        return DatasetResponse(**response)
 
-    def list(self, skip: int = 0, limit: int = 10) -> List[DatasetCreateResponse]:
+    def list(self, skip: int = 0, limit: int = 10) -> List[DatasetResponse]:
         """List all datasets."""
         items, status_code, headers = self._requestor.request(
             method="GET",
@@ -99,4 +108,4 @@ class Datasets:
         )
         if not isinstance(items, list):
             raise TypeError("Expected list response")
-        return [DatasetCreateResponse(**response) for response in items]
+        return [DatasetResponse(**response) for response in items]

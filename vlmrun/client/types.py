@@ -68,13 +68,20 @@ class HubSchemaResponse(BaseModel):
     schema_hash: str
 
 
-class DatasetCreateResponse(BaseModel):
+class DatasetResponse(BaseModel):
     id: str
     dataset_type: str
     dataset_name: str
     domain: str
-    message: str
+    file_id: Optional[str] = None
+    message: Optional[str] = None
+
+    wandb_base_url: Optional[str] = None
+    wandb_project_name: Optional[str] = None
+    wandb_url: Optional[str] = None
+
     created_at: datetime
+    completed_at: Optional[datetime] = None
     status: JobStatus
     usage: CreditUsage
 
@@ -87,6 +94,7 @@ class FinetuningResponse(BaseModel):
     message: str
     model: str
     suffix: Optional[str] = None
+    wandb_url: Optional[str] = None
     wandb_base_url: Optional[str] = None
     wandb_project_name: Optional[str] = None
     usage: CreditUsage
