@@ -3,7 +3,7 @@
 from vlmrun.cli.cli import app
 
 
-def test_list_models(runner, mock_client):
+def test_list_models(runner, mock_client, config_file):
     """Test list models command."""
     result = runner.invoke(app, ["models", "list"])
     assert result.exit_code == 0
@@ -12,7 +12,7 @@ def test_list_models(runner, mock_client):
     assert "Available Models" in result.stdout
 
 
-def test_list_models_with_filter(runner, mock_client):
+def test_list_models_with_filter(runner, mock_client, config_file):
     """Test list models command with domain filter."""
     result = runner.invoke(app, ["models", "list", "--domain", "test-domain"])
     assert result.exit_code == 0
@@ -24,7 +24,7 @@ def test_list_models_with_filter(runner, mock_client):
     assert "model1" not in result.stdout
 
 
-def test_list_models_formatting(runner, mock_client):
+def test_list_models_formatting(runner, mock_client, config_file):
     """Test that list models output is properly formatted."""
     result = runner.invoke(app, ["models", "list"])
     assert result.exit_code == 0
