@@ -17,6 +17,36 @@ from vlmrun.client.types import (
     GenerationConfig,
     RequestMetadata,
 )
+from vlmrun.hub.utils import jsonschema_to_model
+
+
+class SchemaCastMixin:
+    """Mixin class to handle schema casting for predictions."""
+
+    def _cast_response_to_schema(
+        self,
+        prediction: PredictionResponse,
+        domain: str,
+        config: Optional[GenerationConfig] = None,
+    ) -> None:
+        """Cast prediction response to appropriate schema.
+
+        Args:
+            prediction: PredictionResponse to cast
+            domain: Domain identifier
+            config: Optional GenerationConfig with custom schema
+        """
+        if prediction.status == "completed" and prediction.response:
+            try:
+                if config and hasattr(config, "json_schema"):
+                    schema = jsonschema_to_model(config.json_schema)
+                else:
+                    schema = self._client.hub.get_pydantic_model(domain)
+
+                if schema:
+                    prediction.response = schema(**prediction.response)
+            except Exception as e:
+                logger.debug(f"Failed to cast response to schema: {e}")
 
 
 class Predictions:
@@ -81,7 +111,7 @@ class Predictions:
         raise TimeoutError(f"Prediction {id} did not complete within {timeout} seconds")
 
 
-class ImagePredictions(Predictions):
+class ImagePredictions(SchemaCastMixin, Predictions):
     """Image prediction resource for VLM Run API."""
 
     def generate(
@@ -157,13 +187,16 @@ class ImagePredictions(Predictions):
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
-        return PredictionResponse(**response)
+        prediction = PredictionResponse(**response)
+
+        self._cast_response_to_schema(prediction, domain, config)
+        return prediction
 
 
 def FilePredictions(route: str):
     """File prediction resource for VLM Run API."""
 
-    class _FilePredictions(Predictions):
+    class _FilePredictions(SchemaCastMixin, Predictions):
         """File prediction resource for VLM Run API."""
 
         def generate(
@@ -241,7 +274,10 @@ def FilePredictions(route: str):
             )
             if not isinstance(response, dict):
                 raise TypeError("Expected dict response")
-            return PredictionResponse(**response)
+            prediction = PredictionResponse(**response)
+
+            self._cast_response_to_schema(prediction, domain, config)
+            return prediction
 
     return _FilePredictions
 
