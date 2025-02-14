@@ -342,3 +342,17 @@ def mock_client(monkeypatch):
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()
+
+
+@pytest.fixture
+def config_file(tmp_path, monkeypatch):
+    """Create a temporary config file."""
+    config_dir = tmp_path / ".vlmrun"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
+    
+    monkeypatch.setenv("VLMRUN_API_KEY", "test-key")
+    monkeypatch.setenv("VLMRUN_BASE_URL", "https://test.vlm.run")
+    
+    monkeypatch.setattr("vlmrun.cli._cli.config.CONFIG_FILE", config_path)
+    return config_path
