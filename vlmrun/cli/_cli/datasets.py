@@ -6,7 +6,7 @@ from rich.console import Console
 
 from loguru import logger
 from vlmrun.client import VLMRun
-from vlmrun.client.types import DatasetCreateResponse
+from vlmrun.client.types import DatasetResponse
 from vlmrun.constants import VLMRUN_TMP_DIR
 
 app = typer.Typer(
@@ -31,6 +31,13 @@ def create(
     dataset_type: str = typer.Option(
         ..., help="Type of dataset ('images', 'documents', 'videos')"
     ),
+    wandb_base_url: str = typer.Option(
+        "https://api.wandb.ai", help="Base URL for Weights & Biases"
+    ),
+    wandb_project_name: str = typer.Option(
+        None, help="Project name for Weights & Biases"
+    ),
+    wandb_api_key: str = typer.Option(None, help="API key for Weights & Biases"),
 ) -> None:
     """Create a dataset from a directory of images.
 
@@ -86,6 +93,9 @@ def create(
             dataset_directory=directory,
             dataset_name=dataset_name,
             dataset_type=dataset_type,
+            wandb_base_url=wandb_base_url,
+            wandb_project_name=wandb_project_name,
+            wandb_api_key=wandb_api_key,
         )
         typer.echo(f"Dataset created successfully! ID: {dataset_response.id}")
 
@@ -107,7 +117,7 @@ def list(
 ) -> None:
     """List datasets."""
     client: VLMRun = ctx.obj
-    datasets: List[DatasetCreateResponse] = client.datasets.list(skip=skip, limit=limit)
+    datasets: List[DatasetResponse] = client.datasets.list(skip=skip, limit=limit)
 
     console = Console()
     table = Table(show_header=True)
@@ -116,8 +126,9 @@ def list(
     table.add_column("dataset_type")
     table.add_column("domain")
     table.add_column("created_at")
+    table.add_column("completed_at")
     table.add_column("status")
-    table.add_column("usage.credits_used")
+    table.add_column("wandb_url")
 
     for dataset in datasets:
         table.add_row(
@@ -126,7 +137,12 @@ def list(
             dataset.dataset_type,
             dataset.domain,
             dataset.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            (
+                dataset.completed_at.strftime("%Y-%m-%d %H:%M:%S")
+                if dataset.completed_at
+                else ""
+            ),
             dataset.status,
-            str(dataset.usage.credits_used),
+            dataset.wandb_url,
         )
     console.print(table)

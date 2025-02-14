@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List
 from vlmrun.client.types import (
     ModelInfoResponse,
-    DatasetCreateResponse,
+    DatasetResponse,
     HubInfoResponse,
     HubDomainInfo,
     HubSchemaResponse,
@@ -263,12 +263,12 @@ def mock_client(monkeypatch):
                 domain: str,
                 dataset_name: str,
                 dataset_type: str = "images",
-            ) -> DatasetCreateResponse:
+            ) -> DatasetResponse:
                 if dataset_type not in ["images", "videos", "documents"]:
                     raise ValueError(
                         "dataset_type must be one of: images, videos, documents"
                     )
-                return DatasetCreateResponse(
+                return DatasetResponse(
                     id="dataset1",
                     dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                     dataset_type=dataset_type,
@@ -284,8 +284,8 @@ def mock_client(monkeypatch):
                     ),
                 )
 
-            def get(self, dataset_id: str) -> DatasetCreateResponse:
-                return DatasetCreateResponse(
+            def get(self, dataset_id: str) -> DatasetResponse:
+                return DatasetResponse(
                     id="dataset1",
                     dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                     dataset_type="images",
@@ -301,9 +301,9 @@ def mock_client(monkeypatch):
                     ),
                 )
 
-            def list(self) -> List[DatasetCreateResponse]:
+            def list(self) -> List[DatasetResponse]:
                 return [
-                    DatasetCreateResponse(
+                    DatasetResponse(
                         id="dataset1",
                         dataset_uri="gs://vlmrun-test-bucket/dataset1.tar.gz",
                         dataset_type="images",

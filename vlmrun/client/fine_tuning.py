@@ -44,7 +44,7 @@ class Finetuning:
         learning_rate: float = 2e-4,
         suffix: Optional[str] = None,
         wandb_api_key: Optional[str] = None,
-        wandb_base_url: Optional[str] = None,
+        wandb_base_url: Optional[str] = "https://api.wandb.ai",
         wandb_project_name: Optional[str] = None,
         **kwargs,
     ) -> FinetuningResponse:

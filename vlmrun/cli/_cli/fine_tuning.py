@@ -67,7 +67,7 @@ def list(ctx: typer.Context) -> None:
             job.status,
             job.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             job.completed_at.strftime("%Y-%m-%d %H:%M:%S") if job.completed_at else "",
-            job.wandb_base_url,
+            job.wandb_url,
         )
 
     console.print(table)
