@@ -7,6 +7,41 @@ from typing import Literal, Union
 
 from PIL import Image
 
+from vlmrun.constants import SUPPORTED_VIDEO_FILETYPES
+
+
+def encode_video(path: Union[Path, str]) -> str:
+    """Convert a video file to a base64 string with data URI prefix.
+
+    Args:
+        path: Path to video file
+
+    Returns:
+        Base64 encoded string with data URI prefix
+
+    Raises:
+        FileNotFoundError: If video file doesn't exist
+        IOError: If file is not a video or too large
+    """
+    if not isinstance(path, Path):
+        path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found {path}")
+    if path.suffix.lower() not in SUPPORTED_VIDEO_FILETYPES:
+        raise IOError(f"File is not a video: {path}")
+    if path.stat().st_size > 50 * 1024 * 1024:
+        raise IOError(
+            f"File is too large, only videos up to 50MB are supported. [size={path.stat().st_size/1024/1024:.2f}MB]"
+        )
+
+    # Read the video file
+    with open(path, "rb") as f:
+        video_bytes = f.read()
+        video_b64 = b64encode(video_bytes).decode()
+        # Get video mime type from extension
+        mime_type = f"video/{path.suffix.lower()[1:]}"
+        return f"data:{mime_type};base64,{video_b64}"
+
 
 def encode_image(
     image: Union[Image.Image, str, Path],
