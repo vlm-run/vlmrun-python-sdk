@@ -27,10 +27,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
+          key: pip-py310-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
-            pip-
-          id: cache
+            pip-py310-
+        id: cache
 
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
@@ -68,7 +68,7 @@ jobs:
           key: pip-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
             pip-
-          id: cache
+        id: cache
 
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
