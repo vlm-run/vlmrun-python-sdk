@@ -35,14 +35,12 @@ jobs:
           key: pip-${{ matrix.python-version }}-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
             pip-${{ matrix.python-version }}-
-        id: cache
 
       - name: Install base dependencies
         run: |
           which python
           python -m pip install --upgrade pip
           pip install -e '.[test,all]'
-        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Quality Check
         uses: pre-commit/action@v3.0.1
