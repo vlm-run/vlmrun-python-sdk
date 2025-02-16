@@ -7,3 +7,6 @@ VLMRUN_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 VLMRUN_TMP_DIR = Path.home() / ".vlmrun" / "tmp"
 VLMRUN_TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+SUPPORTED_VIDEO_FILETYPES = [".mp4", ".mov", ".avi", ".mkv", ".webm"]
+SUPPORTED_IMAGE_FILETYPES = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"]

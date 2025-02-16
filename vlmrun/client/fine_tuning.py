@@ -17,7 +17,15 @@ from vlmrun.client.types import (
     RequestMetadata,
 )
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.common.image import encode_image
+from vlmrun.common.image import encode_image, encode_video
+
+
+def _check_file_paths(paths: List[Union[Path, str]]):
+    for path in paths:
+        if not isinstance(path, Path):
+            raise ValueError("File must be of type `Path`")
+        if not path.exists():
+            raise ValueError(f"File path does not exist: {path}")
 
 
 class Finetuning:
@@ -116,8 +124,9 @@ class Finetuning:
 
     def generate(
         self,
-        images: List[Union[Path, Image.Image]],
         model: str,
+        images: Optional[List[Union[str, Path, Image.Image]]] = None,
+        videos: Optional[List[Union[str, Path]]] = None,
         batch: bool = False,
         config: Optional[GenerationConfig] = GenerationConfig(),
         metadata: Optional[RequestMetadata] = RequestMetadata(),
@@ -126,7 +135,8 @@ class Finetuning:
         """Generate a document prediction.
 
         Args:
-            images: List of images to generate predictions from
+            images: List of images to generate predictions from (either URL, Path, or PIL Image)
+            videos: List of videos to generate predictions from (either URL or Path)
             model: Model to use for prediction
             batch: Whether to run prediction in batch mode
             config: GenerateConfig to use for prediction
@@ -137,38 +147,75 @@ class Finetuning:
             PredictionResponse: Prediction response
         """
         if not config.json_schema:
-            raise ValueError("JSON schema is required for fine-tuned model predictions")
+            raise ValueError(
+                "JSON schema is required for fine-tuned model predictions."
+            )
         if not config.prompt:
-            raise ValueError("Prompt is required for fine-tuned model predictions")
+            raise ValueError("Prompt is required for fine-tuned model predictions.")
         if batch:
             raise NotImplementedError(
-                "Batch mode is not supported for fine-tuned models"
+                "Batch mode is not supported for fine-tuned models."
             )
         if callback_url:
             raise NotImplementedError(
-                "Callback URL is not supported for fine-tuned model predictions"
+                "Callback URL is not supported for fine-tuned model predictions."
             )
-        if len(images) > 16:
+        if images and len(images) > 16:
             raise ValueError(
-                "Maximum of 16 images are supported for fine-tuned model predictions for now"
+                "Maximum of 16 images are supported for fine-tuned model predictions for now."
+            )
+        if videos and len(videos) > 1:
+            raise ValueError(
+                "Maximum of 1 video is supported for fine-tuned model predictions for now."
             )
 
         # Check if all images are of the same type
-        image_type = type(images[0])
-        if not all(isinstance(image, image_type) for image in images):
-            raise ValueError("All images must be of the same type")
-        if isinstance(images[0], Path):
-            images = [Image.open(str(image)) for image in images]
-        elif isinstance(images[0], Image.Image):
-            pass
-        else:
-            raise ValueError("Image must be a path or a PIL Image")
+        data_kwargs = {}
+        if images:
+            images_payload = None
+            image_type = type(images[0])
+            if not all(isinstance(image, image_type) for image in images):
+                raise ValueError("All images must be of the same type")
+            if isinstance(images[0], Path):
+                _check_file_paths(images)
+                images = [Image.open(str(image)) for image in images]
+                images_payload = [
+                    encode_image(image, format="JPEG") for image in images
+                ]
+            elif isinstance(images[0], Image.Image):
+                images_payload = [
+                    encode_image(image, format="JPEG") for image in images
+                ]
+            elif isinstance(images[0], str) and all(
+                image.startswith("http") for image in images
+            ):
+                images_payload = images
+            else:
+                raise ValueError("Image must be a `Path` or a `PIL Image` or a `URL`")
+            data_kwargs["images"] = images_payload
+
+        # Check if all videos are of the same type
+        if videos:
+            videos_payload = None
+            video_type = type(videos[0])
+            if not all(isinstance(video, video_type) for video in videos):
+                raise ValueError("All videos must be of the same type")
+            if isinstance(videos[0], Path):
+                _check_file_paths(videos)
+                videos_payload = [encode_video(video) for video in videos]
+            elif isinstance(videos[0], str) and all(
+                video.startswith("http") for video in videos
+            ):
+                videos_payload = videos
+            else:
+                raise ValueError("Video must be of type `Path` or `URL`")
+            data_kwargs["videos"] = videos_payload
 
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="generate",
             data={
-                "images": [encode_image(image, format="JPEG") for image in images],
+                **data_kwargs,
                 "model": model,
                 "batch": batch,
                 "config": config.model_dump(),
