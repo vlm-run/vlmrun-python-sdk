@@ -75,6 +75,7 @@ class APIRequestor:
         files: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         raw_response: bool = False,
+        timeout: Optional[float] = None,
     ) -> Union[
         Tuple[Dict[str, Any], int, Dict[str, str]], Tuple[bytes, int, Dict[str, str]]
     ]:
@@ -87,6 +88,8 @@ class APIRequestor:
             data: Request body
             files: Files to upload
             headers: Request headers
+            raw_response: Whether to return raw response content
+            timeout: Request timeout in seconds
 
         Returns:
             Tuple of (response_data, status_code, response_headers)
@@ -112,7 +115,7 @@ class APIRequestor:
                 json=data,
                 files=files,
                 headers=headers,
-                timeout=self._timeout,
+                timeout=timeout or self._timeout,
             )
 
             response.raise_for_status()

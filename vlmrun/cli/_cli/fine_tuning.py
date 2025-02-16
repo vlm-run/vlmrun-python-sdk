@@ -20,8 +20,8 @@ app = typer.Typer(
 def create(
     ctx: typer.Context,
     model: str = typer.Argument(..., help="Base model name"),
-    training_file_id: str = typer.Argument(..., help="Training file ID"),
-    validation_file_id: str = typer.Option(None, help="Validation file ID"),
+    training_file: str = typer.Argument(..., help="Training file ID or URL"),
+    validation_file: str = typer.Option(None, help="Validation file ID or URL"),
     num_epochs: int = typer.Option(1, help="Number of epochs"),
     batch_size: int = typer.Option(1, help="Batch size"),
     learning_rate: float = typer.Option(2e-4, help="Learning rate"),
@@ -35,8 +35,8 @@ def create(
     result: FinetuningResponse = client.fine_tuning.create(
         model=model,
         suffix=suffix,
-        training_file_id=training_file_id,
-        validation_file_id=validation_file_id,
+        training_file=training_file,
+        validation_file=validation_file,
         num_epochs=num_epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,

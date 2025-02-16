@@ -84,12 +84,14 @@ class Files:
         self,
         file: Union[Path, str],
         purpose: str = "assistants",
+        timeout: int = 3 * 60,
     ) -> FileResponse:
         """Upload a file.
 
         Args:
             file: Path to file to upload
             purpose: Purpose of file (default: fine-tune)
+            timeout: Timeout for upload (default: 3 minutes)
 
         Returns:
             FileResponse: Uploaded file object
@@ -110,6 +112,7 @@ class Files:
                 url="files",
                 params={"purpose": purpose},
                 files=files,
+                timeout=timeout,
             )
 
             if not isinstance(response, dict):

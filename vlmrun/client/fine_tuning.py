@@ -45,8 +45,8 @@ class Finetuning:
     def create(
         self,
         model: str,
-        training_file_id: str,
-        validation_file_id: Optional[str] = None,
+        training_file: str,
+        validation_file: Optional[str] = None,
         num_epochs: int = 1,
         batch_size: Union[int, str] = "auto",
         learning_rate: float = 2e-4,
@@ -60,8 +60,8 @@ class Finetuning:
 
         Args:
             model: Base model to fine-tune
-            training_file_id: File ID for training data
-            validation_file_id: File ID for validation data (default: None)
+            training_file: File ID or URL for training data
+            validation_file: File ID or URL for validation data (default: None)
             num_epochs: Number of epochs (default: 1)
             batch_size: Batch size for training (default: "auto")
             learning_rate: Learning rate for training (default: 2e-4)
@@ -87,8 +87,8 @@ class Finetuning:
             url="create",
             data={
                 "model": model,
-                "training_file_id": training_file_id,
-                "validation_file_id": validation_file_id,
+                "training_file": training_file,
+                "validation_file": validation_file,
                 "num_epochs": num_epochs,
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,
