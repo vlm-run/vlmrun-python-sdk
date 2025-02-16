@@ -43,9 +43,6 @@ jobs:
         continue-on-error: true
 
       - name: Run tests
-        env:
-          VLMRUN_BASE_URL: ${{ vars.VLMRUN_BASE_URL }}
-          VLMRUN_API_KEY: ${{ secrets.VLMRUN_API_KEY }}
         run: |
           make test
 
