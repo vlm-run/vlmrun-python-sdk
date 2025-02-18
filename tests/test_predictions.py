@@ -4,6 +4,7 @@ import pytest
 from pydantic import BaseModel
 from PIL import Image
 from vlmrun.client.types import PredictionResponse, GenerationConfig
+from vlmrun.common.gql import create_pydantic_model_from_gql
 
 
 class MockInvoiceSchema(BaseModel):
@@ -186,3 +187,144 @@ def test_schema_casting_across_prediction_types(mock_client, prediction_type):
         )
 
     assert isinstance(response.response, MockInvoiceSchema)
+
+
+class AddressSchema(BaseModel):
+    """Mock address schema for testing."""
+
+    street: str
+    city: str
+    state: str
+    zip: str
+
+
+class NestedInvoiceSchema(BaseModel):
+    """Mock invoice schema for testing."""
+
+    invoice_id: str
+    total_amount: float
+    period_start: str
+    period_end: str
+    address: AddressSchema
+
+
+def test_create_pydantic_model_from_gql_basic():
+    """Test basic field filtering with GQL."""
+    gql_query = """
+    {
+        invoice_id
+        total_amount
+    }
+    """
+
+    FilteredModel = create_pydantic_model_from_gql(NestedInvoiceSchema, gql_query)
+    assert set(FilteredModel.model_fields.keys()) == {"invoice_id", "total_amount"}
+
+
+def test_create_pydantic_model_from_gql_nested():
+    """Test nested field filtering with GQL."""
+    gql_query = """
+    {
+        invoice_id
+        address {
+            state
+            zip
+        }
+    }
+    """
+
+    FilteredModel = create_pydantic_model_from_gql(NestedInvoiceSchema, gql_query)
+
+    assert set(FilteredModel.model_fields.keys()) == {"invoice_id", "address"}
+
+    AddressModel = FilteredModel.model_fields["address"].annotation
+    assert set(AddressModel.model_fields.keys()) == {"state", "zip"}
+
+
+def test_create_pydantic_model_from_gql_invalid_field():
+    """Test handling of invalid field in GQL query."""
+    gql_query = """
+    {
+        invoice_id
+        nonexistent_field
+    }
+    """
+
+    with pytest.raises(
+        ValueError, match="Field 'nonexistent_field' not found in model"
+    ):
+        create_pydantic_model_from_gql(NestedInvoiceSchema, gql_query)
+
+
+def test_create_pydantic_model_from_gql_invalid_nested_field():
+    """Test handling of invalid nested field in GQL query."""
+    gql_query = """
+    {
+        invoice_id
+        address {
+            nonexistent_field
+        }
+    }
+    """
+
+    with pytest.raises(
+        ValueError, match="Field 'nonexistent_field' not found in nested model"
+    ):
+        create_pydantic_model_from_gql(NestedInvoiceSchema, gql_query)
+
+
+def test_create_pydantic_model_from_gql_malformed():
+    """Test handling of malformed GQL query."""
+    malformed_query = """
+    {
+        invoice_id
+        address {
+    """
+
+    with pytest.raises(Exception, match="Syntax Error"):
+        create_pydantic_model_from_gql(NestedInvoiceSchema, malformed_query)
+
+
+def test_create_pydantic_model_from_gql_nested_scalar():
+    """Test handling of attempting to query nested fields of a scalar."""
+    gql_query = """
+    {
+        invoice_id {
+            nested_field
+        }
+    }
+    """
+
+    with pytest.raises(ValueError, match="Cannot query nested fields of scalar type"):
+        create_pydantic_model_from_gql(NestedInvoiceSchema, gql_query)
+
+
+def test_create_pydantic_model_from_gql_all_fields():
+    """Test requesting all fields."""
+    gql_query = """
+    {
+        invoice_id
+        total_amount
+        period_start
+        period_end
+        address {
+            street
+            city
+            state
+            zip
+        }
+    }
+    """
+
+    FilteredModel = create_pydantic_model_from_gql(NestedInvoiceSchema, gql_query)
+
+    assert set(FilteredModel.model_fields.keys()) == {
+        "invoice_id",
+        "total_amount",
+        "period_start",
+        "period_end",
+        "address",
+    }
+
+    AddressModel = FilteredModel.model_fields["address"].annotation
+    assert set(AddressModel.model_fields.keys()) == {"street", "city", "state", "zip"}

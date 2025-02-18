@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any, Type
 from PIL import Image
 from loguru import logger
 
 import time
 from tqdm import tqdm
 from vlmrun.common.image import encode_image
+from vlmrun.common.gql import create_pydantic_model_from_gql
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
@@ -18,10 +19,60 @@ from vlmrun.client.types import (
     RequestMetadata,
 )
 from vlmrun.hub.utils import jsonschema_to_model
+from pydantic import BaseModel
 
 
-class SchemaCastMixin:
-    """Mixin class to handle schema casting for predictions."""
+class SchemaHandlerMixin:
+    """Mixin class to handle schema operations for predictions.
+
+    Handles:
+    - Schema casting for responses
+    - GQL query processing
+    - Request kwargs preparation with schema support
+    """
+
+    def _prepare_gql_schema(
+        self,
+        domain: str,
+        config: GenerationConfig,
+    ) -> Dict[str, Any]:
+        """Prepare schema for GQL query."""
+        try:
+            base_model: Type[BaseModel]
+
+            if config.response_model:
+                base_model = config.response_model
+            elif config.json_schema:
+                base_model = jsonschema_to_model(config.json_schema)
+            else:
+                base_model = self._client.hub.get_pydantic_model(domain)
+
+            return create_pydantic_model_from_gql(
+                base_model=base_model, gql_query=config.gql
+            ).model_json_schema()
+        except Exception as e:
+            logger.error(f"Failed to process schema with GQL: {e}")
+            raise
+
+    def _prepare_request_kwargs(
+        self,
+        domain: str,
+        metadata: Optional[RequestMetadata] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> Dict[str, Any]:
+        additional_kwargs = {}
+
+        if config:
+            if config.gql:
+                filtered_schema = self._prepare_gql_schema(domain, config)
+                config.json_schema = filtered_schema
+
+            additional_kwargs["config"] = config.model_dump()
+
+        if metadata:
+            additional_kwargs["metadata"] = metadata.model_dump()
+
+        return additional_kwargs
 
     def _cast_response_to_schema(
         self,
@@ -111,7 +162,7 @@ class Predictions:
         raise TimeoutError(f"Prediction {id} did not complete within {timeout} seconds")
 
 
-class ImagePredictions(SchemaCastMixin, Predictions):
+class ImagePredictions(SchemaHandlerMixin, Predictions):
     """Image prediction resource for VLM Run API."""
 
     def generate(
@@ -169,11 +220,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
                 raise ValueError("All URLs must be strings")
             images_data = urls
 
-        additional_kwargs = {}
-        if config:
-            additional_kwargs["config"] = config.model_dump()
-        if metadata:
-            additional_kwargs["metadata"] = metadata.model_dump()
+        additional_kwargs = self._prepare_request_kwargs(domain, metadata, config)
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="image/generate",
@@ -196,7 +243,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
 def FilePredictions(route: str):
     """File prediction resource for VLM Run API."""
 
-    class _FilePredictions(SchemaCastMixin, Predictions):
+    class _FilePredictions(SchemaHandlerMixin, Predictions):
         """File prediction resource for VLM Run API."""
 
         def generate(
@@ -256,11 +303,7 @@ def FilePredictions(route: str):
                     "File or URL must be a pathlib.Path, str, or AnyHttpUrl"
                 )
 
-            additional_kwargs = {}
-            if config:
-                additional_kwargs["config"] = config.model_dump()
-            if metadata:
-                additional_kwargs["metadata"] = metadata.model_dump()
+            additional_kwargs = self._prepare_request_kwargs(domain, metadata, config)
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url=f"{route}/generate",

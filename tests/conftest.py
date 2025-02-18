@@ -16,7 +16,7 @@ from vlmrun.client.types import (
     FeedbackSubmitResponse,
     CreditUsage,
 )
-from vlmrun.client.predictions import SchemaCastMixin
+from vlmrun.client.predictions import SchemaHandlerMixin
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def mock_client(monkeypatch):
     """Mock the VLMRun class."""
 
     class MockVLMRun:
-        class AudioPredictions(SchemaCastMixin):
+        class AudioPredictions(SchemaHandlerMixin):
             def __init__(self, client):
                 self._client = client
 
@@ -221,7 +221,7 @@ def mock_client(monkeypatch):
                 schemas = {"document.invoice": MockInvoiceSchema, "general": None}
                 return schemas.get(domain)
 
-        class ImagePredictions(SchemaCastMixin):
+        class ImagePredictions(SchemaHandlerMixin):
             def __init__(self, client):
                 self._client = client
 
@@ -243,7 +243,7 @@ def mock_client(monkeypatch):
                 self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
                 return prediction
 
-        class VideoPredictions(SchemaCastMixin):
+        class VideoPredictions(SchemaHandlerMixin):
             def __init__(self, client):
                 self._client = client
 
@@ -259,7 +259,7 @@ def mock_client(monkeypatch):
                 self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
                 return prediction
 
-        class DocumentPredictions(SchemaCastMixin):
+        class DocumentPredictions(SchemaHandlerMixin):
             def __init__(self, client):
                 self._client = client
 

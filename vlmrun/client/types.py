@@ -127,6 +127,10 @@ class GenerationConfig(BaseModel):
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
 
+    gql: Optional[str] = Field(
+        default=None, description="GraphQL query to filter response fields"
+    )
+
 
 class RequestMetadata(BaseModel):
     environment: Literal["dev", "staging", "prod"] = Field(default="dev")
