@@ -49,9 +49,20 @@ class PredictionResponse(BaseModel):
     usage: CreditUsage
 
 
-class ModelInfoResponse(BaseModel):
+class ModelInfo(BaseModel):
     model: str
     domain: str
+
+
+class DomainInfo(BaseModel):
+    domain: str
+
+
+class SchemaResponse(BaseModel):
+    domain: str
+    schema_version: str
+    schema_hash: str
+    gql_schema: str
 
 
 class HubInfoResponse(BaseModel):
@@ -62,10 +73,8 @@ class HubDomainInfo(BaseModel):
     domain: str
 
 
-class HubSchemaResponse(BaseModel):
+class HubSchemaResponse(SchemaResponse):
     json_schema: Dict[str, Any]
-    schema_version: str
-    schema_hash: str
 
 
 class DatasetResponse(BaseModel):

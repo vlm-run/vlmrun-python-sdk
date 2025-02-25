@@ -6,7 +6,7 @@ from typing import List
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.client.types import ModelInfoResponse
+from vlmrun.client.types import ModelInfo
 
 
 class Models:
@@ -21,7 +21,7 @@ class Models:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def list(self) -> List[ModelInfoResponse]:
+    def list(self) -> List[ModelInfo]:
         """List available models.
 
         Returns:
@@ -34,4 +34,4 @@ class Models:
 
         if not isinstance(response, list):
             raise TypeError("Expected list response")
-        return [ModelInfoResponse(**model) for model in response]
+        return [ModelInfo(**model) for model in response]

@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from datetime import datetime
 from typing import List
 from vlmrun.client.types import (
-    ModelInfoResponse,
+    ModelInfo,
     DatasetResponse,
     HubInfoResponse,
     HubSchemaResponse,
@@ -180,7 +180,7 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def list(self):
-                return [ModelInfoResponse(model="model1", domain="test-domain")]
+                return [ModelInfo(model="model1", domain="test-domain")]
 
         class Hub:
             def __init__(self, client):
@@ -199,6 +199,7 @@ def mock_client(monkeypatch):
 
             def get_schema(self, domain):
                 return HubSchemaResponse(
+                    domain=domain,
                     json_schema={
                         "type": "object",
                         "properties": {
@@ -206,6 +207,12 @@ def mock_client(monkeypatch):
                             "total_amount": {"type": "number"},
                         },
                     },
+                    gql_schema="""
+                    {
+                        invoice_number
+                        total_amount
+                    }
+                    """,
                     schema_version="1.0.0",
                     schema_hash="abcd1234",
                 )
