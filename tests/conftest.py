@@ -207,7 +207,7 @@ def mock_client(monkeypatch):
                             "total_amount": {"type": "number"},
                         },
                     },
-                    gql_schema="""
+                    gql_stmt="""
                     {
                         invoice_number
                         total_amount

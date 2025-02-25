@@ -9,10 +9,25 @@ from vlmrun.client.types import (
     HubInfoResponse,
     HubDomainInfo,
 )
-from vlmrun.hub.registry import registry
+import cachetools
+from cachetools.keys import hashkey
+
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
+
+
+@cachetools.cached(
+    cache=cachetools.TTLCache(maxsize=100, ttl=3600),
+    key=lambda _client, domain: hashkey(domain),  # noqa: B007
+)
+def get_response_model(client, domain: str) -> Type[BaseModel]:
+    """Get the schema type for a hub domain.
+
+    Note: This function is cached to avoid re-fetching the schema from the API.
+    """
+    schema_response: HubSchemaResponse = client.hub.get_schema(domain)
+    return schema_response.response_model
 
 
 class Hub:
@@ -133,6 +148,6 @@ class Hub:
             APIError: If the domain is not found
         """
         try:
-            return registry[domain]
+            return get_response_model(self._client, domain)
         except KeyError:
             raise APIError(f"Domain not found: {domain}")

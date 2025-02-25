@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 import os
 from functools import cached_property
-from typing import Optional, List
+from typing import Optional, List, Type
+from pydantic import BaseModel
 
 from vlmrun.version import __version__
 from vlmrun.client.base_requestor import APIRequestor
@@ -114,6 +115,10 @@ class VLMRun:
             method="GET", url="/health", raw_response=True
         )
         return status_code == 200
+
+    def get_type(self, domain: str, gql_stmt: str | None = None) -> Type[BaseModel]:
+        """Get the type for a domain."""
+        return self.get_schema(domain, gql_stmt).response_model
 
     def get_schema(self, domain: str, gql_stmt: str | None = None) -> SchemaResponse:
         """Get the schema for a domain.

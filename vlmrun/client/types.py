@@ -7,6 +7,7 @@ from pydantic.dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Literal, Optional, Type
 from vlmrun.hub.utils import jsonschema_to_model
+
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
 
@@ -78,8 +79,7 @@ class HubDomainInfo(BaseModel):
     domain: str
 
 
-class HubSchemaResponse(SchemaResponse):
-    ...
+class HubSchemaResponse(SchemaResponse): ...
 
 
 class DatasetResponse(BaseModel):
