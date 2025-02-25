@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from pydantic.dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Literal, Optional, Type
-
+from vlmrun.hub.utils import jsonschema_to_model
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
 
@@ -62,7 +62,12 @@ class SchemaResponse(BaseModel):
     domain: str
     schema_version: str
     schema_hash: str
-    gql_schema: str
+    gql_stmt: str
+    json_schema: Dict[str, Any]
+
+    @property
+    def response_model(self) -> Type[BaseModel]:
+        return jsonschema_to_model(self.json_schema)
 
 
 class HubInfoResponse(BaseModel):
@@ -74,7 +79,7 @@ class HubDomainInfo(BaseModel):
 
 
 class HubSchemaResponse(SchemaResponse):
-    json_schema: Dict[str, Any]
+    ...
 
 
 class DatasetResponse(BaseModel):
@@ -128,6 +133,7 @@ class GenerationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None)
     response_model: Optional[Type[BaseModel]] = Field(default=None)
     json_schema: Optional[Dict[str, Any]] = Field(default=None)
+    gql_stmt: Optional[str] = Field(default=None)
     max_retries: int = Field(default=3)
     max_tokens: int = Field(default=4096)
     temperature: float = Field(default=0.0)

@@ -81,11 +81,12 @@ class Hub:
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 
-    def get_schema(self, domain: str) -> HubSchemaResponse:
+    def get_schema(self, domain: str, gql_stmt: str | None = None) -> HubSchemaResponse:
         """Get the JSON schema for a given domain.
 
         Args:
             domain: Domain identifier (e.g. "document.invoice")
+            gql_stmt: GraphQL statement for the domain
 
         Returns:
             HubSchemaQueryResponse containing:
@@ -110,7 +111,7 @@ class Hub:
             response, _, _ = self._client.requestor.request(
                 method="POST",
                 url="/hub/schema",
-                data={"domain": domain},
+                data={"domain": domain, "gql_stmt": gql_stmt},
                 raw_response=False,
             )
             if not isinstance(response, dict):

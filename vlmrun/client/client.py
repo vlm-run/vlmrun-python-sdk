@@ -115,19 +115,20 @@ class VLMRun:
         )
         return status_code == 200
 
-    def get_schema(self, domain: str) -> SchemaResponse:
+    def get_schema(self, domain: str, gql_stmt: str | None = None) -> SchemaResponse:
         """Get the schema for a domain.
 
         Args:
             domain: Domain name (e.g. "document.invoice")
+            gql_stmt: GraphQL statement to use for the schema
 
         Returns:
             Schema response containing GraphQL schema and metadata
         """
-        response, status_code, headers = self._requestor.request(
+        response, status_code, headers = self.requestor.request(
             method="POST",
             url="/schema",
-            data={"domain": domain},
+            data={"domain": domain, "gql_stmt": gql_stmt},
         )
         return SchemaResponse(**response)
 
@@ -137,8 +138,8 @@ class VLMRun:
         Returns:
             List of domain names
         """
-        response, status_code, headers = self._requestor.request(
+        response, status_code, headers = self.requestor.request(
             method="GET",
             url="/domains",
         )
-        return [DomainInfo(**domain) for domain in response["domains"]]
+        return [DomainInfo(**domain) for domain in response]
