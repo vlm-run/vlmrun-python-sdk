@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel
 from PIL import Image
-from vlmrun.client.types import PredictionResponse, GenerationConfig
+from vlmrun.client.types import PredictionResponse, GenerationConfig, SchemaResponse
 
 
 class MockInvoiceSchema(BaseModel):
@@ -141,16 +141,21 @@ def test_audio_generate(mock_client, tmp_path):
 def test_schema_casting_with_domain(mock_client):
     """Test response casting using domain schema."""
 
-    def mock_get_schema(domain):
-        return MockInvoiceSchema
+    def mock_get_schema(*args, **kwargs):
+        return SchemaResponse(
+            domain="document.invoice",
+            schema_version="1.0.0",
+            schema_hash="1234567890",
+            gql_stmt="",
+            json_schema=MockInvoiceSchema.model_json_schema(),
+        )
 
-    mock_client.hub.get_pydantic_model = mock_get_schema
+    mock_client.get_schema = mock_get_schema
 
     response = mock_client.image.generate(
         domain="document.invoice", urls=["https://example.com/test.jpg"]
     )
-
-    assert isinstance(response.response, MockInvoiceSchema)
+    assert isinstance(response.response, BaseModel)
 
 
 def test_schema_casting_with_custom_schema(mock_client):
@@ -170,9 +175,15 @@ def test_schema_casting_across_prediction_types(mock_client, prediction_type):
     """Test schema casting works consistently across different prediction types."""
 
     def mock_get_schema(domain):
-        return MockInvoiceSchema
+        return SchemaResponse(
+            domain="document.invoice",
+            schema_version="1.0.0",
+            schema_hash="1234567890",
+            gql_stmt="",
+            json_schema=MockInvoiceSchema.model_json_schema(),
+        )
 
-    mock_client.hub.get_pydantic_model = mock_get_schema
+    mock_client.get_schema = mock_get_schema
 
     pred_client = getattr(mock_client, prediction_type)
 
@@ -185,4 +196,4 @@ def test_schema_casting_across_prediction_types(mock_client, prediction_type):
             domain="document.invoice", url="https://example.com/test.file"
         )
 
-    assert isinstance(response.response, MockInvoiceSchema)
+    assert isinstance(response.response, BaseModel)

@@ -7,7 +7,7 @@ from rich.table import Table
 from rich.console import Console
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import ModelInfoResponse
+from vlmrun.client.types import ModelInfo
 
 app = typer.Typer(
     help="Model operations",
@@ -25,7 +25,7 @@ def list(
 ) -> None:
     """List available models."""
     client: VLMRun = ctx.obj
-    models: List[ModelInfoResponse] = client.models.list()
+    models: List[ModelInfo] = client.models.list()
 
     if domain:
         models = [m for m in models if domain in m.domain]

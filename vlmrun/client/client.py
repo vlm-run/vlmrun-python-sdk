@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 import os
 from functools import cached_property
-from typing import Optional
+from typing import Optional, List, Type, Union
+from pydantic import BaseModel
 
 from vlmrun.version import __version__
 from vlmrun.client.base_requestor import APIRequestor
@@ -21,6 +22,7 @@ from vlmrun.client.predictions import (
 )
 from vlmrun.client.feedback import Feedback
 from vlmrun.constants import DEFAULT_BASE_URL
+from vlmrun.client.types import SchemaResponse, DomainInfo
 
 
 @dataclass
@@ -113,3 +115,36 @@ class VLMRun:
             method="GET", url="/health", raw_response=True
         )
         return status_code == 200
+
+    def get_type(self, domain: str, gql_stmt: Optional[str] = None) -> Type[BaseModel]:
+        """Get the type for a domain."""
+        return self.get_schema(domain, gql_stmt).response_model
+
+    def get_schema(self, domain: str, gql_stmt: Optional[str] = None) -> SchemaResponse:
+        """Get the schema for a domain.
+
+        Args:
+            domain: Domain name (e.g. "document.invoice")
+            gql_stmt: GraphQL statement to use for the schema
+
+        Returns:
+            Schema response containing GraphQL schema and metadata
+        """
+        response, status_code, headers = self.requestor.request(
+            method="POST",
+            url="/schema",
+            data={"domain": domain, "gql_stmt": gql_stmt},
+        )
+        return SchemaResponse(**response)
+
+    def list_domains(self) -> List[DomainInfo]:
+        """List all available domains.
+
+        Returns:
+            List of domain names
+        """
+        response, status_code, headers = self.requestor.request(
+            method="GET",
+            url="/domains",
+        )
+        return [DomainInfo(**domain) for domain in response]

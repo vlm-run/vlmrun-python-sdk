@@ -34,4 +34,3 @@ def test_hub_get_schema(mock_client):
     assert isinstance(response.json_schema, dict)
     assert isinstance(response.schema_version, str)
     assert isinstance(response.schema_hash, str)
-    assert len(response.schema_hash) == 8

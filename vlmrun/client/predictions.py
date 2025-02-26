@@ -16,8 +16,37 @@ from vlmrun.client.types import (
     FileResponse,
     GenerationConfig,
     RequestMetadata,
+    SchemaResponse,
 )
 from vlmrun.hub.utils import jsonschema_to_model
+from typing import Type
+from pydantic import BaseModel
+import cachetools
+from cachetools.keys import hashkey
+
+
+@cachetools.cached(
+    cache=cachetools.TTLCache(maxsize=100, ttl=3600),
+    key=lambda _client, domain, config: hashkey(domain, str(config)),  # noqa: B007
+)
+def get_response_model(
+    client, domain: str, config: Optional[GenerationConfig] = None
+) -> Type[BaseModel]:
+    """Get the schema type for a domain and a generation config.
+
+    Note: This function is cached to avoid re-fetching the schema from the API.
+    """
+    if config:
+        if config.json_schema:
+            return jsonschema_to_model(config.json_schema)
+        elif config.gql_stmt:
+            schema_response: SchemaResponse = client.get_schema(
+                domain, gql_stmt=config.gql_stmt
+            )
+            return schema_response.response_model
+    else:
+        schema_response: SchemaResponse = client.get_schema(domain)
+        return schema_response.response_model
 
 
 class SchemaCastMixin:
@@ -38,15 +67,14 @@ class SchemaCastMixin:
         """
         if prediction.status == "completed" and prediction.response:
             try:
-                if config and hasattr(config, "json_schema"):
-                    schema = jsonschema_to_model(config.json_schema)
-                else:
-                    schema = self._client.hub.get_pydantic_model(domain)
+                response_model: Type[BaseModel] = get_response_model(
+                    self._client, domain, config
+                )
 
-                if schema:
-                    prediction.response = schema(**prediction.response)
+                if response_model:
+                    prediction.response = response_model(**prediction.response)
             except Exception as e:
-                logger.debug(f"Failed to cast response to schema: {e}")
+                logger.warning(f"Failed to cast response to schema: {e}")
 
 
 class Predictions:
