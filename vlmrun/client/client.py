@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import os
 from functools import cached_property
-from typing import Optional, List, Type
+from typing import Optional, List, Type, Union
 from pydantic import BaseModel
 
 from vlmrun.version import __version__
@@ -116,11 +116,11 @@ class VLMRun:
         )
         return status_code == 200
 
-    def get_type(self, domain: str, gql_stmt: str | None = None) -> Type[BaseModel]:
+    def get_type(self, domain: str, gql_stmt: Optional[str] = None) -> Type[BaseModel]:
         """Get the type for a domain."""
         return self.get_schema(domain, gql_stmt).response_model
 
-    def get_schema(self, domain: str, gql_stmt: str | None = None) -> SchemaResponse:
+    def get_schema(self, domain: str, gql_stmt: Optional[str] = None) -> SchemaResponse:
         """Get the schema for a domain.
 
         Args:
