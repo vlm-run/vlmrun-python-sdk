@@ -61,6 +61,7 @@ class DomainInfo(BaseModel):
 
 class SchemaResponse(BaseModel):
     domain: str
+    description: Optional[str] = None
     schema_version: str
     schema_hash: str
     gql_stmt: str
