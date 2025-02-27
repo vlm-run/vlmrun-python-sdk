@@ -147,6 +147,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         domain: str,
         images: Optional[List[Union[Path, Image.Image]]] = None,
         urls: Optional[List[str]] = None,
+        model: str = "vlm-1",
         batch: bool = False,
         metadata: Optional[RequestMetadata] = None,
         config: Optional[GenerationConfig] = None,
@@ -155,6 +156,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         """Generate a document prediction.
 
         Args:
+            model: Model to use for prediction
             images: List of images to generate predictions from. Either images or urls must be provided.
             urls: List of image URLs to generate predictions from. Either images or urls must be provided.
             domain: Domain to use for prediction
@@ -206,6 +208,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             method="POST",
             url="image/generate",
             data={
+                "model": model,
                 "images": images_data,
                 "domain": domain,
                 "batch": batch,
@@ -231,6 +234,7 @@ def FilePredictions(route: str):
             self,
             file: Optional[Union[Path, str]] = None,
             url: Optional[str] = None,
+            model: str = "vlm-1",
             domain: Optional[str] = None,
             batch: bool = False,
             config: Optional[GenerationConfig] = GenerationConfig(),
@@ -240,6 +244,7 @@ def FilePredictions(route: str):
             """Generate a document prediction.
 
             Args:
+                model: Model to use for prediction
                 file: File (pathlib.Path) or file_id to generate prediction from
                 url: URL to generate prediction from
                 domain: Domain to use for prediction
@@ -293,6 +298,7 @@ def FilePredictions(route: str):
                 method="POST",
                 url=f"{route}/generate",
                 data={
+                    "model": model,
                     "url" if is_url else "file_id": file_or_url,
                     "domain": domain,
                     "batch": batch,
