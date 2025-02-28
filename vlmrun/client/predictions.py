@@ -156,13 +156,13 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         """Generate a document prediction.
 
         Args:
-            model: Model to use for prediction
-            images: List of images to generate predictions from. Either images or urls must be provided.
-            urls: List of image URLs to generate predictions from. Either images or urls must be provided.
             domain: Domain to use for prediction
+            images: List of file paths (Path) or PIL Image objects to process. Either images or urls must be provided.
+            urls: List of HTTP URLs pointing to images. Either images or urls must be provided.
+            model: Model to use for prediction
             batch: Whether to run prediction in batch mode
-            config: GenerateConfig to use for prediction
             metadata: Metadata to include in prediction
+            config: GenerateConfig to use for prediction
             callback_url: URL to call when prediction is complete
 
         Returns:
@@ -197,6 +197,8 @@ class ImagePredictions(SchemaCastMixin, Predictions):
                 raise ValueError("URLs must be strings")
             if not all(isinstance(url, str) for url in urls):
                 raise ValueError("All URLs must be strings")
+            if not all(url.startswith("http") for url in urls):
+                raise ValueError("URLs must start with 'http'")
             images_data = urls
 
         additional_kwargs = {}
