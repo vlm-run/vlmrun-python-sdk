@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install uv
-          uv pip install -e '.[test,all]'
+          uv pip install --system -e '.[test,all]'
 
       - name: Quality Check
         uses: pre-commit/action@v3.0.1
@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install uv
-          uv pip install -e '.[test,build,all]'
+          uv pip install --system -e '.[test,build,all]'
 
       - name: Bump version
         if: success()
