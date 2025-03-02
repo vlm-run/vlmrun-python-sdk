@@ -31,16 +31,18 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: pip-${{ matrix.python-version }}-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
+          path: |
+            ~/.cache/uv
+            ~/.cache/pip
+          key: uv-${{ matrix.python-version }}-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
-            pip-${{ matrix.python-version }}-
+            uv-${{ matrix.python-version }}-
 
       - name: Install base dependencies
         run: |
           which python
-          python -m pip install --upgrade pip
-          pip install -e '.[test,all]'
+          pip install uv
+          uv pip install -e '.[test,all]'
 
       - name: Quality Check
         uses: pre-commit/action@v3.0.1
@@ -49,6 +51,6 @@ jobs:
       - name: Run all tests
         run: |
           # Install all extras and run complete test suite
-          pip install -e '.[all]'
+          uv pip install -e '.[all]'
           pytest tests/common/test_dependencies.py -v
           make test
