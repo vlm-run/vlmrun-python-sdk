@@ -1,5 +1,8 @@
 cachetools
+IPython
 loguru
+opencv-python>=4.8.0
+pandas
 Pillow>=11.0.0
 pydantic>=2.5,<3
 pydantic_core>=2.23.4
