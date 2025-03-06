@@ -34,14 +34,12 @@ test = ["pytest"]
 build = ["twine", "build"]
 video = [
     "numpy>=1.24.0",
-    "opencv-python>=4.8.0",
 ]
 doc = [
     "pypdfium2>=4.30.0"
 ]
 all = [
     "numpy>=1.24.0",
-    "opencv-python>=4.8.0",
     "pypdfium2>=4.30.0",
 ]
 
