@@ -13,6 +13,8 @@ from vlmrun.common.viz import (
     format_json_html,
     show_results,
 )
+from typing import List, Dict
+from pydantic import BaseModel
 
 
 @pytest.fixture
@@ -26,17 +28,35 @@ def sample_image():
 def sample_response():
     """Create a sample response with various bounding box formats."""
     return {
-        "bounding_boxes": [
-            {"bbox": [0.1, 0.2, 0.3, 0.4]},
-            {"bbox": {"xywh": [0.1, 0.2, 0.2, 0.2]}},
-        ],
-        "boxes": [
-            {"bbox": [0.5, 0.5, 0.7, 0.8]},
-        ],
-        "object_metadata": {
-            "bbox": [0.2, 0.3, 0.4, 0.5],
-            "bbox_content": "Object",
-            "confidence": 0.95,
+        "issuing_state": "AL",
+        "license_number": "1234567",
+        "full_name": "Connor Sample",
+        "address": {
+            "street": "10 Wonderful Drive",
+            "city": "Montgomery",
+            "state": "AL",
+            "zip_code": "36110",
+            "street_metadata": {
+                "bbox": {"xywh": [0.349, 0.588, 0.406, 0.046]},
+                "bbox_content": "10 WONDERFUL DRIVE",
+                "confidence": 0.9,
+            },
+            "city_metadata": {
+                "bbox": {"xywh": [0.347, 0.640, 0.187, 0.041]},
+                "bbox_content": "MONTGOMERY",
+                "confidence": 1.0,
+            },
+        },
+        "date_of_birth": "1948-01-05",
+        "date_of_birth_metadata": {
+            "bbox": {"xywh": [0.349, 0.431, 0.135, 0.049]},
+            "bbox_content": "01-05-1948",
+            "confidence": 1.0,
+        },
+        "full_name_metadata": {
+            "bbox": {"xywh": [0.398, 0.783, 0.455, 0.172]},
+            "bbox_content": "Connor Sample",
+            "confidence": 1.0,
         },
     }
 
@@ -100,22 +120,35 @@ def test_extract_bbox():
 def test_get_boxes_from_response(sample_response):
     """Test extraction of bounding boxes from response."""
     boxes = get_boxes_from_response(sample_response)
-    assert len(boxes) == 4
+    assert len(boxes) == 4  # street, city, dob, full_name metadata
 
-    expected = (0.1, 0.2, 0.3, 0.4)
-    assert all(pytest.approx(a) == b for a, b in zip(boxes[0]["bbox"], expected))
+    # Check street metadata extraction
+    street_box = next(box for box in boxes if box.get("field") == "address.street")
+    expected = (0.349, 0.588, 0.755, 0.634)  # xywh converted to xyxy
+    assert all(pytest.approx(a) == b for a, b in zip(street_box["bbox"], expected))
+    assert street_box["content"] == "10 WONDERFUL DRIVE"
+    assert pytest.approx(street_box["confidence"]) == 0.9
 
-    expected = (0.1, 0.2, 0.3, 0.4)
-    assert all(pytest.approx(a) == b for a, b in zip(boxes[1]["bbox"], expected))
+    # Check city metadata extraction
+    city_box = next(box for box in boxes if box.get("field") == "address.city")
+    expected = (0.347, 0.640, 0.534, 0.681)  # xywh converted to xyxy
+    assert all(pytest.approx(a) == b for a, b in zip(city_box["bbox"], expected))
+    assert city_box["content"] == "MONTGOMERY"
+    assert pytest.approx(city_box["confidence"]) == 1.0
 
-    expected = (0.5, 0.5, 0.7, 0.8)
-    assert all(pytest.approx(a) == b for a, b in zip(boxes[2]["bbox"], expected))
+    # Check date of birth metadata extraction
+    dob_box = next(box for box in boxes if box.get("field") == "date_of_birth")
+    expected = (0.349, 0.431, 0.484, 0.480)  # xywh converted to xyxy
+    assert all(pytest.approx(a) == b for a, b in zip(dob_box["bbox"], expected))
+    assert dob_box["content"] == "01-05-1948"
+    assert pytest.approx(dob_box["confidence"]) == 1.0
 
-    expected = (0.2, 0.3, 0.4, 0.5)
-    assert all(pytest.approx(a) == b for a, b in zip(boxes[3]["bbox"], expected))
-    assert boxes[3]["field"] == "object"
-    assert boxes[3]["content"] == "Object"
-    assert pytest.approx(boxes[3]["confidence"]) == 0.95
+    # Check full name metadata extraction
+    name_box = next(box for box in boxes if box.get("field") == "full_name")
+    expected = (0.398, 0.783, 0.853, 0.955)  # xywh converted to xyxy
+    assert all(pytest.approx(a) == b for a, b in zip(name_box["bbox"], expected))
+    assert name_box["content"] == "Connor Sample"
+    assert pytest.approx(name_box["confidence"]) == 1.0
 
 
 def test_ensure_image(sample_image, tmp_path):
@@ -146,6 +179,39 @@ def test_render_bbox_image(sample_image, sample_response):
 
     result = render_bbox_image(
         sample_image, sample_response, show_content=True, show_confidence=True
+    )
+    assert isinstance(result, Image.Image)
+
+    # Test with Pydantic model
+    class AddressMetadata(BaseModel):
+        bbox: Dict[str, List[float]]
+        bbox_content: str
+        confidence: float
+
+    class Address(BaseModel):
+        street: str
+        city: str
+        state: str
+        zip_code: str
+        street_metadata: AddressMetadata
+        city_metadata: AddressMetadata
+
+    class ResponseModel(BaseModel):
+        issuing_state: str
+        license_number: str
+        full_name: str
+        address: Address
+        date_of_birth: str
+        date_of_birth_metadata: AddressMetadata
+        full_name_metadata: AddressMetadata
+
+    model_response = ResponseModel(**sample_response)
+    result = render_bbox_image(sample_image, model_response)
+    assert isinstance(result, Image.Image)
+
+    # Test with content and confidence for nested fields
+    result = render_bbox_image(
+        sample_image, model_response, show_content=True, show_confidence=True
     )
     assert isinstance(result, Image.Image)
 

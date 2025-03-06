@@ -10,7 +10,7 @@ import io
 import base64
 from pathlib import Path
 
-DEFAULT_BOX_COLOR = (0, 255, 0)
+DEFAULT_BOX_COLOR = (255, 0, 0)
 DEFAULT_BOX_THICKNESS = 2
 DEFAULT_IMAGE_FORMAT = "PNG"
 VALID_RENDER_TYPES = ["default", "bboxes"]
@@ -111,6 +111,7 @@ def get_boxes_from_response(response: Union[Dict, Any]) -> List[Dict[str, Boundi
     - Direct bounding_boxes/boxes list
     - Metadata fields containing bounding boxes
     - Both xyxy and xywh formats
+    - Nested metadata fields (e.g. in address object)
 
     Args:
         response: Raw response dictionary or object with response attribute
@@ -126,6 +127,29 @@ def get_boxes_from_response(response: Union[Dict, Any]) -> List[Dict[str, Boundi
 
     boxes = []
 
+    def process_metadata(metadata: Dict, field_name: str) -> None:
+        if isinstance(metadata, dict):
+            bbox = extract_bbox(metadata)
+            if bbox:
+                boxes.append(
+                    {
+                        "bbox": bbox,
+                        "field": field_name,
+                        "content": metadata.get("bbox_content"),
+                        "confidence": metadata.get("confidence"),
+                    }
+                )
+
+    def process_dict(d: Dict, prefix: str = "") -> None:
+        for key, value in d.items():
+            if key.endswith("_metadata"):
+                field = key.replace("_metadata", "")
+                field = field if not prefix else f"{prefix}.{field}"
+                process_metadata(value, field)
+            elif isinstance(value, dict):
+                process_dict(value, key)
+
+    # Handle direct bounding boxes
     for key in ["bounding_boxes", "boxes"]:
         if key in response and isinstance(response[key], list):
             for box in response[key]:
@@ -138,20 +162,8 @@ def get_boxes_from_response(response: Union[Dict, Any]) -> List[Dict[str, Boundi
         if bbox:
             boxes.append({"bbox": bbox})
 
-    metadata_fields = [k for k in response.keys() if k.endswith("_metadata")]
-    for field in metadata_fields:
-        metadata = response[field]
-        if isinstance(metadata, dict):
-            bbox = extract_bbox(metadata)
-            if bbox:
-                boxes.append(
-                    {
-                        "bbox": bbox,
-                        "field": field.replace("_metadata", ""),
-                        "content": metadata.get("bbox_content"),
-                        "confidence": metadata.get("confidence"),
-                    }
-                )
+    # Process all metadata fields, including nested ones
+    process_dict(response)
 
     return boxes
 
@@ -180,9 +192,23 @@ def ensure_image(image: ImageType) -> Image.Image:
     raise ValueError("Image must be a path string, Path object, or PIL Image")
 
 
+def to_dict(obj: Union[Dict, BaseModel]) -> Dict:
+    """Convert object to dictionary.
+
+    Args:
+        obj: Dictionary or Pydantic model
+
+    Returns:
+        Dictionary representation
+    """
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    return obj
+
+
 def render_bbox_image(
     image: ImageType,
-    response: Union[Dict, Any],
+    response: Union[Dict, BaseModel, Any],
     width: Optional[int] = None,
     return_base64: bool = False,
     box_color: Tuple[int, int, int] = DEFAULT_BOX_COLOR,
@@ -194,7 +220,7 @@ def render_bbox_image(
 
     Args:
         image: Input image (path or PIL Image)
-        response: VLM Run response (can be raw dict or response object)
+        response: VLM Run response (can be raw dict, Pydantic model, or response object)
         width: Optional width to resize image
         return_base64: If True, returns HTML img tag with base64 data
         box_color: BGR color tuple for bounding boxes
@@ -209,7 +235,8 @@ def render_bbox_image(
         ValueError: If image is invalid or bounding box coordinates are invalid
     """
     image = ensure_image(image)
-    boxes = get_boxes_from_response(response)
+    response_dict = to_dict(response)
+    boxes = get_boxes_from_response(response_dict)
 
     # Convert PIL to cv2 image
     img = np.array(image)
