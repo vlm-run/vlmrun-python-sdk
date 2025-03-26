@@ -21,6 +21,7 @@ from vlmrun.client.predictions import (
     AudioPredictions,
 )
 from vlmrun.client.feedback import Feedback
+from vlmrun.client.agents import Agents
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo
 
@@ -83,6 +84,7 @@ class VLMRun:
         self.video = VideoPredictions(self)
         self.video._requestor._timeout = 120.0
         self.feedback = Feedback(self)
+        self.agents = Agents(self)
 
     def __repr__(self):
         return f"VLMRun(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
