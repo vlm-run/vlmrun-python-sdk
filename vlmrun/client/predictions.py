@@ -180,6 +180,57 @@ class ImagePredictions(SchemaCastMixin, Predictions):
                 raise ValueError("All URLs must be strings")
             images_data = urls
         return images_data
+        
+    def execute(
+        self,
+        name: str,
+        images: Optional[List[Union[Path, Image.Image]]] = None,
+        urls: Optional[List[str]] = None,
+        batch: bool = False,
+        metadata: Optional[RequestMetadata] = None,
+        config: Optional[GenerationConfig] = None,
+        callback_url: Optional[str] = None,
+    ) -> PredictionResponse:
+        """Generate a document prediction using a named model.
+
+        Args:
+            name: Name of the model to use
+            images: List of file paths (Path) or PIL Image objects to process. Either images or urls must be provided.
+            urls: List of HTTP URLs pointing to images. Either images or urls must be provided.
+            batch: Whether to run prediction in batch mode
+            metadata: Metadata to include in prediction
+            config: GenerateConfig to use for prediction
+            callback_url: URL to call when prediction is complete
+
+        Returns:
+            PredictionResponse: Prediction response
+
+        Raises:
+            ValueError: If neither images nor urls are provided, or if both are provided
+        """
+        images_data = self._handle_images_or_urls(images, urls)
+        additional_kwargs = {}
+        if config:
+            additional_kwargs["config"] = config.model_dump()
+        if metadata:
+            additional_kwargs["metadata"] = metadata.model_dump()
+        response, status_code, headers = self._requestor.request(
+            method="POST",
+            url="image/execute",
+            data={
+                "name": name,
+                "images": images_data,
+                "batch": batch,
+                "callback_url": callback_url,
+                **additional_kwargs,
+            },
+        )
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
+        prediction = PredictionResponse(**response)
+
+        self._cast_response_to_schema(prediction, name, config)
+        return prediction
 
     def generate(
         self,
@@ -389,6 +440,55 @@ def FilePredictions(route: str):
             prediction = PredictionResponse(**response)
 
             self._cast_response_to_schema(prediction, domain, config)
+            return prediction
+            
+        def execute(
+            self,
+            name: str,
+            file: Optional[Union[Path, str]] = None,
+            url: Optional[str] = None,
+            batch: bool = False,
+            config: Optional[GenerationConfig] = GenerationConfig(),
+            metadata: Optional[RequestMetadata] = RequestMetadata(),
+            callback_url: Optional[str] = None,
+        ) -> PredictionResponse:
+            """Generate a document prediction using a named model.
+
+            Args:
+                name: Name of the model to execute
+                file: File (pathlib.Path) or file_id to generate prediction from
+                url: URL to generate prediction from
+                batch: Whether to run prediction in batch mode
+                config: GenerateConfig to use for prediction
+                metadata: Metadata to include in prediction
+                callback_url: URL to call when prediction is complete
+
+            Returns:
+                PredictionResponse: Prediction response
+            """
+            is_url, file_or_url = self._handle_file_or_url(file, url)
+
+            additional_kwargs = {}
+            if config:
+                additional_kwargs["config"] = config.model_dump()
+            if metadata:
+                additional_kwargs["metadata"] = metadata.model_dump()
+            response, status_code, headers = self._requestor.request(
+                method="POST",
+                url=f"{route}/execute",
+                data={
+                    "name": name,
+                    "url" if is_url else "file_id": file_or_url,
+                    "batch": batch,
+                    "callback_url": callback_url,
+                    **additional_kwargs,
+                },
+            )
+            if not isinstance(response, dict):
+                raise TypeError("Expected dict response")
+            prediction = PredictionResponse(**response)
+
+            self._cast_response_to_schema(prediction, name, config)
             return prediction
 
         def schema(self, 

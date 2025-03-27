@@ -45,6 +45,18 @@ def mock_client(monkeypatch):
                 )
                 self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
                 return prediction
+                
+            def execute(self, name: str, **kwargs):
+                prediction = PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00+00:00",
+                    completed_at="2024-01-01T00:00:01+00:00",
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
+                    usage=CreditUsage(credits_used=100),
+                )
+                self._cast_response_to_schema(prediction, name, kwargs.get("config"))
+                return prediction
 
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
@@ -249,6 +261,24 @@ def mock_client(monkeypatch):
 
                 self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
                 return prediction
+                
+            def execute(self, name: str, images=None, urls=None, **kwargs):
+                if not images and not urls:
+                    raise ValueError("Either `images` or `urls` must be provided")
+                if images and urls:
+                    raise ValueError("Only one of `images` or `urls` can be provided")
+
+                prediction = PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00+00:00",
+                    completed_at="2024-01-01T00:00:01+00:00",
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
+                    usage=CreditUsage(credits_used=100),
+                )
+
+                self._cast_response_to_schema(prediction, name, kwargs.get("config"))
+                return prediction
 
         class VideoPredictions(SchemaCastMixin):
             def __init__(self, client):
@@ -265,6 +295,18 @@ def mock_client(monkeypatch):
                 )
                 self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
                 return prediction
+                
+            def execute(self, name: str, **kwargs):
+                prediction = PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00+00:00",
+                    completed_at="2024-01-01T00:00:01+00:00",
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
+                    usage=CreditUsage(credits_used=100),
+                )
+                self._cast_response_to_schema(prediction, name, kwargs.get("config"))
+                return prediction
 
         class DocumentPredictions(SchemaCastMixin):
             def __init__(self, client):
@@ -280,6 +322,18 @@ def mock_client(monkeypatch):
                     usage=CreditUsage(credits_used=100),
                 )
                 self._cast_response_to_schema(prediction, domain, kwargs.get("config"))
+                return prediction
+                
+            def execute(self, name: str, **kwargs):
+                prediction = PredictionResponse(
+                    id="prediction1",
+                    status="completed",
+                    created_at="2024-01-01T00:00:00+00:00",
+                    completed_at="2024-01-01T00:00:01+00:00",
+                    response={"invoice_number": "INV-001", "total_amount": 100.0},
+                    usage=CreditUsage(credits_used=100),
+                )
+                self._cast_response_to_schema(prediction, name, kwargs.get("config"))
                 return prediction
 
         class Dataset:
