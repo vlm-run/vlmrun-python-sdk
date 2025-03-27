@@ -138,6 +138,92 @@ def test_audio_generate(mock_client, tmp_path):
     assert isinstance(response, PredictionResponse)
 
 
+def test_image_execute(mock_client, tmp_path):
+    """Test executing image prediction with local file."""
+    # Create a dummy image for testing
+    img_path = tmp_path / "test.jpg"
+    img = Image.new("RGB", (100, 100), color="red")
+    img.save(img_path)
+
+    client = mock_client
+    response = client.image.execute(
+        name="test-model",
+        images=[img_path],
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.id is not None
+
+
+def test_image_execute_with_url(mock_client):
+    """Test executing predictions with image URL."""
+    client = mock_client
+    response = client.image.execute(
+        name="test-model",
+        urls=["https://example.com/image.jpg"],
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.id is not None
+
+
+def test_image_execute_validation(mock_client):
+    """Test validation of image execute parameters."""
+    client = mock_client
+
+    # Test missing both images and urls
+    with pytest.raises(ValueError, match="Either `images` or `urls` must be provided"):
+        client.image.execute(name="test-model")
+
+    # Test providing both images and urls
+    img = Image.new("RGB", (100, 100), color="red")
+    with pytest.raises(
+        ValueError, match="Only one of `images` or `urls` can be provided"
+    ):
+        client.image.execute(
+            name="test-model",
+            images=[img],
+            urls=["https://example.com/image.jpg"],
+        )
+
+
+def test_document_execute(mock_client, tmp_path):
+    """Test executing document prediction."""
+    doc_path = tmp_path / "test.pdf"
+    doc_path.write_bytes(b"test content")
+
+    client = mock_client
+    response = client.document.execute(
+        name="test-model",
+        file=doc_path,
+    )
+    assert isinstance(response, PredictionResponse)
+
+
+def test_video_execute(mock_client, tmp_path):
+    """Test executing video prediction."""
+    video_path = tmp_path / "test.mp4"
+    video_path.write_bytes(b"test content")
+
+    client = mock_client
+    response = client.video.execute(
+        name="test-model",
+        file=video_path,
+    )
+    assert isinstance(response, PredictionResponse)
+
+
+def test_audio_execute(mock_client, tmp_path):
+    """Test executing audio prediction."""
+    audio_path = tmp_path / "test.mp3"
+    audio_path.write_bytes(b"test content")
+
+    client = mock_client
+    response = client.audio.execute(
+        name="test-model",
+        file=audio_path,
+    )
+    assert isinstance(response, PredictionResponse)
+
+
 def test_schema_casting_with_domain(mock_client):
     """Test response casting using domain schema."""
 
