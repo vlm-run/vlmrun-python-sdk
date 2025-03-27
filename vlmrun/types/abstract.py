@@ -24,7 +24,7 @@ class VLMRunProtocol(Protocol):
     document: Any
     fine_tuning: Any
     feedback: Any
-    agents: Any
+    agent: Any
     requestor: Any
 
     def __post_init__(self) -> None:
