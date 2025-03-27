@@ -24,33 +24,6 @@ class Agent:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def create(
-        self,
-        name: str,
-    ) -> PredictionResponse:
-        """Create an agent with the given name.
-
-        Args:
-            name: Name of the agent
-
-        Returns:
-            PredictionResponse: Agent creation response
-        """
-        data = {
-            "name": name,
-        }
-            
-        response, status_code, headers = self._requestor.request(
-            method="POST",
-            url="agent/create",
-            data=data,
-        )
-        
-        if not isinstance(response, dict):
-            raise TypeError("Expected dict response")
-            
-        return PredictionResponse(**response)
-
     def get(
         self,
         name: str,
