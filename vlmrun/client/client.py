@@ -23,7 +23,7 @@ from vlmrun.client.predictions import (
 from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
 from vlmrun.constants import DEFAULT_BASE_URL
-from vlmrun.client.types import SchemaResponse, DomainInfo
+from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
 
 
 @dataclass
@@ -118,24 +118,26 @@ class VLMRun:
         )
         return status_code == 200
 
-    def get_type(self, domain: str, gql_stmt: Optional[str] = None) -> Type[BaseModel]:
+    def get_type(self, domain: str, config: Optional[GenerationConfig] = None) -> Type[BaseModel]:
         """Get the type for a domain."""
-        return self.get_schema(domain, gql_stmt).response_model
+        return self.get_schema(domain, config=config).response_model
 
-    def get_schema(self, domain: str, gql_stmt: Optional[str] = None) -> SchemaResponse:
+    def get_schema(self, domain: str, config: Optional[GenerationConfig] = None) -> SchemaResponse:
         """Get the schema for a domain.
 
         Args:
             domain: Domain name (e.g. "document.invoice")
-            gql_stmt: GraphQL statement to use for the schema
+            config: Generation config
 
         Returns:
             Schema response containing GraphQL schema and metadata
         """
+        if config is None:
+            config = GenerationConfig()
         response, status_code, headers = self.requestor.request(
             method="POST",
             url="/schema",
-            data={"domain": domain, "gql_stmt": gql_stmt},
+            data={"domain": domain, "config": config.model_dump()},
         )
         return SchemaResponse(**response)
 
