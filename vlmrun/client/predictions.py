@@ -1,6 +1,7 @@
 """VLM Run API Prediction resource."""
 
 from __future__ import annotations
+import json
 from pathlib import Path
 from typing import List, Optional, Union
 from PIL import Image
@@ -27,7 +28,7 @@ from cachetools.keys import hashkey
 
 @cachetools.cached(
     cache=cachetools.TTLCache(maxsize=100, ttl=3600),
-    key=lambda _client, domain, config: hashkey(domain, str(config)),  # noqa: B007
+    key=lambda _client, domain, config: hashkey(domain, json.dumps(config.model_dump())),  # noqa: B007
 )
 def get_response_model(
     client, domain: str, config: Optional[GenerationConfig] = None
@@ -36,17 +37,8 @@ def get_response_model(
 
     Note: This function is cached to avoid re-fetching the schema from the API.
     """
-    if config:
-        if config.json_schema:
-            return jsonschema_to_model(config.json_schema)
-        elif config.gql_stmt:
-            schema_response: SchemaResponse = client.get_schema(
-                domain, gql_stmt=config.gql_stmt
-            )
-            return schema_response.response_model
-    else:
-        schema_response: SchemaResponse = client.get_schema(domain)
-        return schema_response.response_model
+    schema_response: SchemaResponse = client.get_schema(domain, config=config)
+    return schema_response.response_model
 
 
 class SchemaCastMixin:
@@ -190,6 +182,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         metadata: Optional[RequestMetadata] = None,
         config: Optional[GenerationConfig] = None,
         callback_url: Optional[str] = None,
+        autocast: bool = False,
     ) -> PredictionResponse:
         """Generate a document prediction using a named model.
 
@@ -229,7 +222,8 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             raise TypeError("Expected dict response")
         prediction = PredictionResponse(**response)
 
-        self._cast_response_to_schema(prediction, name, config)
+        if autocast:
+            self._cast_response_to_schema(prediction, name, config)
         return prediction
 
     def generate(
@@ -242,6 +236,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         metadata: Optional[RequestMetadata] = None,
         config: Optional[GenerationConfig] = None,
         callback_url: Optional[str] = None,
+        autocast: bool = False,
     ) -> PredictionResponse:
         """Generate a document prediction.
 
@@ -254,6 +249,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             metadata: Metadata to include in prediction
             config: GenerateConfig to use for prediction
             callback_url: URL to call when prediction is complete
+            autocast: Whether to autocast the response to the schema
 
         Returns:
             PredictionResponse: Prediction response
@@ -313,7 +309,8 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             raise TypeError("Expected dict response")
         prediction = PredictionResponse(**response)
 
-        self._cast_response_to_schema(prediction, domain, config)
+        if autocast:
+            self._cast_response_to_schema(prediction, domain, config)
         return prediction
 
     def schema(self, 
@@ -400,6 +397,7 @@ def FilePredictions(route: str):
             config: Optional[GenerationConfig] = GenerationConfig(),
             metadata: Optional[RequestMetadata] = RequestMetadata(),
             callback_url: Optional[str] = None,
+            autocast: bool = False,
         ) -> PredictionResponse:
             """Generate a document prediction.
 
@@ -412,6 +410,7 @@ def FilePredictions(route: str):
                 config: GenerateConfig to use for prediction
                 metadata: Metadata to include in prediction
                 callback_url: URL to call when prediction is complete
+                autocast: Whether to autocast the response to the schema
 
             Returns:
                 PredictionResponse: Prediction response
@@ -439,7 +438,8 @@ def FilePredictions(route: str):
                 raise TypeError("Expected dict response")
             prediction = PredictionResponse(**response)
 
-            self._cast_response_to_schema(prediction, domain, config)
+            if autocast:
+                self._cast_response_to_schema(prediction, domain, config)
             return prediction
             
         def execute(
@@ -451,6 +451,7 @@ def FilePredictions(route: str):
             config: Optional[GenerationConfig] = GenerationConfig(),
             metadata: Optional[RequestMetadata] = RequestMetadata(),
             callback_url: Optional[str] = None,
+            autocast: bool = False,
         ) -> PredictionResponse:
             """Generate a document prediction using a named model.
 
@@ -462,6 +463,7 @@ def FilePredictions(route: str):
                 config: GenerateConfig to use for prediction
                 metadata: Metadata to include in prediction
                 callback_url: URL to call when prediction is complete
+                autocast: Whether to autocast the response to the schema
 
             Returns:
                 PredictionResponse: Prediction response
@@ -488,7 +490,8 @@ def FilePredictions(route: str):
                 raise TypeError("Expected dict response")
             prediction = PredictionResponse(**response)
 
-            self._cast_response_to_schema(prediction, name, config)
+            if autocast:
+                self._cast_response_to_schema(prediction, name, config)
             return prediction
 
         def schema(self, 

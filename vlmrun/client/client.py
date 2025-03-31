@@ -118,9 +118,9 @@ class VLMRun:
         )
         return status_code == 200
 
-    def get_type(self, domain: str, gql_stmt: Optional[str] = None) -> Type[BaseModel]:
+    def get_type(self, domain: str, config: Optional[GenerationConfig] = None) -> Type[BaseModel]:
         """Get the type for a domain."""
-        return self.get_schema(domain, gql_stmt).response_model
+        return self.get_schema(domain, config=config).response_model
 
     def get_schema(self, domain: str, config: Optional[GenerationConfig] = None) -> SchemaResponse:
         """Get the schema for a domain.
@@ -132,10 +132,12 @@ class VLMRun:
         Returns:
             Schema response containing GraphQL schema and metadata
         """
+        if config is None:
+            config = GenerationConfig()
         response, status_code, headers = self.requestor.request(
             method="POST",
             url="/schema",
-            data={"domain": domain, "config": config},
+            data={"domain": domain, "config": config.model_dump()},
         )
         return SchemaResponse(**response)
 
