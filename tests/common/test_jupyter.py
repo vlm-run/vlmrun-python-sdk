@@ -1,9 +1,8 @@
 import pytest
 from PIL import Image
-from vlmrun.common.viz import (
+from vlmrun.common.jupyter import (
     DisplayOptions,
-    xywh_to_xyxy,
-    extract_bbox,
+    BoundingBox,
     get_boxes_from_response,
     ensure_image,
     render_bbox_image,
@@ -82,39 +81,79 @@ def test_display_options_validation():
         DisplayOptions(image_width=0).validate_image_width()
 
 
-def test_xywh_to_xyxy():
-    """Test conversion from XYWH to XYXY format."""
-    xywh = (0.1, 0.2, 0.3, 0.4)
-    xyxy = xywh_to_xyxy(xywh)
-    expected = (0.1, 0.2, 0.4, 0.6)
-    assert all(pytest.approx(a) == b for a, b in zip(xyxy, expected))
+def test_bounding_box_creation():
+    """Test BoundingBox creation and validation."""
+    # Test direct XYXY creation
+    bbox = BoundingBox(0.1, 0.2, 0.3, 0.4)
+    assert bbox.x1 == pytest.approx(0.1)
+    assert bbox.y1 == pytest.approx(0.2)
+    assert bbox.x2 == pytest.approx(0.3)
+    assert bbox.y2 == pytest.approx(0.4)
 
-    xywh = (10, 20, 30, 40)
-    xyxy = xywh_to_xyxy(xywh)
-    expected = (10, 20, 40, 60)
-    assert all(pytest.approx(a) == b for a, b in zip(xyxy, expected))
+    # Test coordinate normalization
+    bbox = BoundingBox(0.3, 0.2, 0.1, 0.4)
+    assert bbox.x1 == pytest.approx(0.1)  # Should swap to ensure x1 < x2
+    assert bbox.x2 == pytest.approx(0.3)
 
+    # Test invalid coordinates
+    with pytest.raises(ValueError):
+        BoundingBox(-0.1, 0.2, 0.3, 0.4)
 
-def test_extract_bbox():
-    """Test bounding box extraction from various formats."""
-    result = extract_bbox([0.1, 0.2, 0.3, 0.4])
-    expected = (0.1, 0.2, 0.3, 0.4)
-    assert all(pytest.approx(a) == b for a, b in zip(result, expected))
+    with pytest.raises(ValueError):
+        BoundingBox(0.1, 0.2, 1.1, 0.4)
 
-    result = extract_bbox({"bbox": [0.1, 0.2, 0.3, 0.4]})
-    expected = (0.1, 0.2, 0.3, 0.4)
-    assert all(pytest.approx(a) == b for a, b in zip(result, expected))
+    # Test from_xywh
+    bbox = BoundingBox.from_xywh(0.1, 0.2, 0.3, 0.4)
+    assert bbox.x1 == pytest.approx(0.1)
+    assert bbox.y1 == pytest.approx(0.2)
+    assert bbox.x2 == pytest.approx(0.4)  # x + width
+    assert bbox.y2 == pytest.approx(0.6)  # y + height
 
-    result = extract_bbox({"xywh": [0.1, 0.2, 0.3, 0.4]})
-    expected = (0.1, 0.2, 0.4, 0.6)
-    assert all(pytest.approx(a) == b for a, b in zip(result, expected))
+    # Test from_dict with various formats
+    bbox = BoundingBox.from_dict([0.1, 0.2, 0.3, 0.4])
+    assert bbox.x1 == pytest.approx(0.1)
+    assert bbox.y1 == pytest.approx(0.2)
+    assert bbox.x2 == pytest.approx(0.3)
+    assert bbox.y2 == pytest.approx(0.4)
 
-    result = extract_bbox({"bbox": {"xywh": [0.1, 0.2, 0.3, 0.4]}})
-    expected = (0.1, 0.2, 0.4, 0.6)
-    assert all(pytest.approx(a) == b for a, b in zip(result, expected))
+    bbox = BoundingBox.from_dict({"bbox": [0.1, 0.2, 0.3, 0.4]})
+    assert bbox.x1 == pytest.approx(0.1)
+    assert bbox.y1 == pytest.approx(0.2)
+    assert bbox.x2 == pytest.approx(0.3)
+    assert bbox.y2 == pytest.approx(0.4)
 
-    assert extract_bbox({"invalid": "format"}) is None
-    assert extract_bbox([1, 2, 3]) is None
+    bbox = BoundingBox.from_dict({"bbox": {"xywh": [0.1, 0.2, 0.3, 0.4]}})
+    assert bbox.x1 == pytest.approx(0.1)
+    assert bbox.y1 == pytest.approx(0.2)
+    assert bbox.x2 == pytest.approx(0.4)
+    assert bbox.y2 == pytest.approx(0.6)
+
+    # Test properties
+    bbox = BoundingBox(0.1, 0.2, 0.4, 0.6)
+    assert bbox.width == pytest.approx(0.3)
+    assert bbox.height == pytest.approx(0.4)
+    assert bbox.area == pytest.approx(0.12)
+    assert bbox.center[0] == pytest.approx(0.25)
+    assert bbox.center[1] == pytest.approx(0.4)
+
+    # Test pixel coordinates
+    coords = bbox.to_pixel_coords(100, 100)
+    assert coords == (
+        10,
+        20,
+        40,
+        60,
+    )  # Integer coordinates, so exact comparison is fine
+
+    # Test to_dict
+    bbox = BoundingBox(
+        0.1, 0.2, 0.3, 0.4, content="test", confidence=0.9, field="field1"
+    )
+    d = bbox.to_dict()
+    assert all(pytest.approx(a) == b for a, b in zip(d["bbox"], [0.1, 0.2, 0.3, 0.4]))
+    assert d["content"] == "test"
+    assert d["confidence"] == pytest.approx(0.9)
+    assert d["field"] == "field1"
 
 
 def test_get_boxes_from_response(sample_response):
@@ -123,32 +162,40 @@ def test_get_boxes_from_response(sample_response):
     assert len(boxes) == 4  # street, city, dob, full_name metadata
 
     # Check street metadata extraction
-    street_box = next(box for box in boxes if box.get("field") == "address.street")
-    expected = (0.349, 0.588, 0.755, 0.634)  # xywh converted to xyxy
-    assert all(pytest.approx(a) == b for a, b in zip(street_box["bbox"], expected))
-    assert street_box["content"] == "10 WONDERFUL DRIVE"
-    assert pytest.approx(street_box["confidence"]) == 0.9
+    street_box = next(box for box in boxes if box.field == "address.street")
+    assert street_box.x1 == pytest.approx(0.349)
+    assert street_box.y1 == pytest.approx(0.588)
+    assert street_box.x2 == pytest.approx(0.755)  # x + width
+    assert street_box.y2 == pytest.approx(0.634)  # y + height
+    assert street_box.content == "10 WONDERFUL DRIVE"
+    assert street_box.confidence == pytest.approx(0.9)
 
     # Check city metadata extraction
-    city_box = next(box for box in boxes if box.get("field") == "address.city")
-    expected = (0.347, 0.640, 0.534, 0.681)  # xywh converted to xyxy
-    assert all(pytest.approx(a) == b for a, b in zip(city_box["bbox"], expected))
-    assert city_box["content"] == "MONTGOMERY"
-    assert pytest.approx(city_box["confidence"]) == 1.0
+    city_box = next(box for box in boxes if box.field == "address.city")
+    assert city_box.x1 == pytest.approx(0.347)
+    assert city_box.y1 == pytest.approx(0.640)
+    assert city_box.x2 == pytest.approx(0.534)  # x + width
+    assert city_box.y2 == pytest.approx(0.681)  # y + height
+    assert city_box.content == "MONTGOMERY"
+    assert city_box.confidence == pytest.approx(1.0)
 
     # Check date of birth metadata extraction
-    dob_box = next(box for box in boxes if box.get("field") == "date_of_birth")
-    expected = (0.349, 0.431, 0.484, 0.480)  # xywh converted to xyxy
-    assert all(pytest.approx(a) == b for a, b in zip(dob_box["bbox"], expected))
-    assert dob_box["content"] == "01-05-1948"
-    assert pytest.approx(dob_box["confidence"]) == 1.0
+    dob_box = next(box for box in boxes if box.field == "date_of_birth")
+    assert dob_box.x1 == pytest.approx(0.349)
+    assert dob_box.y1 == pytest.approx(0.431)
+    assert dob_box.x2 == pytest.approx(0.484)  # x + width
+    assert dob_box.y2 == pytest.approx(0.480)  # y + height
+    assert dob_box.content == "01-05-1948"
+    assert dob_box.confidence == pytest.approx(1.0)
 
     # Check full name metadata extraction
-    name_box = next(box for box in boxes if box.get("field") == "full_name")
-    expected = (0.398, 0.783, 0.853, 0.955)  # xywh converted to xyxy
-    assert all(pytest.approx(a) == b for a, b in zip(name_box["bbox"], expected))
-    assert name_box["content"] == "Connor Sample"
-    assert pytest.approx(name_box["confidence"]) == 1.0
+    name_box = next(box for box in boxes if box.field == "full_name")
+    assert name_box.x1 == pytest.approx(0.398)
+    assert name_box.y1 == pytest.approx(0.783)
+    assert name_box.x2 == pytest.approx(0.853)  # x + width
+    assert name_box.y2 == pytest.approx(0.955)  # y + height
+    assert name_box.content == "Connor Sample"
+    assert name_box.confidence == pytest.approx(1.0)
 
 
 def test_ensure_image(sample_image, tmp_path):
