@@ -176,6 +176,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
     def execute(
         self,
         name: str,
+        version: str = "latest",
         images: Optional[List[Union[Path, Image.Image]]] = None,
         urls: Optional[List[str]] = None,
         batch: bool = False,
@@ -188,6 +189,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
 
         Args:
             name: Name of the model to use
+            version: Version of the model to use
             images: List of file paths (Path) or PIL Image objects to process. Either images or urls must be provided.
             urls: List of HTTP URLs pointing to images. Either images or urls must be provided.
             batch: Whether to run prediction in batch mode
@@ -212,6 +214,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             url="image/execute",
             data={
                 "name": name,
+                "version": version,
                 "images": images_data,
                 "batch": batch,
                 "callback_url": callback_url,
@@ -445,6 +448,7 @@ def FilePredictions(route: str):
         def execute(
             self,
             name: str,
+            version: str = "latest",
             file: Optional[Union[Path, str]] = None,
             url: Optional[str] = None,
             batch: bool = False,
@@ -457,6 +461,7 @@ def FilePredictions(route: str):
 
             Args:
                 name: Name of the model to execute
+                version: Version of the model to execute
                 file: File (pathlib.Path) or file_id to generate prediction from
                 url: URL to generate prediction from
                 batch: Whether to run prediction in batch mode
@@ -480,6 +485,7 @@ def FilePredictions(route: str):
                 url=f"{route}/execute",
                 data={
                     "name": name,
+                    "version": version,
                     "url" if is_url else "file_id": file_or_url,
                     "batch": batch,
                     "callback_url": callback_url,
