@@ -51,7 +51,7 @@ class Agent:
     def execute(
         self,
         name: str,
-        version: str,
+        version: str = "latest",
         file_ids: Optional[List[str]] = None,
         urls: Optional[List[str]] = None,
         batch: bool = True,

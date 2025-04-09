@@ -446,7 +446,7 @@ def FilePredictions(route: str):
         def execute(
             self,
             name: str,
-            version: str,
+            version: str = "latest",
             file: Optional[Union[Path, str]] = None,
             url: Optional[str] = None,
             batch: bool = False,
