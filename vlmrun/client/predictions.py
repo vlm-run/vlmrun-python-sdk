@@ -19,7 +19,6 @@ from vlmrun.client.types import (
     RequestMetadata,
     SchemaResponse,
 )
-from vlmrun.hub.utils import jsonschema_to_model
 from typing import Type
 from pydantic import BaseModel
 import cachetools
@@ -28,7 +27,9 @@ from cachetools.keys import hashkey
 
 @cachetools.cached(
     cache=cachetools.TTLCache(maxsize=100, ttl=3600),
-    key=lambda _client, domain, config: hashkey(domain, json.dumps(config.model_dump())),  # noqa: B007
+    key=lambda _client, domain, config: hashkey(
+        domain, json.dumps(config.model_dump())
+    ),  # noqa: B007
 )
 def get_response_model(
     client, domain: str, config: Optional[GenerationConfig] = None
@@ -136,8 +137,8 @@ class ImagePredictions(SchemaCastMixin, Predictions):
 
     @staticmethod
     def _handle_images_or_urls(
-        images: Optional[List[Union[Path, Image.Image]]] = None, 
-        urls: Optional[List[str]] = None
+        images: Optional[List[Union[Path, Image.Image]]] = None,
+        urls: Optional[List[str]] = None,
     ) -> List[str]:
         """Handle images and URLs.
 
@@ -172,7 +173,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
                 raise ValueError("All URLs must be strings")
             images_data = urls
         return images_data
-        
+
     def execute(
         self,
         name: str,
@@ -313,10 +314,11 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             self._cast_response_to_schema(prediction, domain, config)
         return prediction
 
-    def schema(self, 
-            images: Optional[List[Union[Path, Image.Image]]] = None, 
-            urls: Optional[List[str]] = None,
-        ) -> PredictionResponse:
+    def schema(
+        self,
+        images: Optional[List[Union[Path, Image.Image]]] = None,
+        urls: Optional[List[str]] = None,
+    ) -> PredictionResponse:
         """Auto-generate a schema for a given image or document.
 
         Args:
@@ -337,7 +339,6 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         prediction = PredictionResponse(**response)
         prediction.response = SchemaResponse(**prediction.response)
         return prediction
-
 
 
 def FilePredictions(route: str):
@@ -441,10 +442,11 @@ def FilePredictions(route: str):
             if autocast:
                 self._cast_response_to_schema(prediction, domain, config)
             return prediction
-            
+
         def execute(
             self,
             name: str,
+            version: str,
             file: Optional[Union[Path, str]] = None,
             url: Optional[str] = None,
             batch: bool = False,
@@ -457,6 +459,7 @@ def FilePredictions(route: str):
 
             Args:
                 name: Name of the model to execute
+                version: Version of the model to execute
                 file: File (pathlib.Path) or file_id to generate prediction from
                 url: URL to generate prediction from
                 batch: Whether to run prediction in batch mode
@@ -480,6 +483,7 @@ def FilePredictions(route: str):
                 url=f"{route}/execute",
                 data={
                     "name": name,
+                    "version": version,
                     "url" if is_url else "file_id": file_or_url,
                     "batch": batch,
                     "callback_url": callback_url,
@@ -494,7 +498,8 @@ def FilePredictions(route: str):
                 self._cast_response_to_schema(prediction, name, config)
             return prediction
 
-        def schema(self, 
+        def schema(
+            self,
             file: Optional[Union[Path, str]] = None,
             url: Optional[str] = None,
         ) -> PredictionResponse:
