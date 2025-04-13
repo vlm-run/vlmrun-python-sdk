@@ -1,5 +1,5 @@
 from typing import Union, List, Dict, Any, Optional, Tuple, Literal
-from PIL import Image
+from PIL import Image, ImageOps
 import pandas as pd
 from IPython.display import HTML
 import json
@@ -182,8 +182,13 @@ def ensure_image(image: ImageType) -> Image.Image:
     """
     if isinstance(image, (str, Path)):
         try:
-            return Image.open(image)
-        except Exception as e:
+            image = Image.open(image)
+            try:
+                image = ImageOps.exif_transpose(image)
+            except Exception:
+                # Continue if EXIF handling fails
+                pass
+            return image
             raise ValueError(f"Failed to load image from path: {e}")
 
     if isinstance(image, Image.Image):

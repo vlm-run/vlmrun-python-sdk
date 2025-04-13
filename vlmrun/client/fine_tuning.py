@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from typing import Dict, List, Optional, Union
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.types import (
@@ -178,7 +178,7 @@ class Finetuning:
                 raise ValueError("All images must be of the same type")
             if isinstance(images[0], Path):
                 _check_file_paths(images)
-                images = [Image.open(str(image)) for image in images]
+                images = [_open_image_with_exif(image) for image in images]
                 images_payload = [
                     encode_image(image, format="JPEG") for image in images
                 ]
@@ -288,3 +288,20 @@ class Finetuning:
             Dict: Cancelled job details
         """
         raise NotImplementedError("Not implemented")
+
+def _open_image_with_exif(path: Union[str, Path]) -> Image.Image:
+    """Open an image and apply EXIF orientation if available.
+    
+    Args:
+        path: Path to the image file
+        
+    Returns:
+        PIL Image with EXIF orientation applied
+    """
+    image = Image.open(str(path))
+    try:
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        # Since logger is not imported in this file, silently continue
+        pass
+    return image
