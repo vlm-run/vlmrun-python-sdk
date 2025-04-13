@@ -3,10 +3,11 @@
 from pathlib import Path
 
 import typer
-from PIL import Image
+from PIL import Image, ImageOps
 from rich import print as rprint
 
 from vlmrun.client import VLMRun
+from loguru import logger
 from vlmrun.client.types import PredictionResponse
 
 app = typer.Typer(help="Generation operations", no_args_is_help=True)

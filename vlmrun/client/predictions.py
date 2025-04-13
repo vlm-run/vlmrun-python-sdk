@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import List, Optional, Union
-from PIL import Image
+from PIL import Image, ImageOps
 from loguru import logger
 
 import time
@@ -157,7 +157,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             if not all(isinstance(image, image_type) for image in images):
                 raise ValueError("All images must be of the same type")
             if isinstance(images[0], Path):
-                images = [Image.open(str(image)) for image in images]
+                images = [_open_image_with_exif(image) for image in images]
             elif isinstance(images[0], Image.Image):
                 pass
             else:
@@ -270,7 +270,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             if not all(isinstance(image, image_type) for image in images):
                 raise ValueError("All images must be of the same type")
             if isinstance(images[0], Path):
-                images = [Image.open(str(image)) for image in images]
+                images = [_open_image_with_exif(image) for image in images]
             elif isinstance(images[0], Image.Image):
                 pass
             else:
@@ -530,3 +530,19 @@ def FilePredictions(route: str):
 DocumentPredictions = FilePredictions("document")
 AudioPredictions = FilePredictions("audio")
 VideoPredictions = FilePredictions("video")
+
+def _open_image_with_exif(path: Union[str, Path]) -> Image.Image:
+    """Open an image and apply EXIF orientation if available.
+    
+    Args:
+        path: Path to the image file
+        
+    Returns:
+        PIL Image with EXIF orientation applied
+    """
+    image = Image.open(str(path))
+    try:
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        logger.warning(f"Failed to load EXIF metadata from image [path={path}]")
+    return image

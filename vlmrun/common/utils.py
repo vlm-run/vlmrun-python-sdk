@@ -8,7 +8,7 @@ from loguru import logger
 
 import tarfile
 import requests
-from PIL import Image
+from PIL import Image, ImageOps
 from vlmrun.constants import VLMRUN_TMP_DIR, VLMRUN_CACHE_DIR
 
 
@@ -43,9 +43,14 @@ def remote_image(url: Union[str, Path]) -> Image.Image:
         IOError: If there's an error processing the image
     """
     if isinstance(url, Path) or (isinstance(url, str) and not url.startswith("http")):
+    if isinstance(url, Path) or (isinstance(url, str) and not url.startswith("http")):
         try:
-            return Image.open(url).convert("RGB")
-        except Exception as e:
+            image = Image.open(url)
+            try:
+                image = ImageOps.exif_transpose(image)
+            except Exception:
+                logger.warning(f"Failed to load EXIF metadata from image [path={url}]")
+            return image.convert("RGB")
             raise ValueError(f"Failed to open image from path={url}") from e
 
     try:

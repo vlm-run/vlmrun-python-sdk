@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Literal, Union
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from vlmrun.constants import SUPPORTED_VIDEO_FILETYPES
 
@@ -68,7 +68,13 @@ def encode_image(
     if isinstance(image, (str, Path)):
         if not Path(image).exists():
             raise FileNotFoundError(f"File not found {image}")
-        image = Image.open(str(image)).convert("RGB")
+        image = Image.open(str(image))
+        try:
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            # Silently continue if EXIF handling fails
+            pass
+        image = image.convert("RGB")
     elif isinstance(image, Image.Image):
         image = image.convert("RGB")
     else:
