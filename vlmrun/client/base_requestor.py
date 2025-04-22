@@ -2,7 +2,6 @@
 
 from typing import Any, Dict, Tuple, TYPE_CHECKING, Union, Optional
 from urllib.parse import urljoin
-from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
@@ -15,25 +14,21 @@ from tenacity import (
     wait_exponential,
 )
 
+from vlmrun.client.exceptions import (
+    APIError,
+    AuthenticationError,
+    ValidationError,
+    RateLimitError,
+    ServerError,
+    ResourceNotFoundError,
+    TimeoutError,
+)
+
 # Constants
 DEFAULT_TIMEOUT = 30.0  # seconds
 MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 1  # seconds
 MAX_RETRY_DELAY = 10  # seconds
-
-
-@dataclass
-class APIError(Exception):
-    """Base exception for API errors."""
-
-    message: str
-    http_status: Optional[int] = None
-    headers: Optional[Dict[str, str]] = None
-
-    def __post_init__(self):
-        super().__init__(self.message)
-        if self.headers is None:
-            self.headers = {}
 
 
 class APIRequestor:
@@ -95,7 +90,13 @@ class APIRequestor:
             Tuple of (response_data, status_code, response_headers)
 
         Raises:
-            APIError: If request fails
+            AuthenticationError: If authentication fails
+            ValidationError: If request validation fails
+            RateLimitError: If rate limit is exceeded
+            ResourceNotFoundError: If resource is not found
+            ServerError: If server returns 5xx error
+            APIError: For other API errors
+            TimeoutError: If request times out
         """
         if not headers:
             headers = {}
@@ -126,17 +127,70 @@ class APIRequestor:
 
         except requests.exceptions.RequestException as e:
             if isinstance(e, requests.exceptions.HTTPError):
-                # Try to get error details from response
+                # Extract error details from response
                 try:
                     error_data = e.response.json()
-                    message = error_data.get("error", {}).get("message", str(e))
+                    error_obj = error_data.get("error", {})
+                    message = error_obj.get("message", str(e))
+                    error_type = error_obj.get("type")
+                    request_id = error_obj.get("request_id") or e.response.headers.get("x-request-id")
                 except Exception:
                     message = str(e)
+                    error_type = None
+                    request_id = e.response.headers.get("x-request-id")
 
-                raise APIError(
-                    message=message,
-                    http_status=e.response.status_code,
-                    headers=dict(e.response.headers),
-                ) from e
+                status_code = e.response.status_code
+                headers = dict(e.response.headers)
 
-            raise APIError(str(e)) from e
+                if status_code == 401:
+                    raise AuthenticationError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif status_code == 400:
+                    raise ValidationError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif status_code == 404:
+                    raise ResourceNotFoundError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif status_code == 429:
+                    raise RateLimitError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif 500 <= status_code < 600:
+                    raise ServerError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                else:
+                    raise APIError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+            elif isinstance(e, requests.exceptions.Timeout):
+                raise TimeoutError(f"Request timed out: {str(e)}") from e
+            else:
+                raise APIError(str(e)) from e

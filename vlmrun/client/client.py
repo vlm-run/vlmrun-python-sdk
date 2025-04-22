@@ -24,6 +24,7 @@ from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
+from vlmrun.client.exceptions import DependencyError, ConfigurationError
 
 
 @dataclass
@@ -56,8 +57,10 @@ class VLMRun:
         if not self.api_key:  # Handle both None and empty string
             self.api_key = os.getenv("VLMRUN_API_KEY", None)
             if not self.api_key:  # Still None or empty after env check
-                raise ValueError(
-                    "Missing API key. Please provide your VLM Run API key:\n\n"
+                raise ConfigurationError(
+                    message="Missing API key",
+                    error_type="missing_api_key",
+                    suggestion="Please provide your VLM Run API key:\n\n"
                     "1. Set it in your code:\n"
                     "   client = VLMRun(api_key='your-api-key')\n\n"
                     "2. Or set the environment variable:\n"
@@ -104,9 +107,10 @@ class VLMRun:
         try:
             from openai import OpenAI as _OpenAI
         except ImportError:
-            raise ImportError(
-                "OpenAI client is not installed. Please install it with "
-                "`pip install openai`"
+            raise DependencyError(
+                message="OpenAI client is not installed",
+                suggestion="Install it with `pip install openai`",
+                error_type="missing_dependency"
             )
 
         return _OpenAI(api_key=self.api_key, base_url=f"{self.base_url}/openai")
