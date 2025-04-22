@@ -33,6 +33,7 @@ class FileResponse(BaseModel):
     ]
     created_at: datetime
     object: str = "file"
+    present: bool = True
 
 
 class CreditUsage(BaseModel):
