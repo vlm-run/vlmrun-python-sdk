@@ -72,8 +72,8 @@ class Files:
             )
             if status_code == 200:
                 file_response = FileResponse(**response)
-                # Check if the file is present
-                if file_response.present:
+                # Check if the file exists by checking if id is empty
+                if file_response.id:
                     return file_response
                 else:
                     return None
