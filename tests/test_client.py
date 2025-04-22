@@ -42,7 +42,10 @@ def test_client_missing_api_key(monkeypatch):
     """Test client initialization fails when API key is missing."""
     monkeypatch.delenv("VLMRUN_API_KEY", raising=False)  # Ensure no API key in env
     monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)  # Ensure clean environment
-    with pytest.raises(ValueError) as exc_info:
+    
+    from vlmrun.client.exceptions import ConfigurationError
+    
+    with pytest.raises(ConfigurationError) as exc_info:
         VLMRun()
     assert "Missing API key" in str(exc_info.value)
 
