@@ -45,10 +45,10 @@ def test_api_error():
     assert error.error_type == "test_error"
     assert error.suggestion == "Try again"
     assert "API error" in str(error)
-    assert "HTTP Status: 400" in str(error)
-    assert "Error Type: test_error" in str(error)
-    assert "Request ID: req-123" in str(error)
-    assert "Suggestion: Try again" in str(error)
+    assert "status=400" in str(error)
+    assert "type=test_error" in str(error)
+    assert "id=req-123" in str(error)
+    assert "Try again" in str(error)
 
 
 def test_authentication_error():
@@ -127,8 +127,8 @@ def test_client_error():
     assert error.error_type == "test_error"
     assert error.suggestion == "Fix your client"
     assert "Client error" in str(error)
-    assert "Error Type: test_error" in str(error)
-    assert "Suggestion: Fix your client" in str(error)
+    assert "type=test_error" in str(error)
+    assert "Fix your client" in str(error)
 
 
 def test_configuration_error():
