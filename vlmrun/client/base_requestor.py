@@ -133,7 +133,7 @@ class APIRequestor:
                     error_obj = error_data.get("error", {})
                     message = error_obj.get("message", str(e))
                     error_type = error_obj.get("type")
-                    request_id = error_obj.get("request_id") or e.response.headers.get("x-request-id")
+                    request_id = error_obj.get("id") or e.response.headers.get("x-request-id")
                 except Exception:
                     message = str(e)
                     error_type = None
