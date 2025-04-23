@@ -33,15 +33,14 @@ def test_api_error():
     error = APIError(
         message="API error",
         http_status=400,
-        headers={"X-Request-ID": "req-123"},
         request_id="req-123",
         error_type="test_error",
         suggestion="Try again",
     )
     assert error.message == "API error"
     assert error.http_status == 400
-    assert error.headers == {"X-Request-ID": "req-123"}
     assert error.request_id == "req-123"
+    assert error.headers == {}
     assert error.error_type == "test_error"
     assert error.suggestion == "Try again"
     assert "API error" in str(error)
