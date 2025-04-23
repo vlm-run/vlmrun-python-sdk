@@ -27,16 +27,18 @@ class APIError(VLMRunError):
 
     def __str__(self) -> str:
         """Return string representation of error."""
-        parts = [self.message]
+        parts = []
         if self.http_status:
-            parts.append(f"HTTP Status: {self.http_status}")
+            parts.append(f"status={self.http_status}")
         if self.error_type:
-            parts.append(f"Error Type: {self.error_type}")
+            parts.append(f"type={self.error_type}")
         if self.request_id:
-            parts.append(f"Request ID: {self.request_id}")
+            parts.append(f"id={self.request_id}")
+        
+        formatted = f"[{', '.join(parts)}] {self.message}"
         if self.suggestion:
-            parts.append(f"Suggestion: {self.suggestion}")
-        return " | ".join(parts)
+            formatted += f" (Suggestion: {self.suggestion})"
+        return formatted
 
 
 @dataclass
@@ -109,12 +111,14 @@ class ClientError(VLMRunError):
 
     def __str__(self) -> str:
         """Return string representation of error."""
-        parts = [self.message]
+        parts = []
         if self.error_type:
-            parts.append(f"Error Type: {self.error_type}")
+            parts.append(f"type={self.error_type}")
+        
+        formatted = f"[{', '.join(parts)}] {self.message}"
         if self.suggestion:
-            parts.append(f"Suggestion: {self.suggestion}")
-        return " | ".join(parts)
+            formatted += f" (Suggestion: {self.suggestion})"
+        return formatted
 
 
 @dataclass
@@ -154,9 +158,11 @@ class TimeoutError(VLMRunError):
 
     def __str__(self) -> str:
         """Return string representation of error."""
-        parts = [self.message]
+        parts = []
         if self.error_type:
-            parts.append(f"Error Type: {self.error_type}")
+            parts.append(f"type={self.error_type}")
+        
+        formatted = f"[{', '.join(parts)}] {self.message}"
         if self.suggestion:
-            parts.append(f"Suggestion: {self.suggestion}")
-        return " | ".join(parts)
+            formatted += f" (Suggestion: {self.suggestion})"
+        return formatted
