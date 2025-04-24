@@ -19,8 +19,8 @@ class APIError(Exception):
 
 
 class FileResponse(BaseModel):
-    id: str
-    filename: str
+    id: Optional[str]
+    filename: Optional[str]
     bytes: int
     purpose: Literal[
         "fine-tune",

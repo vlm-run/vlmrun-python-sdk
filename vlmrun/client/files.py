@@ -71,7 +71,12 @@ class Files:
                 url=f"files/hash/{file_hash}",
             )
             if status_code == 200:
-                return FileResponse(**response)
+                file_response = FileResponse(**response)
+                # Check if the file exists by checking if id is empty
+                if file_response.id:
+                    return file_response
+                else:
+                    return None
             else:
                 return None
         except Exception as exc:
