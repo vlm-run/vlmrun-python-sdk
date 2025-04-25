@@ -8,7 +8,7 @@ from loguru import logger
 
 import tarfile
 import requests
-from PIL import Image
+from PIL import Image, ImageOps
 from vlmrun.constants import VLMRUN_TMP_DIR, VLMRUN_CACHE_DIR
 from vlmrun.common.image import _open_image_with_exif
 
@@ -53,6 +53,10 @@ def remote_image(url: Union[str, Path]) -> Image.Image:
         response = requests.get(url, headers=_HEADERS, timeout=10)
         response.raise_for_status()
         image = Image.open(BytesIO(response.content))
+        try:
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            pass
         return image.convert("RGB")
     except requests.exceptions.RequestException:
         # Let request exceptions propagate through
@@ -126,6 +130,10 @@ def download_artifact(
     if format == "image":
         bytes = requests.get(url, headers=_HEADERS).content
         image = Image.open(BytesIO(bytes))
+        try:
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            pass
         return image.convert("RGB")
     elif format == "json":
         return requests.get(url, headers=_HEADERS).json()
