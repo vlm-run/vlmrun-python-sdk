@@ -8,6 +8,7 @@ from rich import print as rprint
 
 from vlmrun.client import VLMRun
 from vlmrun.client.types import PredictionResponse
+from vlmrun.common.image import _open_image_with_exif
 
 app = typer.Typer(help="Generation operations", no_args_is_help=True)
 
@@ -27,7 +28,7 @@ def image(
     if not Path(image).is_file():
         raise typer.Abort(f"Image file does not exist: {image}")
 
-    img: Image.Image = Image.open(image)
+    img: Image.Image = _open_image_with_exif(image)
     response: PredictionResponse = client.image.generate(images=[img], domain=domain)
     rprint(response)
 

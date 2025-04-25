@@ -9,6 +9,7 @@ import numpy as np
 import io
 import base64
 from pathlib import Path
+from vlmrun.common.image import _open_image_with_exif
 
 DEFAULT_BOX_COLOR = (255, 0, 0)
 DEFAULT_BOX_THICKNESS = 2
@@ -182,7 +183,7 @@ def ensure_image(image: ImageType) -> Image.Image:
     """
     if isinstance(image, (str, Path)):
         try:
-            return Image.open(image)
+            return _open_image_with_exif(image)
         except Exception as e:
             raise ValueError(f"Failed to load image from path: {e}")
 

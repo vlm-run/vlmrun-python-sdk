@@ -8,8 +8,9 @@ from loguru import logger
 
 import tarfile
 import requests
-from PIL import Image
+from PIL import Image, ImageOps
 from vlmrun.constants import VLMRUN_TMP_DIR, VLMRUN_CACHE_DIR
+from vlmrun.common.image import _open_image_with_exif
 
 
 # HTTP request headers
@@ -44,14 +45,19 @@ def remote_image(url: Union[str, Path]) -> Image.Image:
     """
     if isinstance(url, Path) or (isinstance(url, str) and not url.startswith("http")):
         try:
-            return Image.open(url).convert("RGB")
+            return _open_image_with_exif(url)
         except Exception as e:
             raise ValueError(f"Failed to open image from path={url}") from e
 
     try:
         response = requests.get(url, headers=_HEADERS, timeout=10)
         response.raise_for_status()
-        return Image.open(BytesIO(response.content)).convert("RGB")
+        image = Image.open(BytesIO(response.content))
+        try:
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            pass
+        return image.convert("RGB")
     except requests.exceptions.RequestException:
         # Let request exceptions propagate through
         raise
@@ -123,7 +129,12 @@ def download_artifact(
         raise ValueError(f"Invalid URL: {url}")
     if format == "image":
         bytes = requests.get(url, headers=_HEADERS).content
-        return Image.open(BytesIO(bytes)).convert("RGB")
+        image = Image.open(BytesIO(bytes))
+        try:
+            image = ImageOps.exif_transpose(image)
+        except Exception:
+            pass
+        return image.convert("RGB")
     elif format == "json":
         return requests.get(url, headers=_HEADERS).json()
     elif format == "file":
