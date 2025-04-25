@@ -9,7 +9,7 @@ from loguru import logger
 
 import time
 from tqdm import tqdm
-from vlmrun.common.image import encode_image
+from vlmrun.common.image import encode_image, _open_image_with_exif
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
@@ -157,7 +157,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             if not all(isinstance(image, image_type) for image in images):
                 raise ValueError("All images must be of the same type")
             if isinstance(images[0], Path):
-                images = [Image.open(str(image)) for image in images]
+                images = [_open_image_with_exif(str(image)) for image in images]
             elif isinstance(images[0], Image.Image):
                 pass
             else:
@@ -270,7 +270,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             if not all(isinstance(image, image_type) for image in images):
                 raise ValueError("All images must be of the same type")
             if isinstance(images[0], Path):
-                images = [Image.open(str(image)) for image in images]
+                images = [_open_image_with_exif(str(image)) for image in images]
             elif isinstance(images[0], Image.Image):
                 pass
             else:

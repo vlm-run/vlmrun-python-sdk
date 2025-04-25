@@ -17,7 +17,7 @@ from vlmrun.client.types import (
     RequestMetadata,
 )
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.common.image import encode_image, encode_video
+from vlmrun.common.image import encode_image, encode_video, _open_image_with_exif
 
 
 def _check_file_paths(paths: List[Union[Path, str]]):
@@ -178,7 +178,7 @@ class Finetuning:
                 raise ValueError("All images must be of the same type")
             if isinstance(images[0], Path):
                 _check_file_paths(images)
-                images = [Image.open(str(image)) for image in images]
+                images = [_open_image_with_exif(str(image)) for image in images]
                 images_payload = [
                     encode_image(image, format="JPEG") for image in images
                 ]
