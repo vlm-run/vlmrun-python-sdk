@@ -34,7 +34,7 @@ class APIError(VLMRunError):
             parts.append(f"type={self.error_type}")
         if self.request_id:
             parts.append(f"id={self.request_id}")
-        
+
         formatted = f"[{', '.join(parts)}] {self.message}"
         if self.suggestion:
             formatted += f" (Suggestion: {self.suggestion})"
@@ -74,7 +74,9 @@ class RateLimitError(APIError):
     headers: Dict[str, str] = field(default_factory=dict)
     request_id: Optional[str] = None
     error_type: str = "rate_limit_error"
-    suggestion: str = "Reduce request frequency or contact support to increase your rate limit"
+    suggestion: str = (
+        "Reduce request frequency or contact support to increase your rate limit"
+    )
 
 
 @dataclass
@@ -114,7 +116,7 @@ class ClientError(VLMRunError):
         parts = []
         if self.error_type:
             parts.append(f"type={self.error_type}")
-        
+
         formatted = f"[{', '.join(parts)}] {self.message}"
         if self.suggestion:
             formatted += f" (Suggestion: {self.suggestion})"
@@ -149,20 +151,24 @@ class InputError(ClientError):
 
 
 @dataclass
-class TimeoutError(VLMRunError):
+class RequestTimeoutError(APIError):
     """Exception raised when a request times out."""
 
     message: str = "Request timed out"
+    http_status: int = 408
+    headers: Dict[str, str] = field(default_factory=dict)
+    request_id: Optional[str] = None
     error_type: str = "timeout_error"
     suggestion: str = "Try again later or increase the timeout"
 
-    def __str__(self) -> str:
-        """Return string representation of error."""
-        parts = []
-        if self.error_type:
-            parts.append(f"type={self.error_type}")
-        
-        formatted = f"[{', '.join(parts)}] {self.message}"
-        if self.suggestion:
-            formatted += f" (Suggestion: {self.suggestion})"
-        return formatted
+
+@dataclass
+class NetworkError(APIError):
+    """Exception raised when a network error occurs."""
+
+    message: str = "Network error"
+    http_status: Optional[int] = None
+    headers: Dict[str, str] = field(default_factory=dict)
+    request_id: Optional[str] = None
+    error_type: str = "network_error"
+    suggestion: str = "Check your internet connection and try again"

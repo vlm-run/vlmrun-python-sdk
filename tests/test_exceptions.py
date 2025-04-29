@@ -1,9 +1,5 @@
 """Tests for the exceptions module."""
 
-import pytest
-import requests
-from unittest.mock import MagicMock, patch
-
 from vlmrun.client.exceptions import (
     VLMRunError,
     APIError,
@@ -16,9 +12,9 @@ from vlmrun.client.exceptions import (
     ConfigurationError,
     DependencyError,
     InputError,
-    TimeoutError,
+    RequestTimeoutError,
+    NetworkError,
 )
-from vlmrun.client.base_requestor import APIRequestor
 
 
 def test_vlmrun_error():
@@ -164,11 +160,28 @@ def test_input_error():
 
 
 def test_timeout_error():
-    """Test TimeoutError."""
-    error = TimeoutError()
+    """Test RequestTimeoutError."""
+    error = RequestTimeoutError()
     assert error.message == "Request timed out"
+    assert error.http_status == 408
     assert error.error_type == "timeout_error"
     assert "Try again later" in error.suggestion
 
-    error = TimeoutError(message="Operation timed out")
+    error = RequestTimeoutError(message="Operation timed out")
     assert error.message == "Operation timed out"
+    assert error.http_status == 408
+
+    assert isinstance(error, APIError)
+
+
+def test_network_error():
+    """Test NetworkError."""
+    error = NetworkError()
+    assert error.message == "Network error"
+    assert error.error_type == "network_error"
+    assert "Check your internet connection" in error.suggestion
+
+    error = NetworkError(message="Connection failed")
+    assert error.message == "Connection failed"
+
+    assert isinstance(error, APIError)
