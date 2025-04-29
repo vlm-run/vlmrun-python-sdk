@@ -2,7 +2,6 @@
 
 from typing import Any, Dict, Tuple, TYPE_CHECKING, Union, Optional
 from urllib.parse import urljoin
-from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
@@ -15,25 +14,22 @@ from tenacity import (
     wait_exponential,
 )
 
+from vlmrun.client.exceptions import (
+    APIError,
+    AuthenticationError,
+    ValidationError,
+    RateLimitError,
+    ServerError,
+    ResourceNotFoundError,
+    RequestTimeoutError,
+    NetworkError,
+)
+
 # Constants
 DEFAULT_TIMEOUT = 30.0  # seconds
-MAX_RETRIES = 5
+DEFAULT_MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 1  # seconds
 MAX_RETRY_DELAY = 10  # seconds
-
-
-@dataclass
-class APIError(Exception):
-    """Base exception for API errors."""
-
-    message: str
-    http_status: Optional[int] = None
-    headers: Optional[Dict[str, str]] = None
-
-    def __post_init__(self):
-        super().__init__(self.message)
-        if self.headers is None:
-            self.headers = {}
 
 
 class APIRequestor:
@@ -44,6 +40,7 @@ class APIRequestor:
         client: "VLMRunProtocol",
         base_url: Optional[str] = None,
         timeout: float = DEFAULT_TIMEOUT,
+        max_retries: Optional[int] = None,
     ) -> None:
         """Initialize API requestor.
 
@@ -51,21 +48,18 @@ class APIRequestor:
             client: VLMRun API instance
             base_url: Base URL for API
             timeout: Request timeout in seconds
+            max_retries: Maximum number of retry attempts
         """
         self._client = client
         self._base_url = base_url or client.base_url
         self._timeout = timeout
+        self._max_retries = (
+            max_retries
+            if max_retries is not None
+            else getattr(client, "max_retries", DEFAULT_MAX_RETRIES)
+        )
         self._session = requests.Session()
 
-    @retry(
-        retry=retry_if_exception_type(
-            (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
-        ),
-        wait=wait_exponential(
-            multiplier=INITIAL_RETRY_DELAY, min=INITIAL_RETRY_DELAY, max=MAX_RETRY_DELAY
-        ),
-        stop=stop_after_attempt(MAX_RETRIES),
-    )
     def request(
         self,
         method: str,
@@ -95,48 +89,135 @@ class APIRequestor:
             Tuple of (response_data, status_code, response_headers)
 
         Raises:
-            APIError: If request fails
+            AuthenticationError: If authentication fails
+            ValidationError: If request validation fails
+            RateLimitError: If rate limit is exceeded
+            ResourceNotFoundError: If resource is not found
+            ServerError: If server returns 5xx error
+            APIError: For other API errors
+            RequestTimeoutError: If request times out
+            NetworkError: If a network error occurs
         """
-        if not headers:
-            headers = {}
+        retry_decorator = retry(
+            retry=retry_if_exception_type(
+                (
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError,
+                    ServerError,
+                    RequestTimeoutError,
+                    NetworkError,
+                )
+            ),
+            wait=wait_exponential(
+                multiplier=INITIAL_RETRY_DELAY,
+                min=INITIAL_RETRY_DELAY,
+                max=MAX_RETRY_DELAY,
+            ),
+            stop=stop_after_attempt(self._max_retries),
+        )
 
-        # Add authorization
-        if self._client.api_key:
-            headers["Authorization"] = f"Bearer {self._client.api_key}"
+        _headers = {} if headers is None else headers.copy()
 
-        # Build full URL
-        full_url = urljoin(self._base_url.rstrip("/") + "/", url.lstrip("/"))
+        @retry_decorator
+        def _request_with_retry():
+            # Add authorization
+            if self._client.api_key:
+                _headers["Authorization"] = f"Bearer {self._client.api_key}"
 
-        try:
-            response = self._session.request(
-                method=method,
-                url=full_url,
-                params=params,
-                json=data,
-                files=files,
-                headers=headers,
-                timeout=timeout or self._timeout,
-            )
+            # Build full URL
+            full_url = urljoin(self._base_url.rstrip("/") + "/", url.lstrip("/"))
 
-            response.raise_for_status()
+            try:
+                response = self._session.request(
+                    method=method,
+                    url=full_url,
+                    params=params,
+                    json=data,
+                    files=files,
+                    headers=_headers,
+                    timeout=timeout or self._timeout,
+                )
 
-            if raw_response:
-                return response.content, response.status_code, dict(response.headers)
-            return response.json(), response.status_code, dict(response.headers)
+                response.raise_for_status()
 
-        except requests.exceptions.RequestException as e:
-            if isinstance(e, requests.exceptions.HTTPError):
-                # Try to get error details from response
-                try:
-                    error_data = e.response.json()
-                    message = error_data.get("error", {}).get("message", str(e))
-                except Exception:
-                    message = str(e)
+                if raw_response:
+                    return (
+                        response.content,
+                        response.status_code,
+                        dict(response.headers),
+                    )
+                return response.json(), response.status_code, dict(response.headers)
 
-                raise APIError(
-                    message=message,
-                    http_status=e.response.status_code,
-                    headers=dict(e.response.headers),
-                ) from e
+            except requests.exceptions.RequestException as e:
+                if isinstance(e, requests.exceptions.HTTPError):
+                    # Extract error details from response
+                    try:
+                        error_data = e.response.json()
+                        error_obj = error_data.get("error", {})
+                        message = error_obj.get("message", str(e))
+                        error_type = error_obj.get("type")
+                        request_id = error_obj.get("id")
+                    except Exception:
+                        message = str(e)
+                        error_type = None
+                        request_id = None
 
-            raise APIError(str(e)) from e
+                    status_code = e.response.status_code
+                    headers = dict(e.response.headers)
+
+                    if status_code == 401:
+                        raise AuthenticationError(
+                            message=message,
+                            http_status=status_code,
+                            headers=headers,
+                            request_id=request_id,
+                            error_type=error_type,
+                        ) from e
+                    elif status_code == 400:
+                        raise ValidationError(
+                            message=message,
+                            http_status=status_code,
+                            headers=headers,
+                            request_id=request_id,
+                            error_type=error_type,
+                        ) from e
+                    elif status_code == 404:
+                        raise ResourceNotFoundError(
+                            message=message,
+                            http_status=status_code,
+                            headers=headers,
+                            request_id=request_id,
+                            error_type=error_type,
+                        ) from e
+                    elif status_code == 429:
+                        raise RateLimitError(
+                            message=message,
+                            http_status=status_code,
+                            headers=headers,
+                            request_id=request_id,
+                            error_type=error_type,
+                        ) from e
+                    elif 500 <= status_code < 600:
+                        raise ServerError(
+                            message=message,
+                            http_status=status_code,
+                            headers=headers,
+                            request_id=request_id,
+                            error_type=error_type,
+                        ) from e
+                    else:
+                        raise APIError(
+                            message=message,
+                            http_status=status_code,
+                            headers=headers,
+                            request_id=request_id,
+                            error_type=error_type,
+                        ) from e
+                elif isinstance(e, requests.exceptions.Timeout):
+                    raise RequestTimeoutError(f"Request timed out: {str(e)}") from e
+                elif isinstance(e, requests.exceptions.ConnectionError):
+                    raise NetworkError(f"Connection error: {str(e)}") from e
+                else:
+                    raise APIError(str(e)) from e
+
+        return _request_with_retry()

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import os
 from functools import cached_property
-from typing import Optional, List, Type, Union
+from typing import Optional, List, Type
 from pydantic import BaseModel
 
 from vlmrun.version import __version__
@@ -24,6 +24,7 @@ from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
+from vlmrun.client.exceptions import DependencyError, ConfigurationError
 
 
 @dataclass
@@ -35,7 +36,8 @@ class VLMRun:
             or VLMRUN_API_KEY environment variable.
         base_url: Base URL for API. Defaults to None, which falls back to
             VLMRUN_BASE_URL environment variable or https://api.vlm.run/v1.
-        timeout: Request timeout in seconds. Defaults to 30.0.
+        timeout: Request timeout in seconds. Defaults to 120.0.
+        max_retries: Maximum number of retry attempts for failed requests. Defaults to 5.
         files: Files resource for managing files
         models: Models resource for accessing available models
         finetune: Fine-tuning resource for model fine-tuning
@@ -44,6 +46,7 @@ class VLMRun:
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     timeout: float = 120.0
+    max_retries: int = 5
 
     def __post_init__(self):
         """Initialize the client after dataclass initialization.
@@ -56,13 +59,15 @@ class VLMRun:
         if not self.api_key:  # Handle both None and empty string
             self.api_key = os.getenv("VLMRUN_API_KEY", None)
             if not self.api_key:  # Still None or empty after env check
-                raise ValueError(
-                    "Missing API key. Please provide your VLM Run API key:\n\n"
+                raise ConfigurationError(
+                    message="Missing API key",
+                    error_type="missing_api_key",
+                    suggestion="Please provide your VLM Run API key:\n\n"
                     "1. Set it in your code:\n"
                     "   client = VLMRun(api_key='your-api-key')\n\n"
                     "2. Or set the environment variable:\n"
                     "   export VLMRUN_API_KEY='your-api-key'\n\n"
-                    "Get your API key at https://app.vlm.run/dashboard"
+                    "Get your API key at https://app.vlm.run/dashboard",
                 )
 
         # Handle base URL
@@ -96,7 +101,7 @@ class VLMRun:
     @cached_property
     def requestor(self):
         """Requestor for the API."""
-        return APIRequestor(self)
+        return APIRequestor(self, timeout=self.timeout, max_retries=self.max_retries)
 
     @cached_property
     def openai(self):
@@ -104,9 +109,10 @@ class VLMRun:
         try:
             from openai import OpenAI as _OpenAI
         except ImportError:
-            raise ImportError(
-                "OpenAI client is not installed. Please install it with "
-                "`pip install openai`"
+            raise DependencyError(
+                message="OpenAI client is not installed",
+                suggestion="Install it with `pip install openai`",
+                error_type="missing_dependency",
             )
 
         return _OpenAI(api_key=self.api_key, base_url=f"{self.base_url}/openai")
@@ -118,11 +124,15 @@ class VLMRun:
         )
         return status_code == 200
 
-    def get_type(self, domain: str, config: Optional[GenerationConfig] = None) -> Type[BaseModel]:
+    def get_type(
+        self, domain: str, config: Optional[GenerationConfig] = None
+    ) -> Type[BaseModel]:
         """Get the type for a domain."""
         return self.get_schema(domain, config=config).response_model
 
-    def get_schema(self, domain: str, config: Optional[GenerationConfig] = None) -> SchemaResponse:
+    def get_schema(
+        self, domain: str, config: Optional[GenerationConfig] = None
+    ) -> SchemaResponse:
         """Get the schema for a domain.
 
         Args:
