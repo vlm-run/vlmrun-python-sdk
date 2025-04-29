@@ -177,6 +177,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
     def execute(
         self,
         name: str,
+        version: str = "latest",
         images: Optional[List[Union[Path, Image.Image]]] = None,
         urls: Optional[List[str]] = None,
         batch: bool = False,
@@ -189,6 +190,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
 
         Args:
             name: Name of the model to use
+            version: Version of the model to use
             images: List of file paths (Path) or PIL Image objects to process. Either images or urls must be provided.
             urls: List of HTTP URLs pointing to images. Either images or urls must be provided.
             batch: Whether to run prediction in batch mode
@@ -213,6 +215,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             url="image/execute",
             data={
                 "name": name,
+                "version": version,
                 "images": images_data,
                 "batch": batch,
                 "callback_url": callback_url,
