@@ -104,6 +104,8 @@ class APIRequestor:
                     requests.exceptions.Timeout,
                     requests.exceptions.ConnectionError,
                     ServerError,
+                    RequestTimeoutError,
+                    NetworkError,
                 )
             ),
             wait=wait_exponential(
