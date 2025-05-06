@@ -12,6 +12,7 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+    RetryError,
 )
 
 from vlmrun.client.exceptions import (
@@ -106,6 +107,7 @@ class APIRequestor:
                     ServerError,
                     RequestTimeoutError,
                     NetworkError,
+                    RateLimitError,
                 )
             ),
             wait=wait_exponential(
@@ -220,4 +222,45 @@ class APIRequestor:
                 else:
                     raise APIError(str(e)) from e
 
-        return _request_with_retry()
+        try:
+            return _request_with_retry()
+        except RetryError as e:
+            return self._handle_retry_error(e)
+
+    def _handle_retry_error(self, e: RetryError) -> None:
+        """Handle RetryError by extracting and raising the appropriate exception.
+
+        Args:
+            e: The RetryError to handle
+
+        Raises:
+            AuthenticationError: If authentication fails
+            ValidationError: If request validation fails
+            RateLimitError: If rate limit is exceeded
+            ResourceNotFoundError: If resource is not found
+            ServerError: If server returns 5xx error
+            RequestTimeoutError: If request times out
+            NetworkError: If a network error occurs
+            APIError: For other API errors
+        """
+        # Extract the last exception from the retry error
+        last_exception = e.last_attempt.exception()
+
+        # Preserve all our custom error types
+        if isinstance(
+            last_exception,
+            (
+                AuthenticationError,
+                ValidationError,
+                RateLimitError,
+                ResourceNotFoundError,
+                ServerError,
+                RequestTimeoutError,
+                NetworkError,
+            ),
+        ):
+            raise last_exception
+        else:
+            raise APIError(
+                f"Request failed after {self._max_retries} retries: {str(last_exception)}"
+            ) from last_exception
