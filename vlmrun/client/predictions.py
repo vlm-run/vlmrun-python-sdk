@@ -116,20 +116,32 @@ class Predictions:
             raise TypeError("Expected dict response")
         return PredictionResponse(**response)
 
-    def wait(self, id: str, timeout: int = 60, sleep: int = 1) -> PredictionResponse:
+    def wait(self, id: str, timeout: int = 300, sleep: int = 5) -> PredictionResponse:
         """Wait for prediction to complete.
 
         Args:
             id: ID of prediction to wait for
-            timeout: Timeout in seconds
-            sleep: Sleep time in seconds
+            timeout: Maximum number of seconds to wait
+            sleep: Time to wait between checks in seconds (default: 5)
+
+        Returns:
+            PredictionResponse: Completed prediction
+
+        Raises:
+            TimeoutError: If prediction does not complete within timeout
         """
-        for _ in tqdm(range(timeout), desc="Waiting for prediction to complete"):
+        iterations = timeout // sleep
+        for _ in tqdm(range(iterations), desc="Waiting for prediction to complete"):
             response: PredictionResponse = self.get(id)
             if response.status == "completed":
                 return response
             time.sleep(sleep)
-        raise TimeoutError(f"Prediction {id} did not complete within {timeout} seconds")
+
+        # If we get here, we timed out
+        last_response = self.get(id)
+        raise TimeoutError(
+            f"Prediction {id} did not complete within {timeout} seconds. Last status: {last_response.status}"
+        )
 
 
 class ImagePredictions(SchemaCastMixin, Predictions):

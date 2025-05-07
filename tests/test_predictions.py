@@ -3,7 +3,12 @@
 import pytest
 from pydantic import BaseModel
 from PIL import Image
-from vlmrun.client.types import PredictionResponse, GenerationConfig, SchemaResponse
+from vlmrun.client.types import (
+    PredictionResponse,
+    GenerationConfig,
+    SchemaResponse,
+    CreditUsage,
+)
 
 
 class MockInvoiceSchema(BaseModel):
@@ -33,12 +38,127 @@ def test_get_prediction(mock_client):
     assert response.status == "running"
 
 
-def test_wait_prediction(mock_client):
+def test_wait_prediction(mock_client, monkeypatch):
     """Test waiting for prediction completion."""
     client = mock_client
+
+    def mock_get(id):
+        return PredictionResponse(
+            id=id,
+            status="completed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            response={"result": "test"},
+            usage=CreditUsage(credits_used=100),
+        )
+
+    # Mock time.sleep to do nothing
+    def mock_sleep(seconds):
+        pass
+
+    monkeypatch.setattr(client.predictions, "get", mock_get)
+    monkeypatch.setattr("time.sleep", mock_sleep)
+
     response = client.predictions.wait("prediction1", timeout=1)
     assert isinstance(response, PredictionResponse)
     assert response.id == "prediction1"
+    assert response.status == "completed"
+
+
+def test_wait_prediction_timeout(mock_client, monkeypatch):
+    """Test waiting for prediction with timeout."""
+    client = mock_client
+
+    # Mock get to always return running status
+    def mock_get(id):
+        return PredictionResponse(
+            id=id,
+            status="running",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at=None,
+            response=None,
+            usage=CreditUsage(credits_used=0),
+        )
+
+    # Mock time.sleep to do nothing
+    def mock_sleep(seconds):
+        pass
+
+    monkeypatch.setattr(client.predictions, "get", mock_get)
+    monkeypatch.setattr("time.sleep", mock_sleep)
+
+    # Test timeout
+    with pytest.raises(TimeoutError) as exc_info:
+        client.predictions.wait("prediction1", timeout=10, sleep=2)
+    assert "did not complete within 10 seconds" in str(exc_info.value)
+    assert "Last status: running" in str(exc_info.value)
+
+
+def test_wait_prediction_polling(mock_client, monkeypatch):
+    """Test waiting for prediction with different polling intervals."""
+    client = mock_client
+
+    # Track number of calls to get
+    call_count = 0
+
+    def mock_get(id):
+        nonlocal call_count
+        call_count += 1
+        # Return completed on third call
+        if call_count == 3:
+            return PredictionResponse(
+                id=id,
+                status="completed",
+                created_at="2024-01-01T00:00:00+00:00",
+                completed_at="2024-01-01T00:00:01+00:00",
+                response={"result": "test"},
+                usage=CreditUsage(credits_used=100),
+            )
+        return PredictionResponse(
+            id=id,
+            status="running",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at=None,
+            response=None,
+            usage=CreditUsage(credits_used=0),
+        )
+
+    # Mock time.sleep to do nothing
+    def mock_sleep(seconds):
+        pass
+
+    monkeypatch.setattr(client.predictions, "get", mock_get)
+    monkeypatch.setattr("time.sleep", mock_sleep)
+
+    # Test with 2 second sleep
+    response = client.predictions.wait("prediction1", timeout=10, sleep=2)
+    assert response.status == "completed"
+    assert call_count == 3  # Should have called get 3 times
+
+
+def test_wait_prediction_immediate_completion(mock_client, monkeypatch):
+    """Test waiting for prediction that completes immediately."""
+    client = mock_client
+
+    def mock_get(id):
+        return PredictionResponse(
+            id=id,
+            status="completed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            response={"result": "test"},
+            usage=CreditUsage(credits_used=100),
+        )
+
+    # Mock time.sleep to do nothing
+    def mock_sleep(seconds):
+        pass
+
+    monkeypatch.setattr(client.predictions, "get", mock_get)
+    monkeypatch.setattr("time.sleep", mock_sleep)
+
+    # Should return immediately without sleeping
+    response = client.predictions.wait("prediction1", timeout=10, sleep=2)
     assert response.status == "completed"
 
 
