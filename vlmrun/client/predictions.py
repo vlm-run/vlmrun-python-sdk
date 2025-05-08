@@ -8,7 +8,6 @@ from PIL import Image
 from loguru import logger
 
 import time
-from tqdm import tqdm
 from vlmrun.common.image import encode_image, _open_image_with_exif
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -116,20 +115,33 @@ class Predictions:
             raise TypeError("Expected dict response")
         return PredictionResponse(**response)
 
-    def wait(self, id: str, timeout: int = 60, sleep: int = 1) -> PredictionResponse:
+    def wait(self, id: str, timeout: int = 300, sleep: int = 5) -> PredictionResponse:
         """Wait for prediction to complete.
 
         Args:
             id: ID of prediction to wait for
-            timeout: Timeout in seconds
-            sleep: Sleep time in seconds
+            timeout: Maximum number of seconds to wait
+            sleep: Time to wait between checks in seconds (default: 5)
+
+        Returns:
+            PredictionResponse: Completed prediction
+
+        Raises:
+            TimeoutError: If prediction does not complete within timeout
         """
-        for _ in tqdm(range(timeout), desc="Waiting for prediction to complete"):
+        start_time = time.time()
+        while True:
             response: PredictionResponse = self.get(id)
             if response.status == "completed":
                 return response
-            time.sleep(sleep)
-        raise TimeoutError(f"Prediction {id} did not complete within {timeout} seconds")
+
+            elapsed = time.time() - start_time
+            if elapsed >= timeout:
+                raise TimeoutError(
+                    f"Prediction {id} did not complete within {timeout} seconds. Last status: {response.status}"
+                )
+
+            time.sleep(min(sleep, timeout - elapsed))
 
 
 class ImagePredictions(SchemaCastMixin, Predictions):
