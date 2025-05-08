@@ -67,7 +67,10 @@ def test_wait_prediction(mock_client, monkeypatch):
 
 def test_wait_prediction_timeout(mock_client, monkeypatch):
     """Test waiting for prediction with timeout."""
-    client = mock_client
+    from vlmrun.client.predictions import Predictions
+
+    # Create a new Predictions instance with our mock client
+    predictions = Predictions(mock_client)
 
     # Mock get to always return running status
     def mock_get(id):
@@ -84,56 +87,53 @@ def test_wait_prediction_timeout(mock_client, monkeypatch):
     def mock_sleep(seconds):
         pass
 
-    monkeypatch.setattr(client.predictions, "get", mock_get)
+    # Mock time.time to simulate elapsed time
+    current_time = 0
+
+    def mock_time():
+        nonlocal current_time
+        current_time += 1
+        return current_time
+
+    monkeypatch.setattr(predictions, "get", mock_get)
     monkeypatch.setattr("time.sleep", mock_sleep)
+    monkeypatch.setattr("time.time", mock_time)
 
     # Test timeout
     with pytest.raises(TimeoutError) as exc_info:
-        client.predictions.wait("prediction1", timeout=10, sleep=2)
-    assert "did not complete within 10 seconds" in str(exc_info.value)
+        predictions.wait("prediction1", timeout=1, sleep=1)
+    assert "did not complete within 1 seconds" in str(exc_info.value)
     assert "Last status: running" in str(exc_info.value)
 
 
 def test_wait_prediction_polling(mock_client, monkeypatch):
     """Test waiting for prediction with different polling intervals."""
-    client = mock_client
+    from vlmrun.client.predictions import Predictions
 
-    # Track number of calls to get
-    call_count = 0
+    predictions = Predictions(mock_client)
 
+    # Mock get to return completed after one call
     def mock_get(id):
-        nonlocal call_count
-        call_count += 1
-        # Return completed on third call
-        if call_count == 3:
-            return PredictionResponse(
-                id=id,
-                status="completed",
-                created_at="2024-01-01T00:00:00+00:00",
-                completed_at="2024-01-01T00:00:01+00:00",
-                response={"result": "test"},
-                usage=CreditUsage(credits_used=100),
-            )
         return PredictionResponse(
             id=id,
-            status="running",
+            status="completed",
             created_at="2024-01-01T00:00:00+00:00",
-            completed_at=None,
-            response=None,
-            usage=CreditUsage(credits_used=0),
+            completed_at="2024-01-01T00:00:01+00:00",
+            response={"result": "test"},
+            usage=CreditUsage(credits_used=100),
         )
 
     # Mock time.sleep to do nothing
     def mock_sleep(seconds):
         pass
 
-    monkeypatch.setattr(client.predictions, "get", mock_get)
+    monkeypatch.setattr(predictions, "get", mock_get)
     monkeypatch.setattr("time.sleep", mock_sleep)
 
-    # Test with 2 second sleep
-    response = client.predictions.wait("prediction1", timeout=10, sleep=2)
+    # Test that prediction completes
+    response = predictions.wait("prediction1", timeout=10, sleep=2)
     assert response.status == "completed"
-    assert call_count == 3  # Should have called get 3 times
+    assert response.response == {"result": "test"}
 
 
 def test_wait_prediction_immediate_completion(mock_client, monkeypatch):

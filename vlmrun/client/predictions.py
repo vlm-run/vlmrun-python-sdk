@@ -8,7 +8,6 @@ from PIL import Image
 from loguru import logger
 
 import time
-from tqdm import tqdm
 from vlmrun.common.image import encode_image, _open_image_with_exif
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -130,18 +129,19 @@ class Predictions:
         Raises:
             TimeoutError: If prediction does not complete within timeout
         """
-        iterations = timeout // sleep
-        for _ in tqdm(range(iterations), desc="Waiting for prediction to complete"):
+        start_time = time.time()
+        while True:
             response: PredictionResponse = self.get(id)
             if response.status == "completed":
                 return response
-            time.sleep(sleep)
 
-        # If we get here, we timed out
-        last_response = self.get(id)
-        raise TimeoutError(
-            f"Prediction {id} did not complete within {timeout} seconds. Last status: {last_response.status}"
-        )
+            elapsed = time.time() - start_time
+            if elapsed >= timeout:
+                raise TimeoutError(
+                    f"Prediction {id} did not complete within {timeout} seconds. Last status: {response.status}"
+                )
+
+            time.sleep(min(sleep, timeout - elapsed))
 
 
 class ImagePredictions(SchemaCastMixin, Predictions):
