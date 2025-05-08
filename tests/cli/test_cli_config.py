@@ -1,6 +1,16 @@
 """Test config subcommand."""
 
+import pytest
+from unittest.mock import patch
 from vlmrun.cli.cli import app
+
+
+@pytest.fixture(autouse=True)
+def mock_health_check():
+    """Mock the health check request in VLMRun client initialization."""
+    with patch("vlmrun.client.client.APIRequestor.request") as mock_request:
+        mock_request.return_value = (None, 200, {})
+        yield mock_request
 
 
 def test_show_empty_config(runner, config_file):

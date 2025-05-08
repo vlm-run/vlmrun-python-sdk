@@ -24,7 +24,11 @@ from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
-from vlmrun.client.exceptions import DependencyError, ConfigurationError
+from vlmrun.client.exceptions import (
+    DependencyError,
+    ConfigurationError,
+    AuthenticationError,
+)
 
 
 @dataclass
@@ -73,6 +77,29 @@ class VLMRun:
         # Handle base URL
         if self.base_url is None:
             self.base_url = os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)
+
+        # Initialize requestor for API key validation
+        requestor = APIRequestor(
+            self, timeout=self.timeout, max_retries=self.max_retries
+        )
+
+        # Validate API key by making a health check request
+        try:
+            _, status_code, _ = requestor.request(
+                method="GET", url="/health", raw_response=True
+            )
+            if status_code != 200:
+                raise AuthenticationError(
+                    message="Invalid API key",
+                    error_type="invalid_api_key",
+                    suggestion="Please check your API key and ensure it is valid. You can get your API key at https://app.vlm.run/dashboard",
+                )
+        except AuthenticationError as e:
+            raise AuthenticationError(
+                message="Invalid API key",
+                error_type="invalid_api_key",
+                suggestion="Please check your API key and ensure it is valid. You can get your API key at https://app.vlm.run/dashboard",
+            ) from e
 
         # Initialize resources
         self.datasets = Datasets(self)
