@@ -153,8 +153,12 @@ class APIRequestor:
                     # Extract error details from response
                     try:
                         error_data = e.response.json()
+                        # First try to get error from error object
                         error_obj = error_data.get("error", {})
-                        message = error_obj.get("message", str(e))
+                        message = error_obj.get("message")
+                        # If not found, try to get detail directly
+                        if message is None:
+                            message = error_data.get("detail", str(e))
                         error_type = error_obj.get("type")
                         request_id = error_obj.get("id")
                     except Exception:
