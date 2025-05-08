@@ -1,5 +1,8 @@
 """Tests for the exceptions module."""
 
+import pytest
+from tenacity import RetryError
+
 from vlmrun.client.exceptions import (
     VLMRunError,
     APIError,
@@ -15,6 +18,7 @@ from vlmrun.client.exceptions import (
     RequestTimeoutError,
     NetworkError,
 )
+from vlmrun.client.base_requestor import APIRequestor
 
 
 def test_vlmrun_error():
@@ -185,3 +189,48 @@ def test_network_error():
     assert error.message == "Connection failed"
 
     assert isinstance(error, APIError)
+
+
+def test_retry_error_handling():
+    """Test that RetryError is properly handled and converts to appropriate exceptions."""
+
+    # Create a mock client
+    class MockClient:
+        def __init__(self):
+            self.api_key = "test-key"
+            self.base_url = "https://api.test"
+            self.max_retries = 3
+
+    client = MockClient()
+    requestor = APIRequestor(client)
+
+    # Test all our custom error types are preserved
+    error_types = [
+        (AuthenticationError("Invalid API key"), "Invalid API key"),
+        (ValidationError("Invalid parameter"), "Invalid parameter"),
+        (RateLimitError("Too many requests"), "Too many requests"),
+        (ResourceNotFoundError("Resource not found"), "Resource not found"),
+        (ServerError("Server is down"), "Server is down"),
+        (RequestTimeoutError("Request timed out"), "Request timed out"),
+        (NetworkError("Connection failed"), "Connection failed"),
+    ]
+
+    for error, expected_message in error_types:
+        retry_error = RetryError(
+            last_attempt=type("obj", (object,), {"exception": lambda: error})
+        )
+
+        with pytest.raises(type(error)) as exc_info:
+            requestor._handle_retry_error(retry_error)
+        assert exc_info.value.message == expected_message
+
+    # Test unknown error wrapping
+    unknown_error = Exception("Unknown error")
+    retry_error = RetryError(
+        last_attempt=type("obj", (object,), {"exception": lambda: unknown_error})
+    )
+
+    with pytest.raises(APIError) as exc_info:
+        requestor._handle_retry_error(retry_error)
+    assert "Request failed after 3 retries" in exc_info.value.message
+    assert "Unknown error" in exc_info.value.message
