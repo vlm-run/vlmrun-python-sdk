@@ -18,8 +18,6 @@ from vlmrun.client.types import (
     CreditUsage,
 )
 
-import time
-
 
 class MockInvoiceSchema(BaseModel):
     invoice_number: str
@@ -162,17 +160,13 @@ def mock_client(monkeypatch):
                 )
 
             def wait(self, prediction_id, timeout=60, sleep=1):
-                iterations = timeout // sleep
-                for _ in range(iterations):
-                    response = self.get(prediction_id)
-                    if response.status == "completed":
-                        return response
-                    time.sleep(sleep)
-
-                # If we get here, we timed out
-                last_response = self.get(prediction_id)
-                raise TimeoutError(
-                    f"Prediction {prediction_id} did not complete within {timeout} seconds. Last status: {last_response.status}"
+                return PredictionResponse(
+                    id=prediction_id,
+                    status="completed",
+                    created_at="2024-01-01T00:00:00+00:00",
+                    completed_at="2024-01-01T00:00:01+00:00",
+                    response={"result": "test"},
+                    usage=CreditUsage(credits_used=100),
                 )
 
         class Files:
