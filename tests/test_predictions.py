@@ -8,6 +8,7 @@ from vlmrun.client.types import (
     GenerationConfig,
     SchemaResponse,
     CreditUsage,
+    MarkdownPage,
 )
 
 
@@ -398,3 +399,85 @@ def test_schema_casting_across_prediction_types(mock_client, prediction_type):
         )
 
     assert isinstance(response.response, BaseModel)
+
+
+def test_document_markdown_automatic_casting(mock_client, monkeypatch):
+    """Test automatic casting of document.markdown responses to MarkdownPage."""
+
+    client = mock_client
+
+    # Mock response data for a markdown document
+    mock_response = {
+        "content": "# Test Document\n\nThis is a test document.",
+        "markdown_content": "# Test Document\n\nThis is a test document.",
+        "tables": [
+            {
+                "id": 1,
+                "headers": ["Header 1", "Header 2"],
+                "data": [["Value 1", "Value 2"]],
+            }
+        ],
+        "figures": [
+            {
+                "id": 1,
+                "title": "Test Figure",
+                "caption": "Test Caption",
+                "content": "Test content",
+            }
+        ],
+    }
+
+    # Mock the generate method to return our test response and handle casting
+    def mock_generate(domain=None, **kwargs):
+        prediction = PredictionResponse(
+            id="test-prediction",
+            status="completed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            response=(
+                mock_response
+                if domain == "document.markdown"
+                else {"invoice_number": "INV-001", "total_amount": 100.0}
+            ),
+            usage=CreditUsage(credits_used=100),
+        )
+
+        # Handle casting based on domain
+        if (
+            domain == "document.markdown"
+            and prediction.status == "completed"
+            and prediction.response
+        ):
+            prediction.response = MarkdownPage(**prediction.response)
+        elif kwargs.get("autocast", False):
+            prediction.response = MockInvoiceSchema(**prediction.response)
+
+        return prediction
+
+    monkeypatch.setattr(client.document, "generate", mock_generate)
+
+    # Test with autocast=False (default)
+    response = client.document.generate(domain="document.markdown", file="test.pdf")
+    assert isinstance(response, PredictionResponse)
+    assert isinstance(response.response, MarkdownPage)
+    assert response.response.content == "# Test Document\n\nThis is a test document."
+    assert len(response.response.tables) == 1
+    assert len(response.response.figures) == 1
+
+    # Test with autocast=True (should still work the same way)
+    response = client.document.generate(
+        domain="document.markdown", file="test.pdf", autocast=True
+    )
+    assert isinstance(response, PredictionResponse)
+    assert isinstance(response.response, MarkdownPage)
+    assert response.response.content == "# Test Document\n\nThis is a test document."
+    assert len(response.response.tables) == 1
+    assert len(response.response.figures) == 1
+
+    # Test with a different domain (should not cast to MarkdownPage)
+    response = client.document.generate(
+        domain="document.invoice", file="test.pdf", autocast=False
+    )
+    assert isinstance(response, PredictionResponse)
+    assert not isinstance(response.response, MarkdownPage)
+    assert isinstance(response.response, dict)
