@@ -53,6 +53,7 @@ class PredictionResponse(BaseModel):
     response: Optional[Any] = None
     status: JobStatus
     usage: CreditUsage
+    domain: Optional[str] = None
 
 
 class ModelInfo(BaseModel):
