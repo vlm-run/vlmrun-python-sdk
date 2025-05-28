@@ -34,6 +34,15 @@ class FileResponse(BaseModel):
     created_at: datetime
     object: str = "file"
 
+class PresignedUrlResponse(BaseModel):
+    id: Optional[str]
+    url: Optional[str]
+    filename: Optional[str]
+    expiration: Optional[int]
+    method: Optional[str]
+    content_type: Optional[str]
+    created_at: datetime
+
 
 class CreditUsage(BaseModel):
     elements_processed: Optional[int] = None
