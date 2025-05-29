@@ -17,6 +17,7 @@ from vlmrun.client.types import (
     GenerationConfig,
     RequestMetadata,
     SchemaResponse,
+    MarkdownDocument,
 )
 from typing import Type
 from pydantic import BaseModel
@@ -113,7 +114,20 @@ class Predictions:
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
-        return PredictionResponse(**response)
+        prediction = PredictionResponse(**response)
+
+        # Always cast document.markdown responses to MarkdownDocument
+        if (
+            prediction.domain == "document.markdown"
+            and prediction.status == "completed"
+            and prediction.response
+        ):
+            try:
+                prediction.response = MarkdownDocument(**prediction.response)
+            except Exception as e:
+                logger.warning(f"Failed to cast response to MarkdownDocument: {e}")
+
+        return prediction
 
     def wait(self, id: str, timeout: int = 300, sleep: int = 5) -> PredictionResponse:
         """Wait for prediction to complete.
@@ -454,7 +468,18 @@ def FilePredictions(route: str):
                 raise TypeError("Expected dict response")
             prediction = PredictionResponse(**response)
 
-            if autocast:
+            # Always cast document.markdown responses to MarkdownDocument
+            if (
+                domain == "document.markdown"
+                and prediction.status == "completed"
+                and prediction.response
+            ):
+                try:
+                    prediction.response = MarkdownDocument(**prediction.response)
+                except Exception as e:
+                    logger.warning(f"Failed to cast response to MarkdownDocument: {e}")
+            # Handle other domains with autocast
+            elif autocast:
                 self._cast_response_to_schema(prediction, domain, config)
             return prediction
 
