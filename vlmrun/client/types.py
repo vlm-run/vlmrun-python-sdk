@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic.dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, Literal, Optional, Type, List
+from typing import Dict, Any, Literal, Optional, Type, List, Tuple
 from vlmrun.hub.utils import jsonschema_to_model
-from textwrap import dedent
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.panel import Panel
-from loguru import logger
+import math
+import pandas as pd
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
@@ -162,107 +159,161 @@ class MarkdownPageMetadata(BaseModel):
     )
 
 
+def replace_nan_recursive_fast(obj):
+    """Replace NaN values with empty strings recursively."""
+    _isnan = math.isnan
+    _float = float
+    _dict = dict
+    _list = list
+    _isinstance = isinstance
+
+    def _replace(o):
+        if _isinstance(o, _dict):
+            return {k: _replace(v) for k, v in o.items()}
+        elif _isinstance(o, _list):
+            return [_replace(v) for v in o]
+        elif _isinstance(o, _float) and _isnan(o):
+            return ""
+        return o
+
+    return _replace(obj)
+
+
+class BoxCoords(BaseModel):
+    """Bounding box coordinates."""
+
+    xywh: List[float]
+
+    @property
+    def xyxy(self) -> List[float]:
+        x, y, w, h = self.xywh
+        return [x, y, x + w, y + h]
+
+
+class TableCell(BaseModel):
+    """A table cell with layout information."""
+
+    content: str
+    bbox: Optional[BoxCoords] = None
+    index: Tuple[int, int]
+    span: Optional[Tuple[Optional[int], Optional[int]]] = None
+
+
+class TableHeader(BaseModel):
+    """A table header with column information."""
+
+    id: str
+    column: int
+    name: str
+    dtype: Optional[
+        Literal[
+            "str",
+            "int",
+            "float",
+            "bool",
+            "date",
+            "datetime",
+            "time",
+            "timedelta",
+            "duration",
+            "currency",
+            "percentage",
+            "enum",
+        ]
+    ] = None
+
+
+class TableMetadata(BaseModel):
+    """Metadata for a table."""
+
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class MarkdownTable(BaseModel):
     """A table in the document."""
 
-    id: int = Field(
-        ..., description="The reference id of the table, starting from 'tb-<number>'."
-    )
-    data: List[List[str]] = Field(
-        ..., description="The table data as a 2D array of strings"
-    )
-    headers: List[str] = Field(..., description="The table headers")
+    metadata: Optional[TableMetadata] = Field(default_factory=TableMetadata)
+    content: Optional[str] = None
+    headers: List[TableHeader]
+    data: Optional[List[dict]] = None
+    bbox: Optional[BoxCoords] = None
+    cells: Optional[List[TableCell]] = None
+
+    def __str__(self):
+        """Return a string representation of the markdown table."""
+        return self.to_dataframe(header="name").to_markdown()
+
+    @model_validator(mode="after")
+    def validate_metadata(self):
+        """Ensure metadata is not None."""
+        if self.metadata is None:
+            self.metadata = TableMetadata()
+        return self
+
+    def to_dataframe(
+        self, header: Literal["id", "name", "none"] = "id"
+    ) -> pd.DataFrame:
+        """Convert the table to a pandas DataFrame."""
+        try:
+            self.data = replace_nan_recursive_fast(self.data)
+
+            if not self.data:
+                return pd.DataFrame()
+
+            df = pd.DataFrame.from_records(self.data)
+
+            if header == "id":
+                df.columns = [h.id for h in self.headers]
+            elif header == "name":
+                df.columns = [h.name for h in self.headers]
+                if len(df.columns) != len(set(df.columns)):
+                    return self.to_dataframe(header="id")
+            elif header == "none":
+                df.columns = [h.id for h in self.headers]
+            else:
+                raise ValueError(f"Invalid header type: {header}")
+            return df
+        except Exception:
+            return pd.DataFrame()
 
     def render(self) -> str:
         """Render the table as a markdown table."""
-        # Create header row
-        header = "| " + " | ".join(self.headers) + " |"
-        # Create separator row
-        separator = "| " + " | ".join(["---"] * len(self.headers)) + " |"
-        # Create data rows
-        rows = ["| " + " | ".join(row) + " |" for row in self.data]
-        # Combine all rows
-        return "\n".join([header, separator] + rows)
+        return self.to_dataframe(header="name").to_markdown()
 
 
 class MarkdownFigure(BaseModel):
     """A figure such as an image, bar chart, line chart, pie chart, etc."""
 
-    id: int = Field(
-        ..., description="The reference id of the figure, starting from 'fg-<number>'."
-    )
-    title: Optional[str] = Field(
-        default=None, description="Title of the figure, if any, otherwise None."
-    )
-    caption: Optional[str] = Field(
-        default=None, description="Caption of the figure, if any, otherwise None."
-    )
-    content: Optional[str] = Field(
-        default=None, description="The best-attempt at describing the figure."
-    )
+    id: int
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    content: Optional[str] = None
 
     def render(self) -> str:
         """Replace all <Figure> blocks with their rendered markdown content."""
-        return dedent(f"""<Figure id="fg-{self.id}"/>\n\n{self.content or ''}""")
-
-
-class MarkdownBlock(BaseModel):
-    """A markdown block such as a paragraph, heading, entire list, etc."""
-
-    content: str = Field(..., description="The content of the markdown block.")
-
-
-class MarkdownCode(BaseModel):
-    """A code block."""
-
-    id: int = Field(
-        ...,
-        description="The reference id of the code block, starting from 'cd-<number>'.",
-    )
-    language: str = Field(
-        ...,
-        description="The language of the code block (e.g. 'python', 'javascript', 'bash', 'sql', etc.).",
-    )
-    content: str = Field(..., description="The content of the code block.")
-
-
-class MarkdownDiagram(BaseModel):
-    """A diagram block represented as a Mermaid block."""
-
-    id: int = Field(
-        ..., description="The reference id of the diagram, starting from 'dg-<number>'."
-    )
-    content: str = Field(..., description="The content of the diagram.")
+        return f"""<Figure id="fg-{self.id}"/>\n\n{self.content or ''}"""
 
 
 class MarkdownPage(BaseModel):
-    """Represents a markdown document page with its content and metadata."""
+    """A markdown document page."""
 
-    content: str = Field(
-        ..., description="The Github-Flavored markdown content of the document page"
-    )
-    markdown_content: Optional[str] = Field(
-        None, description="The rendered markdown content of the document page"
-    )
-    tables: Optional[list[MarkdownTable]] = Field(
-        None, description="List of tables in the document, if any, otherwise None"
-    )
-    figures: Optional[list[MarkdownFigure]] = Field(
-        None,
-        description="List of figures, images, charts, or diagrams in the document, if any, otherwise None. Do NOT include tables in this list",
-    )
+    content: str
+    markdown_content: Optional[str] = None
+    tables: Optional[List[MarkdownTable]] = None
+    figures: Optional[List[MarkdownFigure]] = None
 
     def __str__(self):
         """Return a string representation of the markdown page."""
-        # Use the rendered markdown content if available, otherwise render it
         content = self.markdown_content or self.render()
+        return content
 
-        # Format the content with rich formatting if available
-        console = Console(record=True, width=240)
-        md = Markdown(content)
-        panel = Panel(md, border_style="blue", title="Markdown Content")
-        console.print(panel)
-        return console.export_text()
+    @model_validator(mode="after")
+    def render_markdown(self):
+        """Render the markdown content of the document page."""
+        self.markdown_content = self.render()
+        return self
 
     def render(self) -> str:
         """Replace all <Table> and <Figure> blocks with their rendered markdown content."""
@@ -271,28 +322,60 @@ class MarkdownPage(BaseModel):
         if self.tables:
             for id, table in enumerate(self.tables):
                 table_placeholder = f'<Table id="tb-{id}"/>'
-                # Check if the table placeholder exists in the markdown content
                 if table_placeholder in rendered_content:
                     rendered_content = rendered_content.replace(
                         table_placeholder, table.render()
                     )
                 else:
-                    logger.warning(
-                        f"Table placeholder {table_placeholder} not found in the markdown content."
-                    )
                     rendered_content = rendered_content + table.render()
 
         if self.figures:
             for figure in self.figures:
                 figure_placeholder = f'<Figure id="fg-{figure.id}"/>'
-                # Check if the figure placeholder exists in the markdown content
                 if figure_placeholder in rendered_content:
                     rendered_content = rendered_content.replace(
                         figure_placeholder, figure.render()
                     )
-                else:
-                    logger.warning(
-                        f"Figure placeholder {figure_placeholder} not found in the markdown content."
-                    )
 
         return rendered_content
+
+
+class MarkdownDocument(BaseModel):
+    """A markdown document containing multiple pages."""
+
+    pages: List[MarkdownPage]
+
+    def __str__(self):
+        """Return a string representation of the markdown document."""
+        return "\n\n---PAGE BREAK---\n\n".join(str(page) for page in self.pages)
+
+    def __getitem__(self, index: int) -> MarkdownPage:
+        """Get a page by index."""
+        return self.pages[index]
+
+    def __len__(self) -> int:
+        """Get the number of pages."""
+        return len(self.pages)
+
+    @property
+    def content(self) -> str:
+        """Get all content concatenated."""
+        return "\n\n---PAGE BREAK---\n\n".join(page.content for page in self.pages)
+
+    @property
+    def all_tables(self) -> List[MarkdownTable]:
+        """Get all tables from all pages."""
+        tables = []
+        for page in self.pages:
+            if page.tables:
+                tables.extend(page.tables)
+        return tables
+
+    @property
+    def all_figures(self) -> List[MarkdownFigure]:
+        """Get all figures from all pages."""
+        figures = []
+        for page in self.pages:
+            if page.figures:
+                figures.extend(page.figures)
+        return figures
