@@ -96,7 +96,9 @@ class Hub:
         except Exception as e:
             raise APIError(f"Failed to list domains: {str(e)}")
 
-    def get_schema(self, domain: str, gql_stmt: Optional[str] = None) -> HubSchemaResponse:
+    def get_schema(
+        self, domain: str, gql_stmt: Optional[str] = None
+    ) -> HubSchemaResponse:
         """Get the JSON schema for a given domain.
 
         Args:

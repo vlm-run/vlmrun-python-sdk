@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import requests
 import time
 import hashlib
 from pathlib import Path
@@ -93,6 +94,7 @@ class Files:
         method: Literal["auto", "direct", "presigned-url"] = "auto",
         timeout: int = 3 * 60,
         expiration: int = 24 * 60 * 60,
+        force: bool = False,
     ) -> FileResponse:
         """Upload a file.
 
@@ -102,6 +104,7 @@ class Files:
             timeout: Timeout for upload (default: 3 minutes)
             method: Method to use for upload (default: "auto")
             expiration: Expiration time for presigned URL (default: 24 hours)
+            force: Force upload even if file already exists (default: False)
 
         Returns:
             FileResponse: Uploaded file object
@@ -120,7 +123,7 @@ class Files:
 
         # Check if the file already exists in the database
         cached_response: Optional[FileResponse] = self.get_cached_file(file)
-        if cached_response:
+        if cached_response and not force:
             return cached_response
 
         # If method is "auto", check if the file is too large to upload directly
@@ -137,7 +140,11 @@ class Files:
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url="files/presigned-url",
-                params={"purpose": purpose, "filename": file.name, "expiration": expiration},
+                data={
+                    "filename": file.name,
+                    "purpose": purpose,
+                    "expiration": expiration,
+                },
             )
             if not isinstance(response, dict):
                 raise TypeError("Expected dict response")
@@ -145,18 +152,30 @@ class Files:
 
             # PUT the file to the presigned URL
             start_t = time.time()
-            logger.debug(f"Uploading file to presigned URL [file={file}, id={response.id}, url={response.url}]")
-            with open(file, "rb") as f:
-                response, status_code, headers = self._requestor.request(
-                    method="PUT",
-                    url=response.url,
-                    data=f,
+            logger.debug(
+                f"Uploading file to presigned URL [file={file}, id={response.id}, url={response.url}]"
+            )
+            with file.open("rb") as f:
+                put_response = requests.put(
+                    response.url,
                     headers={"Content-Type": response.content_type},
+                    data=f,
                 )
+                status_code = put_response.status_code
             end_t = time.time()
-            logger.debug(f"Uploaded file to presigned URL [file={file}, url={response.url}, time={end_t - start_t}s]")
+            logger.debug(
+                f"Uploaded file to presigned URL [file={file}, url={response.url}, time={end_t - start_t:.1f}s]"
+            )
             if status_code == 200:
-                return FileResponse(**response)
+                # Verify the file upload
+                verify_response, status_code, headers = self._requestor.request(
+                    method="GET",
+                    url=f"files/verify-upload/{response.id}",
+                )
+                if status_code == 200:
+                    return FileResponse(**verify_response)
+                else:
+                    raise Exception(f"Failed to verify file upload: {verify_response}")
             else:
                 raise Exception(f"Failed to upload file to presigned URL: {response}")
 
@@ -173,7 +192,7 @@ class Files:
                     files=files,
                     timeout=timeout,
                 )
-            if status_code == 200:
+            if status_code == 201:
                 if not isinstance(response, dict):
                     raise TypeError("Expected dict response")
                 return FileResponse(**response)

@@ -34,6 +34,7 @@ class FileResponse(BaseModel):
     created_at: datetime
     object: str = "file"
 
+
 class PresignedUrlResponse(BaseModel):
     id: Optional[str]
     url: Optional[str]

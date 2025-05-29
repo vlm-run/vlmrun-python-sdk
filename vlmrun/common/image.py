@@ -12,10 +12,10 @@ from vlmrun.constants import SUPPORTED_VIDEO_FILETYPES
 
 def _open_image_with_exif(path: Union[str, Path]) -> Image.Image:
     """Open an image and apply EXIF orientation if available.
-    
+
     Args:
         path: Path to the image file
-        
+
     Returns:
         PIL Image with EXIF orientation applied and converted to RGB
     """
