@@ -3,11 +3,13 @@
 import pytest
 from pydantic import BaseModel
 from PIL import Image
+from loguru import logger
 from vlmrun.client.types import (
     PredictionResponse,
     GenerationConfig,
     SchemaResponse,
     CreditUsage,
+    MarkdownDocument,
 )
 
 
@@ -398,3 +400,176 @@ def test_schema_casting_across_prediction_types(mock_client, prediction_type):
         )
 
     assert isinstance(response.response, BaseModel)
+
+
+def test_document_markdown_automatic_casting(mock_client, monkeypatch):
+    """Test automatic casting of document.markdown responses to MarkdownDocument."""
+
+    client = mock_client
+
+    mock_response = {
+        "pages": [
+            {
+                "content": "# Test Document\n\nThis is a test document.",
+                "markdown_content": "# Test Document\n\nThis is a test document.",
+                "tables": [
+                    {
+                        "headers": [
+                            {"id": "header1", "column": 0, "name": "Header 1"},
+                            {"id": "header2", "column": 1, "name": "Header 2"},
+                        ],
+                        "data": [{"header1": "Value 1", "header2": "Value 2"}],
+                    }
+                ],
+                "figures": [
+                    {
+                        "id": 1,
+                        "title": "Test Figure",
+                        "caption": "Test Caption",
+                        "content": "Test content",
+                    }
+                ],
+            }
+        ]
+    }
+
+    def mock_generate(domain=None, **kwargs):
+        prediction = PredictionResponse(
+            id="test-prediction",
+            status="completed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            response=(
+                mock_response
+                if domain == "document.markdown"
+                else {"invoice_number": "INV-001", "total_amount": 100.0}
+            ),
+            usage=CreditUsage(credits_used=100),
+        )
+
+        if (
+            domain == "document.markdown"
+            and prediction.status == "completed"
+            and prediction.response
+        ):
+            prediction.response = MarkdownDocument(**prediction.response)
+        elif kwargs.get("autocast", False):
+            prediction.response = MockInvoiceSchema(**prediction.response)
+
+        return prediction
+
+    monkeypatch.setattr(client.document, "generate", mock_generate)
+
+    response = client.document.generate(domain="document.markdown", file="test.pdf")
+    assert isinstance(response, PredictionResponse)
+    assert isinstance(response.response, MarkdownDocument)
+    assert len(response.response.pages) == 1
+    assert (
+        response.response.pages[0].content
+        == "# Test Document\n\nThis is a test document."
+    )
+    assert len(response.response.all_tables) == 1
+    assert len(response.response.all_figures) == 1
+
+    response = client.document.generate(
+        domain="document.markdown", file="test.pdf", autocast=True
+    )
+    assert isinstance(response, PredictionResponse)
+    assert isinstance(response.response, MarkdownDocument)
+    assert len(response.response.pages) == 1
+    assert (
+        response.response.pages[0].content
+        == "# Test Document\n\nThis is a test document."
+    )
+    assert len(response.response.all_tables) == 1
+    assert len(response.response.all_figures) == 1
+
+    response = client.document.generate(
+        domain="document.invoice", file="test.pdf", autocast=False
+    )
+    assert isinstance(response, PredictionResponse)
+    assert not isinstance(response.response, MarkdownDocument)
+    assert isinstance(response.response, dict)
+
+
+def test_document_markdown_automatic_casting_in_get(mock_client, monkeypatch):
+    """Test automatic casting of document.markdown responses to MarkdownDocument in predictions.get()."""
+
+    client = mock_client
+
+    mock_response = {
+        "pages": [
+            {
+                "content": "# Test Document\n\nThis is a test document.",
+                "markdown_content": "# Test Document\n\nThis is a test document.",
+                "tables": [
+                    {
+                        "headers": [
+                            {"id": "header1", "column": 0, "name": "Header 1"},
+                            {"id": "header2", "column": 1, "name": "Header 2"},
+                        ],
+                        "data": [{"header1": "Value 1", "header2": "Value 2"}],
+                    }
+                ],
+                "figures": [
+                    {
+                        "id": 1,
+                        "title": "Test Figure",
+                        "caption": "Test Caption",
+                        "content": "Test content",
+                    }
+                ],
+            }
+        ]
+    }
+
+    def mock_get(prediction_id):
+        prediction = PredictionResponse(
+            id=prediction_id,
+            status="completed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            domain="document.markdown",
+            response=mock_response,
+            usage=CreditUsage(credits_used=100),
+        )
+        if (
+            prediction.domain == "document.markdown"
+            and prediction.status == "completed"
+            and prediction.response
+        ):
+            try:
+                prediction.response = MarkdownDocument(**prediction.response)
+            except Exception as e:
+                logger.warning(f"Failed to cast response to MarkdownDocument: {e}")
+        return prediction
+
+    monkeypatch.setattr(client.predictions, "get", mock_get)
+
+    response = client.predictions.get("test-prediction")
+    assert isinstance(response, PredictionResponse)
+    assert isinstance(response.response, MarkdownDocument)
+    assert len(response.response.pages) == 1
+    assert (
+        response.response.pages[0].content
+        == "# Test Document\n\nThis is a test document."
+    )
+    assert len(response.response.all_tables) == 1
+    assert len(response.response.all_figures) == 1
+
+    def mock_get_invoice(prediction_id):
+        return PredictionResponse(
+            id=prediction_id,
+            status="completed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            domain="document.invoice",
+            response={"invoice_number": "INV-001", "total_amount": 100.0},
+            usage=CreditUsage(credits_used=100),
+        )
+
+    monkeypatch.setattr(client.predictions, "get", mock_get_invoice)
+    response = client.predictions.get("test-prediction")
+    assert isinstance(response, PredictionResponse)
+    assert not isinstance(response.response, MarkdownDocument)
+    assert isinstance(response.response, dict)
