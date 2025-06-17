@@ -469,8 +469,7 @@ def mock_client(monkeypatch):
                     offset=offset,
                 )
 
-            def get(self, request_id):
-                return self.list(request_id)
+
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()

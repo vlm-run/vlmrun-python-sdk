@@ -73,14 +73,3 @@ class Feedback:
             data=feedback_data.model_dump(exclude_none=True),
         )
         return FeedbackResponse(**response_data)
-
-    def get(self, request_id: str) -> FeedbackListResponse:
-        """Get feedback by request ID (alias for list method).
-
-        Args:
-            request_id: ID of the prediction request
-
-        Returns:
-            FeedbackListResponse: List of feedback items
-        """
-        return self.list(request_id)

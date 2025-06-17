@@ -28,10 +28,3 @@ def test_list_feedback(mock_client):
     assert isinstance(response, FeedbackListResponse)
     assert len(response.data) >= 0
     assert response.count >= 0
-
-
-def test_get_feedback(mock_client):
-    """Test getting feedback by ID (alias for list)."""
-    response = mock_client.feedback.get("prediction1")
-    assert isinstance(response, FeedbackListResponse)
-    assert len(response.data) >= 0
