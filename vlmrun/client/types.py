@@ -156,11 +156,6 @@ class FeedbackListResponse(BaseModel):
     offset: int
 
 
-class FeedbackListParams(BaseModel):
-    limit: int = 10
-    offset: int = 0
-
-
 class FeedbackSubmitResponse(BaseModel):
     id: str
     created_at: datetime
