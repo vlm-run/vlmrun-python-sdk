@@ -136,11 +136,37 @@ class FinetuningProvisionResponse(BaseModel):
     message: str
 
 
+class FeedbackCreateParams(BaseModel):
+    response: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    created_at: datetime
+    request_id: str
+    response: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+
+
+class FeedbackListResponse(BaseModel):
+    data: List["FeedbackResponse"]
+    count: int
+    limit: int
+    offset: int
+
+
+class FeedbackListParams(BaseModel):
+    limit: int = 10
+    offset: int = 0
+
+
 class FeedbackSubmitResponse(BaseModel):
     id: str
     created_at: datetime
     request_id: str
-    response: Any
+    response: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
 
 
 class GenerationConfig(BaseModel):

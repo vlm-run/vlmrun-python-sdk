@@ -1,11 +1,17 @@
 """VLM Run API Feedback resource."""
 
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.client.types import FeedbackSubmitResponse
+from vlmrun.client.types import (
+    FeedbackSubmitResponse,
+    FeedbackCreateParams,
+    FeedbackResponse,
+    FeedbackListResponse,
+    FeedbackListParams,
+)
 
 
 class Feedback:
@@ -18,47 +24,63 @@ class Feedback:
             client: VLM Run API instance
         """
         self._client = client
-        self._requestor = APIRequestor(
-            client, base_url=f"{client.base_url}/experimental"
+        self._requestor = APIRequestor(client)
+
+    def list(
+        self,
+        request_id: str,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> FeedbackListResponse:
+        """List feedback for a prediction request.
+
+        Args:
+            request_id: ID of the prediction request
+            limit: Maximum number of feedback items to return
+            offset: Number of feedback items to skip
+
+        Returns:
+            FeedbackListResponse: List of feedback items with pagination info
+        """
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url=f"feedback/{request_id}",
+            params={"limit": limit, "offset": offset},
         )
+        return FeedbackListResponse(**response)
 
     def submit(
         self,
-        id: str,
-        label: Optional[BaseModel] = None,
+        request_id: str,
+        response: Optional[Dict[str, Any]] = None,
         notes: Optional[str] = None,
-        flag: Optional[bool] = None,
-    ) -> FeedbackSubmitResponse:
-        """Create feedback for a prediction.
+    ) -> FeedbackResponse:
+        """Submit feedback for a prediction.
+
+        Args:
+            request_id: ID of the prediction request
+            response: Feedback response data
+            notes: Optional notes about the feedback
 
         Returns:
-            List[ModelResponse]: List of model objects with their capabilities
+            FeedbackResponse: Created feedback object
         """
-        if label is not None:
-            if not isinstance(label, BaseModel):
-                raise ValueError("label must be a Pydantic model")
-            label = label.model_dump()
-
-        response, status_code, headers = self._requestor.request(
+        feedback_data = FeedbackCreateParams(response=response, notes=notes)
+        
+        response_data, status_code, headers = self._requestor.request(
             method="POST",
-            url="feedback/submit",
-            data={
-                "request_id": id,
-                "response": label,
-                "notes": notes,
-                "flag": flag,
-            },
+            url=f"feedback/submit/{request_id}",
+            data=feedback_data.model_dump(exclude_none=True),
         )
+        return FeedbackResponse(**response_data)
 
-        return FeedbackSubmitResponse(**response)
+    def get(self, request_id: str) -> FeedbackListResponse:
+        """Get feedback by request ID (alias for list method).
 
-    def get(self, id: str) -> FeedbackSubmitResponse:
-        """Get feedback by request ID.
+        Args:
+            request_id: ID of the prediction request
 
         Returns:
-            FeedbackSubmitResponse: Feedback for a prediction
+            FeedbackListResponse: List of feedback items
         """
-        response, status_code, headers = self._requestor.request(
-            method="GET", url=f"feedback/{id}"
-        )
-        return FeedbackSubmitResponse(**response)
+        return self.list(request_id)

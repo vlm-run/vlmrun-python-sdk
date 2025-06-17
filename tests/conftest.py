@@ -442,21 +442,35 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def submit(self, id, label=None, notes=None, flag=None):
-                return FeedbackSubmitResponse(
+            def submit(self, request_id, response=None, notes=None):
+                from vlmrun.client.types import FeedbackResponse
+                return FeedbackResponse(
                     id="feedback1",
-                    created_at="2024-01-01T00:00:00Z",
-                    request_id=id,
-                    response=label,
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    request_id=request_id,
+                    response=response,
+                    notes=notes,
                 )
 
-            def get(self, id):
-                return FeedbackSubmitResponse(
-                    id="feedback1",
-                    created_at="2024-01-01T00:00:00Z",
-                    request_id=id,
-                    response=None,
+            def list(self, request_id, limit=10, offset=0):
+                from vlmrun.client.types import FeedbackListResponse, FeedbackResponse
+                return FeedbackListResponse(
+                    data=[
+                        FeedbackResponse(
+                            id="feedback1",
+                            created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                            request_id=request_id,
+                            response={"score": 5},
+                            notes="Test feedback",
+                        )
+                    ],
+                    count=1,
+                    limit=limit,
+                    offset=offset,
                 )
+
+            def get(self, request_id):
+                return self.list(request_id)
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()
