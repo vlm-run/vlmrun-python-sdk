@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
-    FeedbackSubmitResponse,
     FeedbackCreateParams,
     FeedbackResponse,
     FeedbackListResponse,

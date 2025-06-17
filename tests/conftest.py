@@ -14,7 +14,6 @@ from vlmrun.client.types import (
     HubDomainInfo,
     FileResponse,
     PredictionResponse,
-    FeedbackSubmitResponse,
     CreditUsage,
 )
 

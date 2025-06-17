@@ -1,7 +1,7 @@
 """Tests for feedback operations."""
 
 from pydantic import BaseModel
-from vlmrun.client.types import FeedbackSubmitResponse, FeedbackResponse, FeedbackListResponse
+from vlmrun.client.types import FeedbackResponse, FeedbackListResponse
 
 
 class TestLabel(BaseModel):

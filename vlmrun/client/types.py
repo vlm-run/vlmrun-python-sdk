@@ -156,14 +156,6 @@ class FeedbackListResponse(BaseModel):
     offset: int
 
 
-class FeedbackSubmitResponse(BaseModel):
-    id: str
-    created_at: datetime
-    request_id: str
-    response: Optional[Dict[str, Any]] = None
-    notes: Optional[str] = None
-
-
 class GenerationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None)
     response_model: Optional[Type[BaseModel]] = Field(default=None)
