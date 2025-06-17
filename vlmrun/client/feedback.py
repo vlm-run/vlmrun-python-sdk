@@ -10,7 +10,6 @@ from vlmrun.client.types import (
     FeedbackCreateParams,
     FeedbackResponse,
     FeedbackListResponse,
-    FeedbackListParams,
 )
 
 
