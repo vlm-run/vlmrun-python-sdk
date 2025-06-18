@@ -1,7 +1,7 @@
 """Tests for feedback operations."""
 
 from pydantic import BaseModel
-from vlmrun.client.types import FeedbackResponse, FeedbackListResponse
+from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
 
 
 class TestLabel(BaseModel):
@@ -18,13 +18,14 @@ def test_submit_feedback(mock_client):
         response={"score": 5, "comment": "Great prediction!"}, 
         notes="Test feedback"
     )
-    assert isinstance(response, FeedbackResponse)
-    assert response.id == "feedback1"
+    assert isinstance(response, FeedbackSubmitResponse)
+    assert response.request_id == "prediction1"
+    assert len(response.items) > 0
 
 
 def test_list_feedback(mock_client):
     """Test listing feedback for a prediction."""
     response = mock_client.feedback.list("prediction1", limit=5, offset=0)
-    assert isinstance(response, FeedbackListResponse)
-    assert len(response.data) >= 0
-    assert response.count >= 0
+    assert isinstance(response, FeedbackSubmitResponse)
+    assert response.request_id == "prediction1"
+    assert len(response.items) >= 0

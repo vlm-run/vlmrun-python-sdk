@@ -136,24 +136,25 @@ class FinetuningProvisionResponse(BaseModel):
     message: str
 
 
-class FeedbackCreateParams(BaseModel):
-    response: Optional[Dict[str, Any]] = None
-    notes: Optional[str] = None
+class FeedbackSubmitRequest(BaseModel):
+    """Request model for submitting feedback."""
+    request_id: str = Field(..., description="The unique identifier for the request.")
+    response: Optional[Dict[str, Any]] = Field(None, description="The updated response for the request.")
+    notes: Optional[str] = Field(None, description="The notes for the feedback.")
 
 
-class FeedbackResponse(BaseModel):
-    id: str
-    created_at: datetime
-    request_id: str
-    response: Optional[Dict[str, Any]] = None
-    notes: Optional[str] = None
+class FeedbackItem(BaseModel):
+    """Individual feedback item."""
+    id: str = Field(..., description="The unique identifier for the feedback.")
+    created_at: datetime = Field(..., description="Date and time when the feedback was submitted (in UTC timezone)")
+    response: Optional[Dict[str, Any]] = Field(None, description="The updated response for the request.")
+    notes: Optional[str] = Field(None, description="The notes for the feedback.")
 
 
-class FeedbackListResponse(BaseModel):
-    data: List["FeedbackResponse"]
-    count: int
-    limit: int
-    offset: int
+class FeedbackSubmitResponse(BaseModel):
+    """Response model for feedback operations."""
+    request_id: str = Field(..., description="The request ID for which the feedback is being submitted.")
+    items: List[FeedbackItem] = Field(..., description="The list of feedback items for the request.")
 
 
 class GenerationConfig(BaseModel):

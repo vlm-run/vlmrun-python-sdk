@@ -6,9 +6,9 @@ from pydantic import BaseModel
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
-    FeedbackCreateParams,
-    FeedbackResponse,
-    FeedbackListResponse,
+    FeedbackSubmitRequest,
+    FeedbackItem,
+    FeedbackSubmitResponse,
 )
 
 
@@ -29,7 +29,7 @@ class Feedback:
         request_id: str,
         limit: int = 10,
         offset: int = 0,
-    ) -> FeedbackListResponse:
+    ) -> FeedbackSubmitResponse:
         """List feedback for a prediction request.
 
         Args:
@@ -38,21 +38,21 @@ class Feedback:
             offset: Number of feedback items to skip
 
         Returns:
-            FeedbackListResponse: List of feedback items with pagination info
+            FeedbackSubmitResponse: Response with list of feedback items
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"feedback/{request_id}",
+            url=f"v1/feedback/{request_id}",
             params={"limit": limit, "offset": offset},
         )
-        return FeedbackListResponse(**response)
+        return FeedbackSubmitResponse(**response)
 
     def submit(
         self,
         request_id: str,
         response: Optional[Dict[str, Any]] = None,
         notes: Optional[str] = None,
-    ) -> FeedbackResponse:
+    ) -> FeedbackSubmitResponse:
         """Submit feedback for a prediction.
 
         Args:
@@ -61,13 +61,17 @@ class Feedback:
             notes: Optional notes about the feedback
 
         Returns:
-            FeedbackResponse: Created feedback object
+            FeedbackSubmitResponse: Response with submitted feedback
         """
-        feedback_data = FeedbackCreateParams(response=response, notes=notes)
+        feedback_data = FeedbackSubmitRequest(
+            request_id=request_id,
+            response=response, 
+            notes=notes
+        )
         
         response_data, status_code, headers = self._requestor.request(
             method="POST",
-            url=f"feedback/submit/{request_id}",
+            url="v1/feedback/submit",
             data=feedback_data.model_dump(exclude_none=True),
         )
-        return FeedbackResponse(**response_data)
+        return FeedbackSubmitResponse(**response_data)
