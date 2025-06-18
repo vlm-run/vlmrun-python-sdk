@@ -1,13 +1,12 @@
 """VLM Run API Feedback resource."""
 
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
     FeedbackSubmitRequest,
-    FeedbackItem,
+    FeedbackListResponse,
     FeedbackSubmitResponse,
 )
 
@@ -27,54 +26,54 @@ class Feedback:
     def get(
         self,
         request_id: str,
-        limit: int = 10,
         offset: int = 0,
-    ) -> FeedbackSubmitResponse:
+        limit: int = 10,
+    ) -> FeedbackListResponse:
         """Get feedback for a prediction request.
 
         Args:
             request_id: ID of the prediction request
-            limit: Maximum number of feedback items to return
             offset: Number of feedback items to skip
+            limit: Maximum number of feedback items to return
 
         Returns:
-            FeedbackSubmitResponse: Response with list of feedback items
+            FeedbackListResponse: Response with list of feedback items
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"v1/feedback/{request_id}",
-            params={"limit": limit, "offset": offset},
+            url=f"feedback/{request_id}",
+            params={"offset": offset, "limit": limit},
         )
-        return FeedbackSubmitResponse(**response)
+        return FeedbackListResponse(**response)
 
     def submit(
         self,
         request_id: str,
-        response: Dict[str, Any],
+        response: Optional[Dict[str, Any]] = None,
         notes: Optional[str] = None,
     ) -> FeedbackSubmitResponse:
         """Submit feedback for a prediction.
 
         Args:
             request_id: ID of the prediction request
-            response: Feedback response data
+            response: Optional feedback response data
             notes: Optional notes about the feedback
 
         Returns:
             FeedbackSubmitResponse: Response with submitted feedback
         """
-        if response is None:
-            raise ValueError("response parameter is required and cannot be None")
-            
+        if response is None and notes is None:
+            raise ValueError(
+                "`response` or `notes` parameter is required and cannot be None"
+            )
+
         feedback_data = FeedbackSubmitRequest(
-            request_id=request_id,
-            response=response, 
-            notes=notes
+            request_id=request_id, response=response, notes=notes
         )
-        
+
         response_data, status_code, headers = self._requestor.request(
             method="POST",
-            url="v1/feedback/submit",
+            url="feedback/submit",
             data=feedback_data.model_dump(exclude_none=True),
         )
         return FeedbackSubmitResponse(**response_data)

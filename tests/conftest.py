@@ -443,33 +443,37 @@ def mock_client(monkeypatch):
 
             def submit(self, request_id, response, notes=None):
                 from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
+
                 return FeedbackSubmitResponse(
                     request_id=request_id,
                     items=[
                         FeedbackItem(
                             id="feedback1",
-                            created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                            created_at=datetime.fromisoformat(
+                                "2024-01-01T00:00:00+00:00"
+                            ),
                             response=response,
                             notes=notes,
                         )
-                    ]
+                    ],
                 )
 
             def get(self, request_id, limit=10, offset=0):
                 from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
+
                 return FeedbackSubmitResponse(
                     request_id=request_id,
                     items=[
                         FeedbackItem(
                             id="feedback1",
-                            created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                            created_at=datetime.fromisoformat(
+                                "2024-01-01T00:00:00+00:00"
+                            ),
                             response={"score": 5},
                             notes="Test feedback",
                         )
-                    ]
+                    ],
                 )
-
-
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()
