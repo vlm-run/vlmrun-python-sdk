@@ -442,26 +442,20 @@ def mock_client(monkeypatch):
                 self._client = client
 
             def submit(self, request_id, response, notes=None):
-                from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
+                from vlmrun.client.types import FeedbackSubmitResponse
 
                 return FeedbackSubmitResponse(
                     request_id=request_id,
-                    items=[
-                        FeedbackItem(
-                            id="feedback1",
-                            created_at=datetime.fromisoformat(
-                                "2024-01-01T00:00:00+00:00"
-                            ),
-                            response=response,
-                            notes=notes,
-                        )
-                    ],
+                    id="feedback1",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    response=response,
+                    notes=notes,
                 )
 
             def get(self, request_id, limit=10, offset=0):
-                from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
+                from vlmrun.client.types import FeedbackListResponse, FeedbackItem
 
-                return FeedbackSubmitResponse(
+                return FeedbackListResponse(
                     request_id=request_id,
                     items=[
                         FeedbackItem(
