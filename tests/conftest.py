@@ -14,7 +14,6 @@ from vlmrun.client.types import (
     HubDomainInfo,
     FileResponse,
     PredictionResponse,
-    FeedbackSubmitResponse,
     CreditUsage,
 )
 
@@ -442,20 +441,32 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def submit(self, id, label=None, notes=None, flag=None):
+            def submit(self, request_id, response, notes=None):
+                from vlmrun.client.types import FeedbackSubmitResponse
+
                 return FeedbackSubmitResponse(
+                    request_id=request_id,
                     id="feedback1",
-                    created_at="2024-01-01T00:00:00Z",
-                    request_id=id,
-                    response=label,
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    response=response,
+                    notes=notes,
                 )
 
-            def get(self, id):
-                return FeedbackSubmitResponse(
-                    id="feedback1",
-                    created_at="2024-01-01T00:00:00Z",
-                    request_id=id,
-                    response=None,
+            def get(self, request_id, limit=10, offset=0):
+                from vlmrun.client.types import FeedbackListResponse, FeedbackItem
+
+                return FeedbackListResponse(
+                    request_id=request_id,
+                    items=[
+                        FeedbackItem(
+                            id="feedback1",
+                            created_at=datetime.fromisoformat(
+                                "2024-01-01T00:00:00+00:00"
+                            ),
+                            response={"score": 5},
+                            notes="Test feedback",
+                        )
+                    ],
                 )
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
