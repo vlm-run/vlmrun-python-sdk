@@ -441,7 +441,7 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def submit(self, request_id, response=None, notes=None):
+            def submit(self, request_id, response, notes=None):
                 from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
                 return FeedbackSubmitResponse(
                     request_id=request_id,
@@ -455,7 +455,7 @@ def mock_client(monkeypatch):
                     ]
                 )
 
-            def list(self, request_id, limit=10, offset=0):
+            def get(self, request_id, limit=10, offset=0):
                 from vlmrun.client.types import FeedbackSubmitResponse, FeedbackItem
                 return FeedbackSubmitResponse(
                     request_id=request_id,

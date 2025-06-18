@@ -24,13 +24,13 @@ class Feedback:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def list(
+    def get(
         self,
         request_id: str,
         limit: int = 10,
         offset: int = 0,
     ) -> FeedbackSubmitResponse:
-        """List feedback for a prediction request.
+        """Get feedback for a prediction request.
 
         Args:
             request_id: ID of the prediction request
@@ -50,7 +50,7 @@ class Feedback:
     def submit(
         self,
         request_id: str,
-        response: Optional[Dict[str, Any]] = None,
+        response: Dict[str, Any],
         notes: Optional[str] = None,
     ) -> FeedbackSubmitResponse:
         """Submit feedback for a prediction.
@@ -63,6 +63,9 @@ class Feedback:
         Returns:
             FeedbackSubmitResponse: Response with submitted feedback
         """
+        if response is None:
+            raise ValueError("response parameter is required and cannot be None")
+            
         feedback_data = FeedbackSubmitRequest(
             request_id=request_id,
             response=response, 
