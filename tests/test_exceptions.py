@@ -89,6 +89,38 @@ def test_rate_limit_error():
     assert error.http_status == 429
 
 
+def test_rate_limit_error_with_detail_format():
+    """Test RateLimitError with specific detail format from API response."""
+    from unittest.mock import Mock, patch
+    import requests
+    
+    # Create a mock client
+    class MockClient:
+        def __init__(self):
+            self.api_key = "test-key"
+            self.base_url = "https://api.test"
+            self.max_retries = 3
+
+    client = MockClient()
+    requestor = APIRequestor(client)
+
+    mock_response = Mock()
+    mock_response.status_code = 429
+    mock_response.json.return_value = {"detail": "Rate limit exceeded: 1/3600s"}
+    mock_response.headers = {}
+
+    http_error = requests.exceptions.HTTPError()
+    http_error.response = mock_response
+
+    with pytest.raises(RateLimitError) as exc_info:
+        with patch.object(requestor._session, "request", side_effect=http_error):
+            requestor.request("GET", "/test")
+    
+    error = exc_info.value
+    assert error.message == "Rate limit exceeded: 1/3600s"
+    assert error.http_status == 429
+
+
 def test_server_error():
     """Test ServerError."""
     error = ServerError()
