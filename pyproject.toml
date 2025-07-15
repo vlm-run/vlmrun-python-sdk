@@ -30,7 +30,7 @@ license = {text = "Apache-2.0"}
 dynamic = ["version", "dependencies"]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "openai", "pre-commit"]
 build = ["twine", "build"]
 video = [
     "numpy>=1.24.0",
