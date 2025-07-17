@@ -9,6 +9,7 @@ from vlmrun.client.types import (
     PredictionResponse,
     GenerationConfig,
     RequestMetadata,
+    AgentCreationResponse,
 )
 
 
@@ -47,6 +48,42 @@ class Agent:
             raise TypeError("Expected dict response")
 
         return PredictionResponse(**response)
+    
+    def create(
+        self,
+        prompt: str,
+        files: Optional[List[str]] = None,
+        config: Optional[GenerationConfig] = None,
+    ) -> AgentCreationResponse:
+        """
+        Create a new agent (application) from a prompt and optional sample input files.
+
+        Args:
+            prompt: Natural language prompt describing the extraction or application.
+            files: Optional list of file IDs to use as sample input files.
+            config: Optional generation configuration.
+
+        Returns:
+            AgentCreationResponse: Agent creation response, including agent_id, agent_name, agent_description, output_json_schema, etc.
+        """
+        data = {
+            "prompt": prompt,
+        }
+        if files:
+            data["files"] = files
+        if config:
+            data["config"] = config.model_dump()
+
+        response, status_code, headers = self._requestor.request(
+            method="POST",
+            url="agent/create",
+            json=data,
+        )
+
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
+
+        return AgentCreationResponse(**response)
 
     def execute(
         self,
