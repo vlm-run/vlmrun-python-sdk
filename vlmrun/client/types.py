@@ -190,7 +190,7 @@ class GenerationConfig(BaseModel):
     json_schema: Optional[Dict[str, Any]] = Field(default=None)
     gql_stmt: Optional[str] = Field(default=None)
     max_retries: int = Field(default=3)
-    max_tokens: int = Field(default=4096)
+    max_tokens: int = Field(default=65535)
     temperature: float = Field(default=0.0)
 
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
