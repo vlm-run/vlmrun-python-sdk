@@ -265,6 +265,11 @@ class APIRequestor:
         ):
             raise last_exception
         else:
-            raise APIError(
-                f"Request failed after {self._max_retries} retries: {str(last_exception)}"
-            ) from last_exception
+            error_type = type(last_exception).__name__
+            retry_attempts = getattr(e.last_attempt, 'attempt_number', self._max_retries)
+            error_message = f"Request failed after {retry_attempts} retries. Last error ({error_type}): {str(last_exception)}"
+            
+            if "VLM-CLOUD-PROD-MA" in str(last_exception):
+                error_message = f"VLM Cloud production infrastructure error after {retry_attempts} retries: {str(last_exception)}"
+            
+            raise APIError(error_message) from last_exception
