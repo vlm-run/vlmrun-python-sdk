@@ -8,6 +8,7 @@ from PIL import Image
 from loguru import logger
 
 import time
+from vlmrun.constants import SUPPORTED_IMAGE_FILETYPES
 from vlmrun.common.image import encode_image, _open_image_with_exif
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -445,6 +446,23 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
+            if file and isinstance(file, (Path, str)) and Path(file).suffix:
+                file_path = Path(file)
+                if file_path.suffix.lower() in SUPPORTED_IMAGE_FILETYPES:
+                    from vlmrun.common.image import _open_image_with_exif
+
+                    image = _open_image_with_exif(str(file_path))
+                    return self._client.image.generate(
+                        domain=domain,
+                        images=[image],
+                        model=model,
+                        batch=batch,
+                        metadata=metadata,
+                        config=config,
+                        callback_url=callback_url,
+                        autocast=autocast,
+                    )
+
             is_url, file_or_url = self._handle_file_or_url(file, url)
 
             additional_kwargs = {}
@@ -511,6 +529,23 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
+            if file and isinstance(file, (Path, str)) and Path(file).suffix:
+                file_path = Path(file)
+                if file_path.suffix.lower() in SUPPORTED_IMAGE_FILETYPES:
+                    from vlmrun.common.image import _open_image_with_exif
+
+                    image = _open_image_with_exif(str(file_path))
+                    return self._client.image.execute(
+                        name=name,
+                        version=version,
+                        images=[image],
+                        batch=batch,
+                        metadata=metadata,
+                        config=config,
+                        callback_url=callback_url,
+                        autocast=autocast,
+                    )
+
             is_url, file_or_url = self._handle_file_or_url(file, url)
 
             additional_kwargs = {}
