@@ -184,19 +184,46 @@ class FeedbackListResponse(BaseModel):
     )
 
 
-class AgentCreationResponse(BaseModel):
-    """Response to the agent creation request."""
+class AgentExecutionResponse(BaseModel):
+    """Response to the agent execution request."""
 
     id: str = Field(..., description="ID of the agent")
     name: str = Field(..., description="Name of the agent")
     version: str = Field(..., description="Version of the agent.")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    updated_at: datetime = Field(
+        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    )
+    response: Optional[Dict[str, Any]] = Field(
+        None, description="The response from the agent"
+    )
+    status: JobStatus = Field(..., description="The status of the agent")
+    usage: CreditUsage = Field(..., description="The usage of the agent")
+
+
+class AgentExecutionConfig(BaseModel):
+    prompt: Optional[str] = Field(default=None, description="The prompt to the agent")
+    response_model: Optional[Type[BaseModel]] = Field(
+        default=None, description="The response model to the agent"
+    )
+    json_schema: Optional[Dict[str, Any]] = Field(
+        default=None, description="The JSON schema to the agent"
+    )
+
+
+class AgentInfo(BaseModel):
+    id: str = Field(..., description="ID of the agent")
+    name: str = Field(..., description="Name of the agent")
+    version: str = Field(..., description="Version of the agent.")
     description: str = Field(..., description="Description of the agent")
-    created_at: datetime = Field(..., description="Date and time when the agent was created (in UTC timezone)")
-    updated_at: datetime = Field(..., description="Date and time when the agent was updated (in UTC timezone)")
-    output_json_schema: Dict[str, Any] = Field(..., description="Output JSON schema for the agent")
-    output_json_sample: Dict[str, Any] = Field(..., description="Output JSON sample for the agent")
-    input_type: Literal["text", "document", "image", "video", "audio", "mixed"] = Field(..., description="Input type for the agent")
-    input_json_schema: Optional[Dict[str, Any]] = Field(None, description="Input JSON schema for the agent")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    updated_at: datetime = Field(
+        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    )
 
 
 class GenerationConfig(BaseModel):
@@ -445,3 +472,17 @@ class MarkdownDocument(BaseModel):
             if page.figures:
                 figures.extend(page.figures)
         return figures
+
+
+class ImageUrl(BaseModel):
+    url: str = Field(..., description="The URL of the image")
+
+class DocumentUrl(BaseModel):
+    url: str = Field(..., description="The URL of the document")
+
+class VideoUrl(BaseModel):
+    url: str = Field(..., description="The URL of the video")
+
+class AudioUrl(BaseModel):
+    url: str = Field(..., description="The URL of the audio")
+

@@ -1,6 +1,5 @@
 """Tests for the Agent resource."""
 
-import pytest
 from datetime import datetime
 from vlmrun.client.types import AgentCreationResponse
 
@@ -19,19 +18,15 @@ class TestAgentCreationResponse:
             "updated_at": datetime.now(),
             "output_json_schema": {
                 "type": "object",
-                "properties": {
-                    "result": {"type": "string"}
-                }
+                "properties": {"result": {"type": "string"}},
             },
-            "output_json_sample": {
-                "result": "test result"
-            },
+            "output_json_sample": {"result": "test result"},
             "input_type": "document",
-            "input_json_schema": None
+            "input_json_schema": None,
         }
-        
+
         response = AgentCreationResponse(**response_data)
-        
+
         assert response.id == "test-agent-123"
         assert response.name == "Test Agent"
         assert response.version == "1.0.0"
@@ -52,24 +47,18 @@ class TestAgentCreationResponse:
             "updated_at": datetime.now(),
             "output_json_schema": {
                 "type": "object",
-                "properties": {
-                    "output": {"type": "string"}
-                }
+                "properties": {"output": {"type": "string"}},
             },
-            "output_json_sample": {
-                "output": "test output"
-            },
+            "output_json_sample": {"output": "test output"},
             "input_type": "mixed",
             "input_json_schema": {
                 "type": "object",
-                "properties": {
-                    "input": {"type": "string"}
-                }
-            }
+                "properties": {"input": {"type": "string"}},
+            },
         }
-        
+
         response = AgentCreationResponse(**response_data)
-        
+
         assert response.id == "test-agent-456"
         assert response.input_type == "mixed"
         assert response.input_json_schema is not None
@@ -78,7 +67,7 @@ class TestAgentCreationResponse:
     def test_agent_creation_response_input_types(self):
         """Test that all input types are accepted."""
         valid_input_types = ["text", "document", "image", "video", "audio", "mixed"]
-        
+
         for input_type in valid_input_types:
             response_data = {
                 "id": f"test-agent-{input_type}",
@@ -90,8 +79,8 @@ class TestAgentCreationResponse:
                 "output_json_schema": {"type": "object", "properties": {}},
                 "output_json_sample": {},
                 "input_type": input_type,
-                "input_json_schema": None
+                "input_json_schema": None,
             }
-            
+
             response = AgentCreationResponse(**response_data)
-            assert response.input_type == input_type 
+            assert response.input_type == input_type
