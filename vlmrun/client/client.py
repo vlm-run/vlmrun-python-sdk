@@ -22,6 +22,7 @@ from vlmrun.client.predictions import (
 )
 from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
+from vlmrun.client.executions import Executions
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
 from vlmrun.client.exceptions import (
@@ -117,6 +118,7 @@ class VLMRun:
         self.video._requestor._timeout = 120.0
         self.feedback = Feedback(self)
         self.agent = Agent(self)
+        self.executions = Executions(self)
 
     def __repr__(self):
         return f"VLMRun(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
