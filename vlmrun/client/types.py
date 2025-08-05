@@ -193,8 +193,8 @@ class AgentExecutionResponse(BaseModel):
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )
-    updated_at: datetime = Field(
-        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    completed_at: Optional[datetime] = Field(
+        None, description="Date and time when the agent was completed (in UTC timezone)"
     )
     response: Optional[Dict[str, Any]] = Field(
         None, description="The response from the agent"
@@ -211,6 +211,25 @@ class AgentExecutionConfig(BaseModel):
     json_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="The JSON schema to the agent"
     )
+
+    def model_dump(self, **kwargs) -> dict:
+        """Dump the config as a dictionary, converting response_model to json_schema if present."""
+        data = super().model_dump(**kwargs)
+
+        if self.response_model and self.json_schema:
+            raise ValueError(
+                "`response_model` and `json_schema` cannot be used together"
+            )
+
+        if self.response_model is not None:
+            assert (
+                self.json_schema is None
+            ), "`response_model` and `json_schema` cannot be used together"
+            json_schema = self.response_model.model_json_schema()
+            data["json_schema"] = json_schema
+            data.pop("response_model", None)
+
+        return data
 
 
 class AgentInfo(BaseModel):
@@ -238,6 +257,25 @@ class GenerationConfig(BaseModel):
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
+
+    def model_dump(self, **kwargs) -> dict:
+        """Dump the config as a dictionary, converting response_model to json_schema if present."""
+        data = super().model_dump(**kwargs)
+
+        if self.response_model and self.json_schema:
+            raise ValueError(
+                "`response_model` and `json_schema` cannot be used together"
+            )
+
+        if self.response_model is not None:
+            assert (
+                self.json_schema is None
+            ), "`response_model` and `json_schema` cannot be used together"
+            json_schema = self.response_model.model_json_schema()
+            data["json_schema"] = json_schema
+            data.pop("response_model", None)
+
+        return data
 
 
 class RequestMetadata(BaseModel):

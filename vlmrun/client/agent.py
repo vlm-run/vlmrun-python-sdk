@@ -73,6 +73,9 @@ class Agent:
         Returns:
             AgentExecutionResponse: Agent execution response
         """
+        if not batch:
+            raise NotImplementedError("Batch mode is required for agent execution")
+
         data = {
             "name": name,
             "version": version,
