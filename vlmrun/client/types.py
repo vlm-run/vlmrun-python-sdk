@@ -240,11 +240,20 @@ class AgentCreationResponse(BaseModel):
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )
-    json_sample: Optional[Dict[str, Any]] = Field(
+    updated_at: datetime = Field(
+        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    )
+    output_json_sample: Optional[Dict[str, Any]] = Field(
         None, description="The sample response JSON from the agent"
     )
-    json_schema: Optional[Dict[str, Any]] = Field(
+    output_json_schema: Optional[Dict[str, Any]] = Field(
         None, description="The JSON schema of the agent's response"
+    )
+    input_type: Literal["text", "document", "image", "video", "audio", "mixed"] = Field(
+        ..., description="The type of input the agent accepts"
+    )
+    input_json_schema: Optional[Dict[str, Any]] = Field(
+        None, description="The JSON schema of the agent's input"
     )
 
 
