@@ -232,6 +232,22 @@ class AgentExecutionConfig(BaseModel):
         return data
 
 
+class AgentCreationResponse(BaseModel):
+    id: str = Field(..., description="ID of the agent")
+    name: str = Field(..., description="Name of the agent")
+    version: str = Field(..., description="Version of the agent.")
+    description: str = Field(..., description="Description of the agent")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    json_sample: Optional[Dict[str, Any]] = Field(
+        None, description="The sample response JSON from the agent"
+    )
+    json_schema: Optional[Dict[str, Any]] = Field(
+        None, description="The JSON schema of the agent's response"
+    )
+
+
 class AgentInfo(BaseModel):
     id: str = Field(..., description="ID of the agent")
     name: str = Field(..., description="Name of the agent")
