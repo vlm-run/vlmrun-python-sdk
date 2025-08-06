@@ -1,14 +1,15 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
-from typing import List, Optional
+from typing import Any, Optional
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
-    PredictionResponse,
-    GenerationConfig,
     RequestMetadata,
+    AgentInfo,
+    AgentExecutionResponse,
+    AgentExecutionConfig,
 )
 
 
@@ -28,7 +29,7 @@ class Agent:
         self,
         name: str,
         version: str = "latest",
-    ) -> PredictionResponse:
+    ) -> AgentInfo:
         """Get an agent by name.
 
         Args:
@@ -36,7 +37,7 @@ class Agent:
             version: Version of the agent
 
         Returns:
-            PredictionResponse: Agent response
+            AgentInfo: Agent information response
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
@@ -46,54 +47,41 @@ class Agent:
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
 
-        return PredictionResponse(**response)
+        return AgentInfo(**response)
 
     def execute(
         self,
         name: str,
         version: str = "latest",
-        file_ids: Optional[List[str]] = None,
-        urls: Optional[List[str]] = None,
+        inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
-        config: Optional[GenerationConfig] = None,
+        config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
         callback_url: Optional[str] = None,
-    ) -> PredictionResponse:
+    ) -> AgentExecutionResponse:
         """Execute an agent with the given arguments.
 
         Args:
             name: Name of the agent to execute
             version: Version of the agent to execute
-            file_ids: Optional list of file IDs to process
-            urls: Optional list of URLs to process
+            inputs: Optional inputs to the agent
             batch: Whether to process in batch mode (async)
-            config: Optional generation configuration
+            config: Optional agent execution configuration
             metadata: Optional request metadata
             callback_url: Optional URL to call when execution is complete
 
         Returns:
-            PredictionResponse: Agent execution response
-
-        Raises:
-            ValueError: If neither file_ids nor urls are provided, or if both are provided
+            AgentExecutionResponse: Agent execution response
         """
-        if not file_ids and not urls:
-            raise ValueError("Either `file_ids` or `urls` must be provided")
-
-        if file_ids and urls:
-            raise ValueError("Only one of `file_ids` or `urls` can be provided")
+        if not batch:
+            raise NotImplementedError("Batch mode is required for agent execution")
 
         data = {
             "name": name,
             "version": version,
             "batch": batch,
+            "inputs": inputs,
         }
-
-        if file_ids:
-            data["file_ids"] = file_ids
-
-        if urls:
-            data["urls"] = urls
 
         if config:
             data["config"] = config.model_dump()
@@ -113,4 +101,4 @@ class Agent:
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
 
-        return PredictionResponse(**response)
+        return AgentExecutionResponse(**response)

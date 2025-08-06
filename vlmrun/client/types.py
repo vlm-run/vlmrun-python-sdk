@@ -184,6 +184,92 @@ class FeedbackListResponse(BaseModel):
     )
 
 
+class AgentExecutionResponse(BaseModel):
+    """Response to the agent execution request."""
+
+    id: str = Field(..., description="ID of the agent")
+    name: str = Field(..., description="Name of the agent")
+    version: str = Field(..., description="Version of the agent.")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    completed_at: Optional[datetime] = Field(
+        None, description="Date and time when the agent was completed (in UTC timezone)"
+    )
+    response: Optional[Dict[str, Any]] = Field(
+        None, description="The response from the agent"
+    )
+    status: JobStatus = Field(..., description="The status of the agent")
+    usage: CreditUsage = Field(..., description="The usage of the agent")
+
+
+class AgentExecutionConfig(BaseModel):
+    prompt: Optional[str] = Field(default=None, description="The prompt to the agent")
+    response_model: Optional[Type[BaseModel]] = Field(
+        default=None, description="The response model to the agent"
+    )
+    json_schema: Optional[Dict[str, Any]] = Field(
+        default=None, description="The JSON schema to the agent"
+    )
+
+    def model_dump(self, **kwargs) -> dict:
+        """Dump the config as a dictionary, converting response_model to json_schema if present."""
+        data = super().model_dump(**kwargs)
+
+        if self.response_model and self.json_schema:
+            raise ValueError(
+                "`response_model` and `json_schema` cannot be used together"
+            )
+
+        if self.response_model is not None:
+            assert (
+                self.json_schema is None
+            ), "`response_model` and `json_schema` cannot be used together"
+            json_schema = self.response_model.model_json_schema()
+            data["json_schema"] = json_schema
+            data.pop("response_model", None)
+
+        return data
+
+
+class AgentCreationResponse(BaseModel):
+    id: str = Field(..., description="ID of the agent")
+    name: str = Field(..., description="Name of the agent")
+    version: str = Field(..., description="Version of the agent.")
+    description: str = Field(..., description="Description of the agent")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    updated_at: datetime = Field(
+        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    )
+    output_json_sample: Optional[Dict[str, Any]] = Field(
+        None, description="The sample response JSON from the agent"
+    )
+    output_json_schema: Optional[Dict[str, Any]] = Field(
+        None, description="The JSON schema of the agent's response"
+    )
+    input_type: Literal["text", "document", "image", "video", "audio", "mixed"] = Field(
+        ..., description="The type of input the agent accepts"
+    )
+    input_json_schema: Optional[Dict[str, Any]] = Field(
+        None, description="The JSON schema of the agent's input"
+    )
+
+
+class AgentInfo(BaseModel):
+    id: str = Field(..., description="ID of the agent")
+    name: str = Field(..., description="Name of the agent")
+    version: str = Field(..., description="Version of the agent.")
+    description: str = Field(..., description="Description of the agent")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    updated_at: datetime = Field(
+        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    )
+
+
 class GenerationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None)
     response_model: Optional[Type[BaseModel]] = Field(default=None)
@@ -196,6 +282,25 @@ class GenerationConfig(BaseModel):
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
+
+    def model_dump(self, **kwargs) -> dict:
+        """Dump the config as a dictionary, converting response_model to json_schema if present."""
+        data = super().model_dump(**kwargs)
+
+        if self.response_model and self.json_schema:
+            raise ValueError(
+                "`response_model` and `json_schema` cannot be used together"
+            )
+
+        if self.response_model is not None:
+            assert (
+                self.json_schema is None
+            ), "`response_model` and `json_schema` cannot be used together"
+            json_schema = self.response_model.model_json_schema()
+            data["json_schema"] = json_schema
+            data.pop("response_model", None)
+
+        return data
 
 
 class RequestMetadata(BaseModel):
@@ -430,3 +535,19 @@ class MarkdownDocument(BaseModel):
             if page.figures:
                 figures.extend(page.figures)
         return figures
+
+
+class ImageUrl(BaseModel):
+    url: str = Field(..., description="The URL of the image")
+
+
+class DocumentUrl(BaseModel):
+    url: str = Field(..., description="The URL of the document")
+
+
+class VideoUrl(BaseModel):
+    url: str = Field(..., description="The URL of the video")
+
+
+class AudioUrl(BaseModel):
+    url: str = Field(..., description="The URL of the audio")
