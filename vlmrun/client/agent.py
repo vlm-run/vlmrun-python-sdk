@@ -102,3 +102,22 @@ class Agent:
             raise TypeError("Expected dict response")
 
         return AgentExecutionResponse(**response)
+
+    def get_by_id(self, agent_id: str) -> AgentInfo:
+        """Get agent information by ID.
+
+        Args:
+            agent_id: The ID of the agent to retrieve
+
+        Returns:
+            AgentInfo: Information about the agent
+        """
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url=f"agents/{agent_id}",
+        )
+
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
+
+        return AgentInfo(**response)
