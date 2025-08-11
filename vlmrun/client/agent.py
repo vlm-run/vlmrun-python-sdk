@@ -27,27 +27,54 @@ class Agent:
 
     def get(
         self,
-        name: str,
-        version: str = "latest",
+        name: str | None = None,
+        version: str | None = None,
+        id: str | None = None,
     ) -> AgentInfo:
-        """Get an agent by name.
+        """Get an agent by name and version.
 
         Args:
-            name: Name of the agent
+            name: Name of the agent (lookup either by name + version or by id alone)
             version: Version of the agent
+            id: ID of the agent
 
+        Raises:
+            APIError: If the agent is not found (404) or the agent name is invalid (400)
+        
         Returns:
             AgentInfo: Agent information response
         """
+        if id and name:
+            raise ValueError("Only one of `id` or `name` can be provided.")
+        elif id is not None:
+            data = {"id": id}
+        elif name is not None:
+            data = {"name": name, "version": version}
+        else:
+            raise ValueError("Either `id` or `name` must be provided.")
+        
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"agent/{name}/{version}",
+            url="agent/lookup",
+            data=data,
         )
 
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
 
         return AgentInfo(**response)
+    
+    def list(self) -> list[AgentInfo]:
+        """List all agents."""
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url="agent",
+        )
+
+        if not isinstance(response, list):
+            raise TypeError("Expected list response")
+
+        return [AgentInfo(**agent) for agent in response]
 
     def execute(
         self,
