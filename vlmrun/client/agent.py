@@ -10,6 +10,8 @@ from vlmrun.client.types import (
     AgentInfo,
     AgentExecutionResponse,
     AgentExecutionConfig,
+    AgentCreationConfig,
+    AgentCreationResponse,
 )
 
 
@@ -40,7 +42,7 @@ class Agent:
 
         Raises:
             APIError: If the agent is not found (404) or the agent name is invalid (400)
-        
+
         Returns:
             AgentInfo: Agent information response
         """
@@ -52,7 +54,7 @@ class Agent:
             data = {"name": name, "version": version}
         else:
             raise ValueError("Either `id` or `name` must be provided.")
-        
+
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="agent/lookup",
@@ -63,7 +65,7 @@ class Agent:
             raise TypeError("Expected dict response")
 
         return AgentInfo(**response)
-    
+
     def list(self) -> list[AgentInfo]:
         """List all agents."""
         response, status_code, headers = self._requestor.request(
@@ -76,10 +78,53 @@ class Agent:
 
         return [AgentInfo(**agent) for agent in response]
 
+    def create(
+        self,
+        config: AgentCreationConfig,
+        name: str | None = None,
+        inputs: Optional[dict[str, Any]] = None,
+        callback_url: Optional[str] = None,
+    ) -> AgentCreationResponse:
+        """Create an agent.
+
+        Args:
+            config: Agent creation configuration
+            name: Optional name of the agent to create
+            inputs: Optional inputs to the agent (e.g. {"image": "https://..."})
+            callback_url: Optional URL to call when creation is complete
+
+        Returns:
+            AgentCreationResponse: Agent creation response
+        """
+        if config.prompt is None:
+            raise ValueError(
+                "Prompt is not provided as a request parameter, please provide a prompt."
+            )
+
+        data = {
+            "name": name,
+            "inputs": inputs,
+            "config": config.model_dump(),
+        }
+
+        if callback_url:
+            data["callback_url"] = callback_url
+
+        response, status_code, headers = self._requestor.request(
+            method="POST",
+            url="agent/create",
+            data=data,
+        )
+
+        if not isinstance(response, dict):
+            raise TypeError("Expected dict response")
+
+        return AgentCreationResponse(**response)
+
     def execute(
         self,
         name: str,
-        version: str = "latest",
+        version: str | None = None,
         inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
@@ -90,7 +135,7 @@ class Agent:
 
         Args:
             name: Name of the agent to execute
-            version: Version of the agent to execute
+            version: Optional version of the agent to execute
             inputs: Optional inputs to the agent
             batch: Whether to process in batch mode (async)
             config: Optional agent execution configuration
