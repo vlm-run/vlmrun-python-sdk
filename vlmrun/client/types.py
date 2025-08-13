@@ -203,14 +203,22 @@ class AgentExecutionResponse(BaseModel):
     usage: CreditUsage = Field(..., description="The usage of the agent")
 
 
-class AgentExecutionConfig(BaseModel):
+class AgentExecutionOrCreationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None, description="The prompt to the agent")
     response_model: Optional[Type[BaseModel]] = Field(
-        default=None, description="The response model to the agent"
+        default=None, description="The response model of the agent"
     )
     json_schema: Optional[Dict[str, Any]] = Field(
-        default=None, description="The JSON schema to the agent"
+        default=None, description="The JSON schema response model of the agent"
     )
+
+    @model_validator(mode="after")
+    def validate_config(self):
+        """Validate the config."""
+        if self.response_model and self.json_schema:
+            raise ValueError(
+                "`response_model` and `json_schema` cannot be used together, please provide only one."
+            )
 
     def model_dump(self, **kwargs) -> dict:
         """Dump the config as a dictionary, converting response_model to json_schema if present."""
@@ -218,7 +226,7 @@ class AgentExecutionConfig(BaseModel):
 
         if self.response_model and self.json_schema:
             raise ValueError(
-                "`response_model` and `json_schema` cannot be used together"
+                "`response_model` and `json_schema` cannot be used together, please provide only one."
             )
 
         if self.response_model is not None:
@@ -232,28 +240,19 @@ class AgentExecutionConfig(BaseModel):
         return data
 
 
-class AgentCreationResponse(BaseModel):
-    id: str = Field(..., description="ID of the agent")
-    name: str = Field(..., description="Name of the agent")
-    version: str = Field(..., description="Version of the agent.")
-    description: str = Field(..., description="Description of the agent")
-    created_at: datetime = Field(
-        ..., description="Date and time when the agent was created (in UTC timezone)"
+class AgentCreationConfig(AgentExecutionOrCreationConfig):
+    """Configuration for the agent creation request."""
+
+    prompt: Optional[str] = Field(
+        default=None, description="The prompt to guide the creation of the agent."
     )
-    updated_at: datetime = Field(
-        ..., description="Date and time when the agent was updated (in UTC timezone)"
-    )
-    output_json_sample: Optional[Dict[str, Any]] = Field(
-        None, description="The sample response JSON from the agent"
-    )
-    output_json_schema: Optional[Dict[str, Any]] = Field(
-        None, description="The JSON schema of the agent's response"
-    )
-    input_type: Literal["text", "document", "image", "video", "audio", "mixed"] = Field(
-        ..., description="The type of input the agent accepts"
-    )
-    input_json_schema: Optional[Dict[str, Any]] = Field(
-        None, description="The JSON schema of the agent's input"
+
+
+class AgentExecutionConfig(AgentExecutionOrCreationConfig):
+    """Configuration for the agent execution request."""
+
+    prompt: Optional[str] = Field(
+        default=None, description="The prompt to guide the execution of the agent."
     )
 
 
@@ -262,12 +261,33 @@ class AgentInfo(BaseModel):
     name: str = Field(..., description="Name of the agent")
     version: str = Field(..., description="Version of the agent.")
     description: str = Field(..., description="Description of the agent")
+    prompt: str = Field(..., description="The prompt of the agent")
+    json_schema: Optional[Dict[str, Any]] = Field(
+        None, description="The JSON schema of the agent's response"
+    )
+    json_sample: Optional[Dict[str, Any]] = Field(
+        None, description="The sample response JSON from the agent"
+    )
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )
     updated_at: datetime = Field(
         ..., description="Date and time when the agent was updated (in UTC timezone)"
     )
+    status: JobStatus = Field(..., description="The status of the agent")
+
+
+class AgentCreationResponse(BaseModel):
+    id: str = Field(..., description="ID of the agent")
+    name: str = Field(..., description="Name of the agent")
+    version: str = Field(..., description="Version of the agent.")
+    created_at: datetime = Field(
+        ..., description="Date and time when the agent was created (in UTC timezone)"
+    )
+    updated_at: datetime = Field(
+        ..., description="Date and time when the agent was updated (in UTC timezone)"
+    )
+    status: JobStatus = Field(..., description="The status of the agent")
 
 
 class GenerationConfig(BaseModel):

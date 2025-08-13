@@ -98,6 +98,7 @@ def mock_client(monkeypatch):
             self.document = self.DocumentPredictions(self)
             self.audio = self.AudioPredictions(self)
             self.feedback = self.Feedback(self)
+            self.agent = self.Agent(self)
 
         class FineTuning:
             def __init__(self, client):
@@ -467,6 +468,126 @@ def mock_client(monkeypatch):
                             notes="Test feedback",
                         )
                     ],
+                )
+
+        class Agent:
+            def __init__(self, client):
+                self._client = client
+
+            def get(self, name=None, version=None, id=None):
+                from vlmrun.client.types import AgentInfo
+                from datetime import datetime
+
+                if id and name:
+                    raise ValueError("Only one of `id` or `name` can be provided.")
+                if not id and not name:
+                    raise ValueError("Either `id` or `name` must be provided.")
+
+                if id:
+                    agent_id = id
+                    agent_name = f"agent-{id}"
+                else:
+                    agent_id = f"agent-{name}-{version or 'latest'}"
+                    agent_name = name
+
+                return AgentInfo(
+                    id=agent_id,
+                    name=agent_name,
+                    version=version or "latest",
+                    description="Test agent description",
+                    prompt="Test agent prompt",
+                    json_schema={
+                        "type": "object",
+                        "properties": {"result": {"type": "string"}},
+                    },
+                    json_sample={"result": "test result"},
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    status="completed",
+                )
+
+            def list(self):
+                from vlmrun.client.types import AgentInfo
+                from datetime import datetime
+
+                return [
+                    AgentInfo(
+                        id="agent-1",
+                        name="test-agent-1",
+                        version="1.0.0",
+                        description="First test agent",
+                        prompt="Test prompt 1",
+                        json_schema={
+                            "type": "object",
+                            "properties": {"result": {"type": "string"}},
+                        },
+                        json_sample={"result": "test result 1"},
+                        created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        status="completed",
+                    ),
+                    AgentInfo(
+                        id="agent-2",
+                        name="test-agent-2",
+                        version="2.0.0",
+                        description="Second test agent",
+                        prompt="Test prompt 2",
+                        json_schema={
+                            "type": "object",
+                            "properties": {"output": {"type": "string"}},
+                        },
+                        json_sample={"output": "test output 2"},
+                        created_at=datetime.fromisoformat("2024-01-02T00:00:00+00:00"),
+                        updated_at=datetime.fromisoformat("2024-01-02T00:00:00+00:00"),
+                        status="completed",
+                    ),
+                ]
+
+            def create(self, config, name=None, inputs=None, callback_url=None):
+                from vlmrun.client.types import AgentCreationResponse
+                from datetime import datetime
+
+                if config.prompt is None:
+                    raise ValueError(
+                        "Prompt is not provided as a request parameter, please provide a prompt."
+                    )
+
+                return AgentCreationResponse(
+                    id=f"agent-{name or 'created'}",
+                    name=name or "created-agent",
+                    version="1.0.0",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    status="pending",
+                )
+
+            def execute(
+                self,
+                name,
+                version=None,
+                inputs=None,
+                batch=True,
+                config=None,
+                metadata=None,
+                callback_url=None,
+            ):
+                from vlmrun.client.types import AgentExecutionResponse, CreditUsage
+                from datetime import datetime
+
+                if not batch:
+                    raise NotImplementedError(
+                        "Batch mode is required for agent execution"
+                    )
+
+                return AgentExecutionResponse(
+                    id=f"execution-{name}",
+                    name=name,
+                    version=version or "latest",
+                    status="completed",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    completed_at=datetime.fromisoformat("2024-01-01T00:00:01+00:00"),
+                    response={"result": "execution result"},
+                    usage=CreditUsage(credits_used=50),
                 )
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
