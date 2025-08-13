@@ -91,7 +91,7 @@ class Files:
         self,
         file: Union[Path, str],
         purpose: str = "assistants",
-        method: Literal["auto", "direct", "presigned-url"] = "auto",
+        method: Literal["auto", "direct", "presigned-url"] = "presigned-url",
         timeout: int = 3 * 60,
         expiration: int = 24 * 60 * 60,
         force: bool = False,
