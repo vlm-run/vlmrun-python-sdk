@@ -187,9 +187,12 @@ class FeedbackListResponse(BaseModel):
 class AgentExecutionResponse(BaseModel):
     """Response to the agent execution request."""
 
-    id: str = Field(..., description="ID of the agent")
-    name: str = Field(..., description="Name of the agent")
-    version: str = Field(..., description="Version of the agent.")
+    id: str = Field(..., description="ID of the execution")
+    agent_id: Optional[str] = Field(
+        default=None, description="ID of the agent associated with the execution"
+    )
+    name: Optional[str] = Field(default=None, description="Name of the agent")
+    version: Optional[str] = Field(default=None, description="Version of the agent.")
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )
