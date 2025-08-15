@@ -25,7 +25,7 @@ class Agent:
             client: VLM Run API instance
         """
         self._client = client
-        self._requestor = APIRequestor(client)
+        self._requestor = APIRequestor(client, timeout=client.timeout)
 
     def get(
         self,
