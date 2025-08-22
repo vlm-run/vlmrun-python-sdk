@@ -49,16 +49,18 @@ class Agent:
         if id and name:
             raise ValueError("Only one of `id` or `name` can be provided.")
         elif id is not None:
-            data = {"id": id}
+            params = {"id": id}
         elif name is not None:
-            data = {"name": name, "version": version}
+            params = {"name": name}
+            if version is not None:
+                params["version"] = version
         else:
             raise ValueError("Either `id` or `name` must be provided.")
 
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="agent/lookup",
-            data=data,
+            params=params,
         )
 
         if not isinstance(response, dict):
