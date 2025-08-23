@@ -123,7 +123,7 @@ class Agent:
 
     def execute(
         self,
-        name: str,
+        name: str | None = None,
         version: str | None = None,
         inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
@@ -134,7 +134,7 @@ class Agent:
         """Execute an agent with the given arguments.
 
         Args:
-            name: Name of the agent to execute
+            name: Name of the agent to execute. If not provided, we use the prompt to identify the unique agent.
             version: Optional version of the agent to execute
             inputs: Optional inputs to the agent
             batch: Whether to process in batch mode (async)
