@@ -102,10 +102,12 @@ class Agent:
             )
 
         data = {
-            "name": name,
             "inputs": inputs,
             "config": config.model_dump(),
         }
+
+        if name is not None:
+            data["name"] = name
 
         if callback_url:
             data["callback_url"] = callback_url
@@ -123,7 +125,7 @@ class Agent:
 
     def execute(
         self,
-        name: str,
+        name: str | None = None,
         version: str | None = None,
         inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
@@ -134,7 +136,8 @@ class Agent:
         """Execute an agent with the given arguments.
 
         Args:
-            name: Name of the agent to execute
+            name: Optional name of the agent to execute. If not provided, a
+                prompt must be supplied in `config` for ad-hoc execution.
             version: Optional version of the agent to execute
             inputs: Optional inputs to the agent
             batch: Whether to process in batch mode (async)
@@ -148,12 +151,21 @@ class Agent:
         if not batch:
             raise NotImplementedError("Batch mode is required for agent execution")
 
+        # Require at least a name or a prompt for ad-hoc execution
+        if name is None and (config is None or config.prompt is None):
+            raise ValueError(
+                "Either `name` must be provided, or provide `config.prompt` for ad-hoc execution."
+            )
+
         data = {
-            "name": name,
-            "version": version,
             "batch": batch,
             "inputs": inputs,
         }
+
+        if name is not None:
+            data["name"] = name
+            if version is not None:
+                data["version"] = version
 
         if config:
             data["config"] = config.model_dump()
