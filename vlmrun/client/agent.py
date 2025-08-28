@@ -68,7 +68,7 @@ class Agent:
             raise ValueError("Either `id` or `name` or `prompt` must be provided.")
 
         response, status_code, headers = self._requestor.request(
-            method="GET",
+            method="POST",
             url="agent/lookup",
             data=data,
         )
