@@ -64,7 +64,9 @@ class TestAgentMethods:
         ):
             client.agent.get(id="agent-123", name="test-agent")
 
-        with pytest.raises(ValueError, match="Either `id` or `name` or `prompt` must be provided."):
+        with pytest.raises(
+            ValueError, match="Either `id` or `name` or `prompt` must be provided."
+        ):
             client.agent.get()
 
     def test_agent_list(self, mock_client):

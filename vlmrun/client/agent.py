@@ -48,15 +48,21 @@ class Agent:
         """
         if id:
             if name or prompt:
-                raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                raise ValueError(
+                    "Only one of `id` or `name` or `prompt` can be provided."
+                )
             data = {"id": id}
         elif name:
             if id or prompt:
-                raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                raise ValueError(
+                    "Only one of `id` or `name` or `prompt` can be provided."
+                )
             data = {"name": name}
         elif prompt:
             if id or name:
-                raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                raise ValueError(
+                    "Only one of `id` or `name` or `prompt` can be provided."
+                )
             data = {"prompt": prompt}
         else:
             raise ValueError("Either `id` or `name` or `prompt` must be provided.")

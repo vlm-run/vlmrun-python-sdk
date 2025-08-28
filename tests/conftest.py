@@ -481,15 +481,23 @@ def mock_client(monkeypatch):
 
                 if id:
                     if name or prompt:
-                        raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                        raise ValueError(
+                            "Only one of `id` or `name` or `prompt` can be provided."
+                        )
                 elif name:
                     if id or prompt:
-                        raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                        raise ValueError(
+                            "Only one of `id` or `name` or `prompt` can be provided."
+                        )
                 elif prompt:
                     if id or name:
-                        raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                        raise ValueError(
+                            "Only one of `id` or `name` or `prompt` can be provided."
+                        )
                 else:
-                    raise ValueError("Either `id` or `name` or `prompt` must be provided.")
+                    raise ValueError(
+                        "Either `id` or `name` or `prompt` must be provided."
+                    )
 
                 if id:
                     agent_id = id
