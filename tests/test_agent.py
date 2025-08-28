@@ -53,18 +53,18 @@ class TestAgentMethods:
 
         assert isinstance(response, AgentInfo)
         assert response.id == "agent-123"
-        assert response.name == "agent-123:latest"
+        assert response.name == "agent-agent-123"
 
     def test_agent_get_validation_error(self, mock_client):
         """Test that get method validates input parameters."""
         client = mock_client
 
         with pytest.raises(
-            ValueError, match="Only one of `id` or `name` can be provided."
+            ValueError, match="Only one of `id` or `name` or `prompt` can be provided."
         ):
             client.agent.get(id="agent-123", name="test-agent")
 
-        with pytest.raises(ValueError, match="Either `id` or `name` must be provided."):
+        with pytest.raises(ValueError, match="Either `id` or `name` or `prompt` must be provided."):
             client.agent.get()
 
     def test_agent_list(self, mock_client):
@@ -94,7 +94,7 @@ class TestAgentMethods:
         )
 
         assert isinstance(response, AgentCreationResponse)
-        assert response.name == "new-agent:1.0.0"
+        assert response.name == "new-agent"
         assert response.status == "pending"
 
     def test_agent_create_validation_error(self, mock_client):
@@ -139,7 +139,7 @@ class TestAgentMethods:
         response = client.agent.execute(name="test-agent")
 
         assert isinstance(response, AgentExecutionResponse)
-        assert response.name == "test-agent:latest"
+        assert response.name == "test-agent"
 
     def test_agent_execute_batch_mode_required(self, mock_client):
         """Test that execute method requires batch mode."""
