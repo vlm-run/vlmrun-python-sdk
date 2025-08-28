@@ -189,7 +189,6 @@ class AgentExecutionResponse(BaseModel):
 
     id: str = Field(..., description="ID of the agent")
     name: str = Field(..., description="Name of the agent")
-    version: str = Field(..., description="Version of the agent.")
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )
@@ -259,7 +258,6 @@ class AgentExecutionConfig(AgentExecutionOrCreationConfig):
 class AgentInfo(BaseModel):
     id: str = Field(..., description="ID of the agent")
     name: str = Field(..., description="Name of the agent")
-    version: str = Field(..., description="Version of the agent.")
     description: str = Field(..., description="Description of the agent")
     prompt: str = Field(..., description="The prompt of the agent")
     json_schema: Optional[Dict[str, Any]] = Field(
@@ -280,7 +278,6 @@ class AgentInfo(BaseModel):
 class AgentCreationResponse(BaseModel):
     id: str = Field(..., description="ID of the agent")
     name: str = Field(..., description="Name of the agent")
-    version: str = Field(..., description="Version of the agent.")
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )

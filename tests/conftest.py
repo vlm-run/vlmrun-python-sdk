@@ -1,5 +1,6 @@
 """Test fixtures for vlmrun tests."""
 
+import hashlib
 import pytest
 from typer.testing import CliRunner
 from pydantic import BaseModel
@@ -474,26 +475,36 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def get(self, name=None, version=None, id=None):
+            def get(self, name=None, id=None, prompt=None):
                 from vlmrun.client.types import AgentInfo
                 from datetime import datetime
 
-                if id and name:
-                    raise ValueError("Only one of `id` or `name` can be provided.")
-                if not id and not name:
-                    raise ValueError("Either `id` or `name` must be provided.")
+                if id:
+                    if name or prompt:
+                        raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                elif name:
+                    if id or prompt:
+                        raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                elif prompt:
+                    if id or name:
+                        raise ValueError("Only one of `id` or `name` or `prompt` can be provided.")
+                else:
+                    raise ValueError("Either `id` or `name` or `prompt` must be provided.")
 
                 if id:
                     agent_id = id
                     agent_name = f"agent-{id}"
-                else:
-                    agent_id = f"agent-{name}-{version or 'latest'}"
+                elif name:
+                    agent_id = f"agent-{name}"
                     agent_name = name
+                elif prompt:
+                    hash_prompt = hashlib.sha256(prompt.encode()).hexdigest()
+                    agent_id = f"agent-{hash_prompt}"
+                    agent_name = f"agent-{hash_prompt}"
 
                 return AgentInfo(
                     id=agent_id,
                     name=agent_name,
-                    version=version or "latest",
                     description="Test agent description",
                     prompt="Test agent prompt",
                     json_schema={
@@ -513,8 +524,7 @@ def mock_client(monkeypatch):
                 return [
                     AgentInfo(
                         id="agent-1",
-                        name="test-agent-1",
-                        version="1.0.0",
+                        name="test-agent-1:1.0.0",
                         description="First test agent",
                         prompt="Test prompt 1",
                         json_schema={
@@ -528,8 +538,7 @@ def mock_client(monkeypatch):
                     ),
                     AgentInfo(
                         id="agent-2",
-                        name="test-agent-2",
-                        version="2.0.0",
+                        name="test-agent-2:2.0.0",
                         description="Second test agent",
                         prompt="Test prompt 2",
                         json_schema={
@@ -554,8 +563,7 @@ def mock_client(monkeypatch):
 
                 return AgentCreationResponse(
                     id=f"agent-{name or 'created'}",
-                    name=name or "created-agent",
-                    version="1.0.0",
+                    name=name or "created-agent:1.0.0",
                     created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
                     updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
                     status="pending",
@@ -564,7 +572,6 @@ def mock_client(monkeypatch):
             def execute(
                 self,
                 name,
-                version=None,
                 inputs=None,
                 batch=True,
                 config=None,
@@ -582,7 +589,6 @@ def mock_client(monkeypatch):
                 return AgentExecutionResponse(
                     id=f"execution-{name}",
                     name=name,
-                    version=version or "latest",
                     status="completed",
                     created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
                     completed_at=datetime.fromisoformat("2024-01-01T00:00:01+00:00"),
