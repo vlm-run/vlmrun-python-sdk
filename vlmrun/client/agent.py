@@ -29,9 +29,9 @@ class Agent:
 
     def get(
         self,
-        name: str | None = None,
-        id: str | None = None,
-        prompt: str | None = None,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        prompt: Optional[str] = None,
     ) -> AgentInfo:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
@@ -135,7 +135,7 @@ class Agent:
 
     def execute(
         self,
-        name: str | None = None,
+        name: Optional[str] = None,
         inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
