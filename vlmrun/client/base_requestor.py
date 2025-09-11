@@ -6,6 +6,8 @@ from urllib.parse import urljoin
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
 
+from vlmrun.version import __version__
+
 import requests
 from tenacity import (
     retry,
@@ -125,6 +127,9 @@ class APIRequestor:
             # Add authorization
             if self._client.api_key:
                 _headers["Authorization"] = f"Bearer {self._client.api_key}"
+
+            if "X-Client-Id" not in _headers:
+                _headers["X-Client-Id"] = f"python-sdk-{__version__}"
 
             # Build full URL
             full_url = urljoin(self._base_url.rstrip("/") + "/", url.lstrip("/"))
