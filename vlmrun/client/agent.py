@@ -29,9 +29,9 @@ class Agent:
 
     def get(
         self,
-        name: str | None = None,
-        id: str | None = None,
-        prompt: str | None = None,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        prompt: Optional[str] = None,
     ) -> AgentInfo:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
@@ -78,11 +78,20 @@ class Agent:
 
         return AgentInfo(**response)
 
-    def list(self) -> list[AgentInfo]:
-        """List all agents."""
+    def list(self, skip: int = 0, limit: int = 10) -> list[AgentInfo]:
+        """List all agents.
+
+        Args:
+            skip: Number of items to skip
+            limit: Maximum number of items to return
+
+        Returns:
+            List[AgentInfo]: List of agent information objects
+        """
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="agent",
+            params={"skip": skip, "limit": limit},
         )
 
         if not isinstance(response, list):
@@ -135,7 +144,7 @@ class Agent:
 
     def execute(
         self,
-        name: str | None = None,
+        name: Optional[str] = None,
         inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
