@@ -78,11 +78,20 @@ class Agent:
 
         return AgentInfo(**response)
 
-    def list(self) -> list[AgentInfo]:
-        """List all agents."""
+    def list(self, skip: int = 0, limit: int = 10) -> list[AgentInfo]:
+        """List all agents.
+
+        Args:
+            skip: Number of items to skip
+            limit: Maximum number of items to return
+
+        Returns:
+            List[AgentInfo]: List of agent information objects
+        """
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="agent",
+            params={"skip": skip, "limit": limit},
         )
 
         if not isinstance(response, list):
