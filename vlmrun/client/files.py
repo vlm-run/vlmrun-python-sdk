@@ -75,7 +75,11 @@ class Files:
             if status_code == 200:
                 file_response = FileResponse(**response)
                 # Check if the file exists by checking if id is empty
+                logger.debug(f"File response [file_response={file_response.id}]")
                 if file_response.id:
+                    # Generate public URL if not already present
+                    if not file_response.public_url:
+                        file_response.public_url = self.get_public_url(file_response.id)
                     return file_response
                 else:
                     return None
@@ -230,6 +234,29 @@ class Files:
             bytes: File content
         """
         raise NotImplementedError("Not implemented")
+
+    def get_public_url(self, file_id: str, expiration_minutes: int = 60) -> str:
+        """Get a public URL for a file.
+
+        Args:
+            file_id: ID of file to get public URL for
+            expiration_minutes: URL expiration time in minutes (default: 60)
+
+        Returns:
+            str: Public URL for the file
+        """
+        response, status_code, headers = self._requestor.request(
+            method="GET",
+            url=f"files/{file_id}/public-url",
+            params={"expiration_minutes": expiration_minutes},
+        )
+
+        if status_code == 200 and isinstance(response, dict):
+            return response.get("public_url", "")
+        else:
+            # Fallback: construct a basic URL if the endpoint doesn't exist
+            base_url = self._client.base_url.rstrip("/")
+            return f"{base_url}/files/{file_id}/content"
 
     def delete(self, file_id: str) -> FileResponse:
         """Delete a file.

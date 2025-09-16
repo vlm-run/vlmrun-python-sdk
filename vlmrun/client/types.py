@@ -35,6 +35,7 @@ class FileResponse(BaseModel):
     ]
     created_at: datetime
     object: str = "file"
+    public_url: Optional[str] = None
 
 
 class PresignedUrlResponse(BaseModel):
@@ -189,7 +190,7 @@ class AgentExecutionResponse(BaseModel):
 
     id: str = Field(..., description="ID of the agent")
     name: str = Field(..., description="Name of the agent")
-    version: str = Field(..., description="Version of the agent.")
+    version: Optional[str] = Field(None, description="Version of the agent.")
     created_at: datetime = Field(
         ..., description="Date and time when the agent was created (in UTC timezone)"
     )
@@ -219,6 +220,7 @@ class AgentExecutionOrCreationConfig(BaseModel):
             raise ValueError(
                 "`response_model` and `json_schema` cannot be used together, please provide only one."
             )
+        return self
 
     def model_dump(self, **kwargs) -> dict:
         """Dump the config as a dictionary, converting response_model to json_schema if present."""
