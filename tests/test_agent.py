@@ -19,8 +19,7 @@ class TestAgentCreationResponse:
         """Test creating an AgentCreationResponse instance."""
         response_data = {
             "id": "test-agent-123",
-            "name": "Test Agent",
-            "version": "1.0.0",
+            "name": "test-agent:1.0.0",
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
             "status": "completed",
@@ -29,8 +28,7 @@ class TestAgentCreationResponse:
         response = AgentCreationResponse(**response_data)
 
         assert response.id == "test-agent-123"
-        assert response.name == "Test Agent"
-        assert response.version == "1.0.0"
+        assert response.name == "test-agent:1.0.0"
         assert response.status == "completed"
 
 
@@ -40,11 +38,10 @@ class TestAgentMethods:
     def test_agent_get_by_name_and_version(self, mock_client):
         """Test getting an agent by name and version."""
         client = mock_client
-        response = client.agent.get(name="test-agent", version="1.0.0")
+        response = client.agent.get(name="test-agent:1.0.0")
 
         assert isinstance(response, AgentInfo)
-        assert response.name == "test-agent"
-        assert response.version == "1.0.0"
+        assert response.name == "test-agent:1.0.0"
         assert response.description == "Test agent description"
         assert response.prompt == "Test agent prompt"
         assert response.status == "completed"
@@ -57,18 +54,19 @@ class TestAgentMethods:
         assert isinstance(response, AgentInfo)
         assert response.id == "agent-123"
         assert response.name == "agent-agent-123"
-        assert response.version == "latest"
 
     def test_agent_get_validation_error(self, mock_client):
         """Test that get method validates input parameters."""
         client = mock_client
 
         with pytest.raises(
-            ValueError, match="Only one of `id` or `name` can be provided."
+            ValueError, match="Only one of `id` or `name` or `prompt` can be provided."
         ):
             client.agent.get(id="agent-123", name="test-agent")
 
-        with pytest.raises(ValueError, match="Either `id` or `name` must be provided."):
+        with pytest.raises(
+            ValueError, match="Either `id` or `name` or `prompt` must be provided."
+        ):
             client.agent.get()
 
     def test_agent_list(self, mock_client):
@@ -79,8 +77,8 @@ class TestAgentMethods:
         assert isinstance(response, list)
         assert len(response) == 2
         assert all(isinstance(agent, AgentInfo) for agent in response)
-        assert response[0].name == "test-agent-1"
-        assert response[1].name == "test-agent-2"
+        assert response[0].name.startswith("test-agent-1")
+        assert response[1].name.startswith("test-agent-2")
 
     def test_agent_create(self, mock_client):
         """Test creating an agent."""
@@ -99,7 +97,6 @@ class TestAgentMethods:
 
         assert isinstance(response, AgentCreationResponse)
         assert response.name == "new-agent"
-        assert response.version == "1.0.0"
         assert response.status == "pending"
 
     def test_agent_create_validation_error(self, mock_client):
@@ -125,15 +122,13 @@ class TestAgentMethods:
         )
 
         response = client.agent.execute(
-            name="test-agent",
-            version="1.0.0",
+            name="test-agent:1.0.0",
             inputs={"input": "test data"},
             config=config,
         )
 
         assert isinstance(response, AgentExecutionResponse)
-        assert response.name == "test-agent"
-        assert response.version == "1.0.0"
+        assert response.name == "test-agent:1.0.0"
         assert response.status == "completed"
         assert response.response == {"result": "execution result"}
         assert isinstance(response.usage, CreditUsage)
@@ -147,7 +142,6 @@ class TestAgentMethods:
 
         assert isinstance(response, AgentExecutionResponse)
         assert response.name == "test-agent"
-        assert response.version == "latest"
 
     def test_agent_execute_batch_mode_required(self, mock_client):
         """Test that execute method requires batch mode."""

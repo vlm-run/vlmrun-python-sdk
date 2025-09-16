@@ -30,15 +30,15 @@ class Agent:
     def get(
         self,
         name: str | None = None,
-        version: str | None = None,
         id: str | None = None,
+        prompt: str | None = None,
     ) -> AgentInfo:
-        """Get an agent by name and version.
+        """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
         Args:
-            name: Name of the agent (lookup either by name + version or by id alone)
-            version: Version of the agent
+            name: Name of the agent
             id: ID of the agent
+            prompt: Prompt of the agent
 
         Raises:
             APIError: If the agent is not found (404) or the agent name is invalid (400)
@@ -46,17 +46,29 @@ class Agent:
         Returns:
             AgentInfo: Agent information response
         """
-        if id and name:
-            raise ValueError("Only one of `id` or `name` can be provided.")
-        elif id is not None:
+        if id:
+            if name or prompt:
+                raise ValueError(
+                    "Only one of `id` or `name` or `prompt` can be provided."
+                )
             data = {"id": id}
-        elif name is not None:
-            data = {"name": name, "version": version}
+        elif name:
+            if id or prompt:
+                raise ValueError(
+                    "Only one of `id` or `name` or `prompt` can be provided."
+                )
+            data = {"name": name}
+        elif prompt:
+            if id or name:
+                raise ValueError(
+                    "Only one of `id` or `name` or `prompt` can be provided."
+                )
+            data = {"prompt": prompt}
         else:
-            raise ValueError("Either `id` or `name` must be provided.")
+            raise ValueError("Either `id` or `name` or `prompt` must be provided.")
 
         response, status_code, headers = self._requestor.request(
-            method="GET",
+            method="POST",
             url="agent/lookup",
             data=data,
         )
@@ -124,7 +136,6 @@ class Agent:
     def execute(
         self,
         name: str | None = None,
-        version: str | None = None,
         inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
@@ -135,7 +146,6 @@ class Agent:
 
         Args:
             name: Name of the agent to execute. If not provided, we use the prompt to identify the unique agent.
-            version: Optional version of the agent to execute
             inputs: Optional inputs to the agent
             batch: Whether to process in batch mode (async)
             config: Optional agent execution configuration
@@ -150,7 +160,6 @@ class Agent:
 
         data = {
             "name": name,
-            "version": version,
             "batch": batch,
             "inputs": inputs,
         }
