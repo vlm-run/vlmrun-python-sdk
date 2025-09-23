@@ -42,10 +42,12 @@ class PresignedUrlResponse(BaseModel):
     id: Optional[str]
     url: Optional[str]
     filename: Optional[str]
-    expiration: Optional[int]
-    method: Optional[str]
     content_type: Optional[str]
+    upload_method: Optional[str]
+    public_url: Optional[str]
     created_at: datetime
+    expiration: Optional[int] = None
+    method: Optional[str] = None
 
 
 class CreditUsage(BaseModel):
