@@ -146,7 +146,7 @@ class Predictions:
         start_time = time.time()
         while True:
             response: PredictionResponse = self.get(id)
-            if response.status == "completed":
+            if response.status in ("completed", "failed"):
                 return response
 
             elapsed = time.time() - start_time
@@ -206,7 +206,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         version: str = "latest",
         images: Optional[List[Union[Path, Image.Image]]] = None,
         urls: Optional[List[str]] = None,
-        batch: bool = False,
+        batch: bool = True,
         metadata: Optional[RequestMetadata] = None,
         config: Optional[GenerationConfig] = None,
         callback_url: Optional[str] = None,
@@ -262,7 +262,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         images: Optional[List[Union[Path, Image.Image]]] = None,
         urls: Optional[List[str]] = None,
         model: str = "vlm-1",
-        batch: bool = False,
+        batch: bool = True,
         metadata: Optional[RequestMetadata] = None,
         config: Optional[GenerationConfig] = None,
         callback_url: Optional[str] = None,
@@ -423,7 +423,7 @@ def FilePredictions(route: str):
             url: Optional[str] = None,
             model: str = "vlm-1",
             domain: Optional[str] = None,
-            batch: bool = False,
+            batch: bool = True,
             config: Optional[GenerationConfig] = GenerationConfig(),
             metadata: Optional[RequestMetadata] = RequestMetadata(),
             callback_url: Optional[str] = None,
@@ -489,7 +489,7 @@ def FilePredictions(route: str):
             version: str = "latest",
             file: Optional[Union[Path, str]] = None,
             url: Optional[str] = None,
-            batch: bool = False,
+            batch: bool = True,
             config: Optional[GenerationConfig] = GenerationConfig(),
             metadata: Optional[RequestMetadata] = RequestMetadata(),
             callback_url: Optional[str] = None,

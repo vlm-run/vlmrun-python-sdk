@@ -164,6 +164,32 @@ def test_wait_prediction_immediate_completion(mock_client, monkeypatch):
     assert response.status == "completed"
 
 
+def test_wait_prediction_failed_status(mock_client, monkeypatch):
+    """Test waiting for prediction that fails immediately."""
+    from vlmrun.client.predictions import Predictions
+
+    predictions = Predictions(mock_client)
+
+    def mock_get(id):
+        return PredictionResponse(
+            id=id,
+            status="failed",
+            created_at="2024-01-01T00:00:00+00:00",
+            completed_at="2024-01-01T00:00:01+00:00",
+            response={"error": "Processing failed"},
+            usage=CreditUsage(credits_used=0),
+        )
+
+    def mock_sleep(seconds):
+        pass
+
+    monkeypatch.setattr(predictions, "get", mock_get)
+    monkeypatch.setattr("time.sleep", mock_sleep)
+
+    response = predictions.wait("prediction1", timeout=10, sleep=2)
+    assert response.status == "failed"
+
+
 def test_image_generate(mock_client, tmp_path):
     """Test generating image prediction with local file."""
     # Create a dummy image for testing
