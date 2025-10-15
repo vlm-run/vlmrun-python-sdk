@@ -7,6 +7,7 @@ from pydantic.dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, Literal, Optional, Type, List, Tuple
 from vlmrun.hub.utils import jsonschema_to_model
+import hashlib
 import math
 import pandas as pd
 
@@ -572,3 +573,27 @@ class VideoUrl(BaseModel):
 
 class AudioUrl(BaseModel):
     url: str = Field(..., description="The URL of the audio")
+
+
+class Message(BaseModel):
+    """Message model for key generation."""
+
+    pass
+
+
+class Deps(BaseModel):
+    """Dependencies model containing user and session information."""
+
+    user_id: str
+    session_id: str
+
+
+class Session(BaseModel):
+    """Session model."""
+
+    pass
+
+
+def key_part(_msg_: Message, _deps_: Deps, _session_: Optional[Session] = None) -> str:
+    """Get a key for a given part"""
+    return f"msg:{hashlib.sha256(_msg_.model_dump_json(exclude_none=True).encode()).hexdigest()}:{_deps_.user_id}:{_deps_.session_id}"
