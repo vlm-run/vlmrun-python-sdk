@@ -2,11 +2,11 @@
 
 import hmac
 import hashlib
-from typing import Union
+from typing import Optional, Union
 
 
 def verify_webhook(
-    raw_body: Union[str, bytes], signature_header: str | None, secret: str
+    raw_body: Union[str, bytes], signature_header: Optional[str], secret: str
 ) -> bool:
     """
     Verify webhook HMAC signature.

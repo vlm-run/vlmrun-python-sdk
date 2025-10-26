@@ -3,7 +3,6 @@
 import hmac
 import hashlib
 import json
-import pytest
 
 from vlmrun.common.webhook import verify_webhook
 
@@ -109,14 +108,18 @@ class TestVerifyWebhook:
         """Test that signature with different case returns False."""
         signature = self.generate_signature(self.test_payload, self.test_secret)
         uppercase_signature = signature.upper()
-        result = verify_webhook(self.test_payload, uppercase_signature, self.test_secret)
+        result = verify_webhook(
+            self.test_payload, uppercase_signature, self.test_secret
+        )
         assert result is False
 
     def test_truncated_signature(self):
         """Test that truncated signature returns False."""
         signature = self.generate_signature(self.test_payload, self.test_secret)
         truncated_signature = signature[:-2]  # Remove last 2 chars
-        result = verify_webhook(self.test_payload, truncated_signature, self.test_secret)
+        result = verify_webhook(
+            self.test_payload, truncated_signature, self.test_secret
+        )
         assert result is False
 
     def test_undefined_signature_header(self):
@@ -131,17 +134,17 @@ class TestVerifyWebhook:
 
     def test_signature_without_prefix(self):
         """Test that signature without sha256= prefix returns False."""
-        signature = self.generate_signature(self.test_payload, self.test_secret).replace(
-            "sha256=", ""
-        )
+        signature = self.generate_signature(
+            self.test_payload, self.test_secret
+        ).replace("sha256=", "")
         result = verify_webhook(self.test_payload, signature, self.test_secret)
         assert result is False
 
     def test_signature_with_wrong_prefix(self):
         """Test that signature with wrong prefix returns False."""
-        signature = self.generate_signature(self.test_payload, self.test_secret).replace(
-            "sha256=", "sha512="
-        )
+        signature = self.generate_signature(
+            self.test_payload, self.test_secret
+        ).replace("sha256=", "sha512=")
         result = verify_webhook(self.test_payload, signature, self.test_secret)
         assert result is False
 
@@ -318,7 +321,9 @@ class TestVerifyWebhook:
         """Test that signature header with spaces returns False."""
         signature = self.generate_signature(self.test_payload, self.test_secret)
         signature_with_spaces = signature.replace("=", " = ")
-        result = verify_webhook(self.test_payload, signature_with_spaces, self.test_secret)
+        result = verify_webhook(
+            self.test_payload, signature_with_spaces, self.test_secret
+        )
         assert result is False
 
     def test_multiple_equals_in_signature(self):
