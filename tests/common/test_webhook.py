@@ -3,6 +3,7 @@
 import hmac
 import hashlib
 import json
+from typing import Union
 
 from vlmrun.common.webhook import verify_webhook
 
@@ -20,7 +21,7 @@ class TestVerifyWebhook:
     )
 
     @staticmethod
-    def generate_signature(payload: str | bytes, secret: str) -> str:
+    def generate_signature(payload: Union[str, bytes], secret: str) -> str:
         """Helper function to generate valid signature."""
         body_bytes = payload.encode("utf-8") if isinstance(payload, str) else payload
         signature = hmac.new(
