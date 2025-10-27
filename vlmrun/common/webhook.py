@@ -12,12 +12,12 @@ def verify_webhook(
     Verify webhook HMAC signature.
 
     This function verifies that a webhook request came from VLM Run by validating
-    the HMAC signature in the X-VLM-Signature header. The signature is computed
+    the HMAC signature in the X-VLMRun-Signature header. The signature is computed
     using SHA256 HMAC with your webhook secret.
 
     Args:
         raw_body: Raw request body as string or bytes
-        signature_header: X-VLM-Signature header value (format: "sha256=<hex>")
+        signature_header: X-VLMRun-Signature header value (format: "sha256=<hex>")
         secret: Your webhook secret from VLM Run dashboard
 
     Returns:
@@ -33,7 +33,7 @@ def verify_webhook(
         @app.post("/webhook")
         async def webhook_endpoint(request: Request):
             raw_body = await request.body()
-            signature_header = request.headers.get("X-VLM-Signature")
+            signature_header = request.headers.get("X-VLMRun-Signature")
             secret = "your_webhook_secret_here"
 
             if not verify_webhook(raw_body, signature_header, secret):
