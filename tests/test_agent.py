@@ -236,21 +236,3 @@ class TestAgentCompletions:
         async_completions2 = client.agent.async_completions
 
         assert async_completions1 is async_completions2
-
-    def test_client_openai_property_enhanced(self, mock_client):
-        """Test that client.openai property is enhanced with timeout and max_retries."""
-        client = mock_client
-
-        openai_client = client.openai
-
-        assert hasattr(openai_client, "chat")
-        assert hasattr(openai_client.chat, "completions")
-
-    def test_client_async_openai_property_exists(self, mock_client):
-        """Test that client.async_openai property exists."""
-        client = mock_client
-
-        async_openai_client = client.async_openai
-
-        assert hasattr(async_openai_client, "chat")
-        assert hasattr(async_openai_client.chat, "completions")

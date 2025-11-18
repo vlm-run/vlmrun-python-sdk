@@ -89,7 +89,7 @@ client = VLMRun(
 )
 
 response = client.agent.completions.create(
-    model="vlm-1",
+    model="vlmrun-orion-1",
     messages=[
         {"role": "user", "content": "Hello!"}
     ]
@@ -107,7 +107,7 @@ client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
 
 async def main():
     response = await client.agent.async_completions.create(
-        model="vlm-1",
+        model="vlmrun-orion-1",
         messages=[{"role": "user", "content": "Hello!"}]
     )
     print(response.choices[0].message.content)
