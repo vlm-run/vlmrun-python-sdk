@@ -32,6 +32,7 @@ dynamic = ["version", "dependencies"]
 [project.optional-dependencies]
 test = ["pytest", "openai", "pre-commit"]
 build = ["twine", "build"]
+openai = ["openai>=1.0.0"]
 video = [
     "numpy>=1.24.0",
 ]
@@ -41,6 +42,7 @@ doc = [
 all = [
     "numpy>=1.24.0",
     "pypdfium2>=4.30.0",
+    "openai>=1.0.0",
 ]
 
 [tool.setuptools.dynamic]

@@ -134,17 +134,82 @@ class VLMRun:
 
     @cached_property
     def openai(self):
-        """OpenAI client."""
+        """OpenAI client (synchronous).
+
+        Returns an OpenAI client configured to use the VLMRun API endpoint.
+
+        Example:
+            ```python
+            from vlmrun import VLMRun
+
+            client = VLMRun(api_key="your-key")
+
+            response = client.openai.chat.completions.create(
+                model="vlm-1",
+                messages=[{"role": "user", "content": "Hello!"}]
+            )
+            ```
+
+        Raises:
+            DependencyError: If openai package is not installed
+        """
         try:
             from openai import OpenAI as _OpenAI
         except ImportError:
             raise DependencyError(
                 message="OpenAI client is not installed",
-                suggestion="Install it with `pip install openai`",
+                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
                 error_type="missing_dependency",
             )
 
-        return _OpenAI(api_key=self.api_key, base_url=f"{self.base_url}/openai")
+        return _OpenAI(
+            api_key=self.api_key,
+            base_url=f"{self.base_url}/openai",
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
+
+    @cached_property
+    def async_openai(self):
+        """OpenAI client (asynchronous).
+
+        Returns an AsyncOpenAI client configured to use the VLMRun API endpoint.
+
+        Example:
+            ```python
+            from vlmrun import VLMRun
+            import asyncio
+
+            client = VLMRun(api_key="your-key")
+
+            async def main():
+                response = await client.async_openai.chat.completions.create(
+                    model="vlm-1",
+                    messages=[{"role": "user", "content": "Hello!"}]
+                )
+                return response
+
+            asyncio.run(main())
+            ```
+
+        Raises:
+            DependencyError: If openai package is not installed
+        """
+        try:
+            from openai import AsyncOpenAI as _AsyncOpenAI
+        except ImportError:
+            raise DependencyError(
+                message="OpenAI client is not installed",
+                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
+                error_type="missing_dependency",
+            )
+
+        return _AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=f"{self.base_url}/openai",
+            timeout=self.timeout,
+            max_retries=self.max_retries,
+        )
 
     def healthcheck(self) -> bool:
         """Check the health of the API."""

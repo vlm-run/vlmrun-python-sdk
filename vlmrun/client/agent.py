@@ -1,6 +1,7 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
+from functools import cached_property
 from typing import Any, Optional
 
 from vlmrun.client.base_requestor import APIRequestor
@@ -13,6 +14,7 @@ from vlmrun.client.types import (
     AgentCreationConfig,
     AgentCreationResponse,
 )
+from vlmrun.client.exceptions import DependencyError
 
 
 class Agent:
@@ -202,3 +204,102 @@ class Agent:
             raise TypeError("Expected dict response")
 
         return AgentInfo(**response)
+
+    @cached_property
+    def completions(self):
+        """OpenAI-compatible chat completions interface (synchronous).
+
+        Returns an OpenAI Completions object configured to use the VLMRun
+        agent endpoint. This allows you to use the familiar OpenAI API
+        for chat completions.
+
+        Example:
+            ```python
+            from vlmrun import VLMRun
+
+            client = VLMRun(api_key="your-key")
+
+            response = client.agent.completions.create(
+                model="vlm-1",
+                messages=[
+                    {"role": "user", "content": "Hello!"}
+                ]
+            )
+            ```
+
+        Raises:
+            DependencyError: If openai package is not installed
+
+        Returns:
+            OpenAI Completions object configured for VLMRun agent endpoint
+        """
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise DependencyError(
+                message="OpenAI SDK is not installed",
+                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
+                error_type="missing_dependency",
+            )
+
+        base_url = f"{self._client.base_url}/openai"
+        openai_client = OpenAI(
+            api_key=self._client.api_key,
+            base_url=base_url,
+            timeout=self._client.timeout,
+            max_retries=self._client.max_retries,
+        )
+
+        return openai_client.chat.completions
+
+    @cached_property
+    def async_completions(self):
+        """OpenAI-compatible chat completions interface (asynchronous).
+
+        Returns an OpenAI AsyncCompletions object configured to use the VLMRun
+        agent endpoint. This allows you to use the familiar OpenAI async API
+        for chat completions.
+
+        Example:
+            ```python
+            from vlmrun import VLMRun
+            import asyncio
+
+            client = VLMRun(api_key="your-key")
+
+            async def main():
+                response = await client.agent.async_completions.create(
+                    model="vlm-1",
+                    messages=[
+                        {"role": "user", "content": "Hello!"}
+                    ]
+                )
+                return response
+
+            asyncio.run(main())
+            ```
+
+        Raises:
+            DependencyError: If openai package is not installed
+
+        Returns:
+            OpenAI AsyncCompletions object configured for VLMRun agent endpoint
+        """
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
+            raise DependencyError(
+                message="OpenAI SDK is not installed",
+                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
+                error_type="missing_dependency",
+            )
+
+        base_url = f"{self._client.base_url}/openai"
+        async_openai_client = AsyncOpenAI(
+            api_key=self._client.api_key,
+            base_url=base_url,
+            timeout=self._client.timeout,
+            max_retries=self._client.max_retries,
+        )
+
+        return async_openai_client.chat.completions

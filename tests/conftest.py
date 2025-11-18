@@ -88,6 +88,8 @@ def mock_client(monkeypatch):
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
+            self.timeout = 120.0
+            self.max_retries = 5
             self.dataset = self.Dataset(self)
             self.fine_tuning = self.FineTuning(self)
             self.predictions = self.Prediction(self)
@@ -100,6 +102,26 @@ def mock_client(monkeypatch):
             self.audio = self.AudioPredictions(self)
             self.feedback = self.Feedback(self)
             self.agent = self.Agent(self)
+
+        @property
+        def openai(self):
+            from openai import OpenAI
+            return OpenAI(
+                api_key=self.api_key,
+                base_url=f"{self.base_url}/openai",
+                timeout=self.timeout,
+                max_retries=self.max_retries,
+            )
+
+        @property
+        def async_openai(self):
+            from openai import AsyncOpenAI
+            return AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=f"{self.base_url}/openai",
+                timeout=self.timeout,
+                max_retries=self.max_retries,
+            )
 
         class FineTuning:
             def __init__(self, client):
@@ -474,6 +496,36 @@ def mock_client(monkeypatch):
         class Agent:
             def __init__(self, client):
                 self._client = client
+                self._completions_cache = None
+                self._async_completions_cache = None
+
+            @property
+            def completions(self):
+                if self._completions_cache is None:
+                    from openai import OpenAI
+                    base_url = f"{self._client.base_url}/openai"
+                    openai_client = OpenAI(
+                        api_key=self._client.api_key,
+                        base_url=base_url,
+                        timeout=self._client.timeout,
+                        max_retries=self._client.max_retries,
+                    )
+                    self._completions_cache = openai_client.chat.completions
+                return self._completions_cache
+
+            @property
+            def async_completions(self):
+                if self._async_completions_cache is None:
+                    from openai import AsyncOpenAI
+                    base_url = f"{self._client.base_url}/openai"
+                    async_openai_client = AsyncOpenAI(
+                        api_key=self._client.api_key,
+                        base_url=base_url,
+                        timeout=self._client.timeout,
+                        max_retries=self._client.max_retries,
+                    )
+                    self._async_completions_cache = async_openai_client.chat.completions
+                return self._async_completions_cache
 
             def get(self, name=None, id=None, prompt=None):
                 from vlmrun.client.types import AgentInfo

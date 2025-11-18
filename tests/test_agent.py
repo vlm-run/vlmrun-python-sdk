@@ -195,3 +195,62 @@ class TestAgentConfigModels:
             AgentCreationConfig(
                 prompt="Test", response_model=TestModel, json_schema={"type": "object"}
             )
+
+
+class TestAgentCompletions:
+    """Test the Agent OpenAI completions integration."""
+
+    def test_agent_completions_property_exists(self, mock_client):
+        """Test that agent.completions property exists and returns OpenAI Completions object."""
+        client = mock_client
+
+        completions = client.agent.completions
+
+        assert hasattr(completions, "create")
+        assert hasattr(completions, "stream")
+        assert callable(completions.create)
+
+    def test_agent_async_completions_property_exists(self, mock_client):
+        """Test that agent.async_completions property exists and returns AsyncCompletions object."""
+        client = mock_client
+
+        async_completions = client.agent.async_completions
+
+        assert hasattr(async_completions, "create")
+        assert callable(async_completions.create)
+
+    def test_agent_completions_cached_property(self, mock_client):
+        """Test that completions property is cached."""
+        client = mock_client
+
+        completions1 = client.agent.completions
+        completions2 = client.agent.completions
+
+        assert completions1 is completions2
+
+    def test_agent_async_completions_cached_property(self, mock_client):
+        """Test that async_completions property is cached."""
+        client = mock_client
+
+        async_completions1 = client.agent.async_completions
+        async_completions2 = client.agent.async_completions
+
+        assert async_completions1 is async_completions2
+
+    def test_client_openai_property_enhanced(self, mock_client):
+        """Test that client.openai property is enhanced with timeout and max_retries."""
+        client = mock_client
+
+        openai_client = client.openai
+
+        assert hasattr(openai_client, "chat")
+        assert hasattr(openai_client.chat, "completions")
+
+    def test_client_async_openai_property_exists(self, mock_client):
+        """Test that client.async_openai property exists."""
+        client = mock_client
+
+        async_openai_client = client.async_openai
+
+        assert hasattr(async_openai_client, "chat")
+        assert hasattr(async_openai_client.chat, "completions")

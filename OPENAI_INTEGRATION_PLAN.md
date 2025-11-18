@@ -89,21 +89,21 @@ from vlmrun.client.exceptions import DependencyError
 
 class Agent:
     # ... existing methods ...
-    
+
     @cached_property
     def completions(self):
         """OpenAI-compatible chat completions interface (synchronous).
-        
+
         Returns an OpenAI Completions object configured to use the VLMRun
         agent endpoint. This allows you to use the familiar OpenAI API
         for chat completions.
-        
+
         Example:
             ```python
             from vlmrun import VLMRun
-            
+
             client = VLMRun(api_key="your-key")
-            
+
             response = client.agent.completions.create(
                 model="vlm-1",
                 messages=[
@@ -111,7 +111,7 @@ class Agent:
                 ]
             )
             ```
-        
+
         Raises:
             DependencyError: If openai package is not installed
         """
@@ -123,7 +123,7 @@ class Agent:
                 suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
                 error_type="missing_dependency",
             )
-        
+
         # Create OpenAI client with agent-specific base URL
         base_url = f"{self._client.base_url}/openai"
         openai_client = OpenAI(
@@ -132,24 +132,24 @@ class Agent:
             timeout=self._client.timeout,
             max_retries=self._client.max_retries,
         )
-        
+
         return openai_client.chat.completions
-    
+
     @cached_property
     def async_completions(self):
         """OpenAI-compatible chat completions interface (asynchronous).
-        
+
         Returns an OpenAI AsyncCompletions object configured to use the VLMRun
         agent endpoint. This allows you to use the familiar OpenAI async API
         for chat completions.
-        
+
         Example:
             ```python
             from vlmrun import VLMRun
             import asyncio
-            
+
             client = VLMRun(api_key="your-key")
-            
+
             async def main():
                 response = await client.agent.async_completions.create(
                     model="vlm-1",
@@ -158,10 +158,10 @@ class Agent:
                     ]
                 )
                 return response
-            
+
             asyncio.run(main())
             ```
-        
+
         Raises:
             DependencyError: If openai package is not installed
         """
@@ -173,7 +173,7 @@ class Agent:
                 suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
                 error_type="missing_dependency",
             )
-        
+
         # Create AsyncOpenAI client with agent-specific base URL
         base_url = f"{self._client.base_url}/openai"
         async_openai_client = AsyncOpenAI(
@@ -182,7 +182,7 @@ class Agent:
             timeout=self._client.timeout,
             max_retries=self._client.max_retries,
         )
-        
+
         return async_openai_client.chat.completions
 ```
 
@@ -206,7 +206,7 @@ def openai(self):
         )
 
     return _OpenAI(
-        api_key=self.api_key, 
+        api_key=self.api_key,
         base_url=f"{self.base_url}/openai",
         timeout=self.timeout,
         max_retries=self.max_retries,
@@ -270,14 +270,14 @@ async def main():
         api_key="your-vlmrun-api-key",
         base_url="https://agent.vlm.run/v1"
     )
-    
+
     response = await client.agent.async_completions.create(
         model="vlm-1",
         messages=[
             {"role": "user", "content": "Hello!"}
         ]
     )
-    
+
     print(response.choices[0].message.content)
 
 asyncio.run(main())
@@ -323,7 +323,7 @@ def test_agent_completions_requires_openai():
 def test_agent_completions_sync(mock_vlmrun_client):
     """Test synchronous completions access."""
     client = VLMRun(api_key="test-key")
-    
+
     # Should return OpenAI Completions object
     completions = client.agent.completions
     assert completions is not None
@@ -333,7 +333,7 @@ def test_agent_completions_sync(mock_vlmrun_client):
 def test_agent_completions_async(mock_vlmrun_client):
     """Test asynchronous completions access."""
     client = VLMRun(api_key="test-key")
-    
+
     # Should return OpenAI AsyncCompletions object
     async_completions = client.agent.async_completions
     assert async_completions is not None
@@ -345,7 +345,7 @@ def test_agent_completions_base_url():
         api_key="test-key",
         base_url="https://agent.vlm.run/v1"
     )
-    
+
     # The OpenAI client should be configured with /openai suffix
     # This would need to inspect the internal OpenAI client configuration
     pass
@@ -367,7 +367,7 @@ import os
 def test_agent_completions_create():
     """Test actual chat completion request."""
     client = VLMRun(base_url="https://agent.vlm.run/v1")
-    
+
     response = client.agent.completions.create(
         model="vlm-1",
         messages=[
@@ -375,7 +375,7 @@ def test_agent_completions_create():
         ],
         max_tokens=10
     )
-    
+
     assert response.choices[0].message.content is not None
     assert len(response.choices) > 0
 
@@ -387,7 +387,7 @@ def test_agent_completions_create():
 async def test_agent_async_completions_create():
     """Test actual async chat completion request."""
     client = VLMRun(base_url="https://agent.vlm.run/v1")
-    
+
     response = await client.agent.async_completions.create(
         model="vlm-1",
         messages=[
@@ -395,7 +395,7 @@ async def test_agent_async_completions_create():
         ],
         max_tokens=10
     )
-    
+
     assert response.choices[0].message.content is not None
 ```
 

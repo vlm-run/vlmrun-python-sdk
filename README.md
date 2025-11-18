@@ -40,6 +40,11 @@ The package provides optional features that can be installed based on your needs
   pip install "vlmrun[doc]"
   ```
 
+- OpenAI SDK integration (for chat completions API):
+  ```bash
+  pip install "vlmrun[openai]"
+  ```
+
 - All optional features:
   ```bash
   pip install "vlmrun[all]"
@@ -70,6 +75,47 @@ response = client.image.generate(
 )
 print(response)
 ```
+
+### OpenAI-Compatible Chat Completions
+
+The VLM Run SDK provides OpenAI-compatible chat completions through the agent endpoint. This allows you to use the familiar OpenAI API with VLM Run's powerful vision-language models.
+
+```python
+from vlmrun import VLMRun
+
+client = VLMRun(
+    api_key="your-key",
+    base_url="https://agent.vlm.run/v1"
+)
+
+response = client.agent.completions.create(
+    model="vlm-1",
+    messages=[
+        {"role": "user", "content": "Hello!"}
+    ]
+)
+print(response.choices[0].message.content)
+```
+
+For async support:
+
+```python
+import asyncio
+from vlmrun import VLMRun
+
+client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
+
+async def main():
+    response = await client.agent.async_completions.create(
+        model="vlm-1",
+        messages=[{"role": "user", "content": "Hello!"}]
+    )
+    print(response.choices[0].message.content)
+
+asyncio.run(main())
+```
+
+**Installation**: Install with OpenAI support using `pip install vlmrun[openai]`
 
 ## 🔗 Quick Links
 
