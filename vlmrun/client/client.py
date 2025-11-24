@@ -26,7 +26,6 @@ from vlmrun.client.executions import Executions
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
 from vlmrun.client.exceptions import (
-    DependencyError,
     ConfigurationError,
     AuthenticationError,
 )
@@ -131,20 +130,6 @@ class VLMRun:
     def requestor(self):
         """Requestor for the API."""
         return APIRequestor(self, timeout=self.timeout, max_retries=self.max_retries)
-
-    @cached_property
-    def openai(self):
-        """OpenAI client."""
-        try:
-            from openai import OpenAI as _OpenAI
-        except ImportError:
-            raise DependencyError(
-                message="OpenAI client is not installed",
-                suggestion="Install it with `pip install openai`",
-                error_type="missing_dependency",
-            )
-
-        return _OpenAI(api_key=self.api_key, base_url=f"{self.base_url}/openai")
 
     def healthcheck(self) -> bool:
         """Check the health of the API."""
