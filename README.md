@@ -81,7 +81,7 @@ print(response)
 The VLM Run SDK provides OpenAI-compatible chat completions through the agent endpoint. This allows you to use the familiar OpenAI API with VLM Run's powerful vision-language models.
 
 ```python
-from vlmrun import VLMRun
+from vlmrun.client import VLMRun
 
 client = VLMRun(
     api_key="your-key",
@@ -101,7 +101,7 @@ For async support:
 
 ```python
 import asyncio
-from vlmrun import VLMRun
+from vlmrun.client import VLMRun
 
 client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
 
