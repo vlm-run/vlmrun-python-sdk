@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 from pathlib import Path
 from pydantic import AnyHttpUrl
 from PIL import Image
@@ -28,7 +28,7 @@ class Artifacts:
 
     def get(
         self, session_id: str, object_id: str, raw_response: bool = False
-    ) -> bytes | Image.Image:
+    ) -> Union[bytes, Image.Image, AnyHttpUrl, Path]:
         """Get an artifact by session ID and object ID.
 
         Args:
@@ -60,26 +60,25 @@ class Artifacts:
                 f"Invalid object ID: {object_id}, expected format: <obj_type>_<6-digit-hex-string>"
             )
 
-        match obj_type:
-            case "img":
-                assert (
-                    headers["Content-Type"] == "image/jpeg"
-                ), f"Expected image/jpeg, got {headers['Content-Type']}"
-                return Image.open(io.BytesIO(response)).convert("RGB")
-            case "url":
-                return AnyHttpUrl(response.decode("utf-8"))
-            case "vid":
-                # Read the binary response as a video file and write it to a temporary file
-                assert (
-                    headers["Content-Type"] == "video/mp4"
-                ), f"Expected video/mp4, got {headers['Content-Type']}"
-                tmp_path: Path = VLMRUN_CACHE_DIR / f"{object_id}.mp4"
-                tmp_path.parent.mkdir(parents=True, exist_ok=True)
-                with tmp_path.open("wb") as f:
-                    f.write(response)
-                return tmp_path
-            case _:
-                return response
+        if obj_type == "img":
+            assert (
+                headers["Content-Type"] == "image/jpeg"
+            ), f"Expected image/jpeg, got {headers['Content-Type']}"
+            return Image.open(io.BytesIO(response)).convert("RGB")
+        elif obj_type == "url":
+            return AnyHttpUrl(response.decode("utf-8"))
+        elif obj_type == "vid":
+            # Read the binary response as a video file and write it to a temporary file
+            assert (
+                headers["Content-Type"] == "video/mp4"
+            ), f"Expected video/mp4, got {headers['Content-Type']}"
+            tmp_path: Path = VLMRUN_CACHE_DIR / f"{object_id}.mp4"
+            tmp_path.parent.mkdir(parents=True, exist_ok=True)
+            with tmp_path.open("wb") as f:
+                f.write(response)
+            return tmp_path
+        else:
+            return response
 
     def list(self, session_id: str) -> None:
         """List artifacts for a session.
