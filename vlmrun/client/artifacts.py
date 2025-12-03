@@ -2,13 +2,35 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
-from pathlib import Path
-from pydantic import AnyHttpUrl
-from PIL import Image
 import io
+from email.parser import HeaderParser
+from pathlib import Path
+from typing import TYPE_CHECKING, Dict, Union
+
+from PIL import Image
+from pydantic import AnyHttpUrl
+
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.constants import VLMRUN_CACHE_DIR
+
+
+def _get_disposition_params(disposition: str) -> Dict[str, str]:
+    """Parse Content-Disposition header and return parameters.
+
+    Args:
+        disposition: Content-Disposition header value
+
+    Returns:
+        Dictionary of parameters from the header
+    """
+    parser = HeaderParser()
+    msg = parser.parsestr(f"Content-Disposition: {disposition}")
+    params = msg.get_params(header="Content-Disposition", unquote=True)
+    if not params:
+        return {}
+    # First element is the main value (e.g., "attachment"), rest are params
+    return dict(params[1:])
+
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
@@ -72,8 +94,28 @@ class Artifacts:
             assert (
                 headers["Content-Type"] == "video/mp4"
             ), f"Expected video/mp4, got {headers['Content-Type']}"
-            tmp_path: Path = VLMRUN_CACHE_DIR / f"{object_id}.mp4"
-            tmp_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Parse Content-Disposition header to get file extension
+            ext = "mp4"  # default extension
+            disposition = headers.get("Content-Disposition") or headers.get(
+                "content-disposition"
+            )
+            if disposition:
+                params = _get_disposition_params(disposition)
+                filename = params.get("filename")
+                if filename:
+                    suffix = Path(filename).suffix
+                    if suffix:
+                        ext = suffix.lstrip(".")
+
+            # Build cache path with session_id and object_id
+            safe_session_id = session_id.replace("-", "")
+            tmp_path: Path = VLMRUN_CACHE_DIR / f"{safe_session_id}_{object_id}.{ext}"
+
+            # Return cached version if it exists
+            if tmp_path.exists():
+                return tmp_path
+
             with tmp_path.open("wb") as f:
                 f.write(response)
             return tmp_path
