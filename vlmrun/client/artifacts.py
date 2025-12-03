@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-
+from pathlib import Path
+from pydantic import AnyHttpUrl
+from PIL import Image
+import io
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.constants import VLMRUN_CACHE_DIR
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
@@ -22,15 +26,19 @@ class Artifacts:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def get(self, session_id: str, object_id: str) -> bytes:
+    def get(
+        self, session_id: str, object_id: str, raw_response: bool = False
+    ) -> bytes | Image.Image:
         """Get an artifact by session ID and object ID.
 
         Args:
             session_id: Session ID for the artifact
             object_id: Object ID for the artifact
+            raw_response: Whether to return the raw response or not
 
         Returns:
-            bytes: The artifact content
+            bytes: The artifact content if raw_response is True, otherwise
+            converted to the appropriate type based on the content type
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
@@ -40,7 +48,38 @@ class Artifacts:
 
         if not isinstance(response, bytes):
             raise TypeError("Expected bytes response")
-        return response
+
+        # If raw response is requested, return the raw response as bytes
+        if raw_response:
+            return response
+
+        # Otherwise, return the appropriate type based on the content type
+        obj_type, _obj_id = object_id.split("_")
+        if len(_obj_id) != 6:
+            raise ValueError(
+                f"Invalid object ID: {object_id}, expected format: <obj_type>_<6-digit-hex-string>"
+            )
+
+        match obj_type:
+            case "img":
+                assert (
+                    headers["Content-Type"] == "image/jpeg"
+                ), f"Expected image/jpeg, got {headers['Content-Type']}"
+                return Image.open(io.BytesIO(response)).convert("RGB")
+            case "url":
+                return AnyHttpUrl(response.decode("utf-8"))
+            case "vid":
+                # Read the binary response as a video file and write it to a temporary file
+                assert (
+                    headers["Content-Type"] == "video/mp4"
+                ), f"Expected video/mp4, got {headers['Content-Type']}"
+                tmp_path: Path = VLMRUN_CACHE_DIR / f"{object_id}.mp4"
+                tmp_path.parent.mkdir(parents=True, exist_ok=True)
+                with tmp_path.open("wb") as f:
+                    f.write(response)
+                return tmp_path
+            case _:
+                return response
 
     def list(self, session_id: str) -> None:
         """List artifacts for a session.
