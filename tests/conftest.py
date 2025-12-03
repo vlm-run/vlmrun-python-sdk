@@ -103,6 +103,7 @@ def mock_client(monkeypatch):
             self.audio = self.AudioPredictions(self)
             self.feedback = self.Feedback(self)
             self.agent = self.Agent(self)
+            self.artifacts = self.Artifacts(self)
 
         class FineTuning:
             def __init__(self, client):
@@ -632,6 +633,16 @@ def mock_client(monkeypatch):
                     response={"result": "execution result"},
                     usage=CreditUsage(credits_used=50),
                 )
+
+        class Artifacts:
+            def __init__(self, client):
+                self._client = client
+
+            def get(self, session_id: str, object_id: str) -> bytes:
+                return b"mock artifact content"
+
+            def list(self, session_id: str):
+                raise NotImplementedError("Artifacts.list() is not yet implemented")
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()
