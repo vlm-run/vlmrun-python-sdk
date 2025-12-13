@@ -38,6 +38,11 @@ class FileResponse(BaseModel):
     public_url: Optional[str] = None
 
 
+class PresignedUrlRequest(BaseModel):
+    filename: str
+    purpose: Optional[str] = None
+
+
 class PresignedUrlResponse(BaseModel):
     id: Optional[str]
     url: Optional[str]
