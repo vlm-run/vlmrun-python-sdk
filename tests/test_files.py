@@ -1,6 +1,6 @@
 """Tests for files operations."""
 
-from vlmrun.client.types import FileResponse
+from vlmrun.client.types import FileResponse, PresignedUrlRequest, PresignedUrlResponse
 
 
 def test_list_files(mock_client):
@@ -39,3 +39,22 @@ def test_delete_file(mock_client):
     response = mock_client.files.delete("file1")
     assert isinstance(response, FileResponse)
     assert response.id == "file1"
+
+
+def test_generate_presigned_url(mock_client):
+    """Test generating a presigned URL."""
+    params = PresignedUrlRequest(filename="test.pdf", purpose="assistants")
+    response = mock_client.files.generate_presigned_url(params)
+    assert isinstance(response, PresignedUrlResponse)
+    assert response.id == "presigned1"
+    assert response.filename == "test.pdf"
+    assert response.url is not None
+    assert "storage.example.com" in response.url
+
+
+def test_generate_presigned_url_without_purpose(mock_client):
+    """Test generating a presigned URL without specifying purpose."""
+    params = PresignedUrlRequest(filename="document.pdf")
+    response = mock_client.files.generate_presigned_url(params)
+    assert isinstance(response, PresignedUrlResponse)
+    assert response.filename == "document.pdf"
