@@ -17,6 +17,7 @@ from vlmrun.client.types import (
     FileResponse,
     PredictionResponse,
     CreditUsage,
+    PresignedUrlResponse,
 )
 
 
@@ -216,6 +217,17 @@ def mock_client(monkeypatch):
                     filename="test.txt",
                     bytes=10,
                     purpose="assistants",
+                    created_at="2024-01-01T00:00:00+00:00",
+                )
+
+            def generate_presigned_url(self, params):
+                return PresignedUrlResponse(
+                    id="presigned1",
+                    url="https://storage.example.com/upload/presigned1",
+                    filename=params.filename,
+                    content_type="application/octet-stream",
+                    upload_method="PUT",
+                    public_url="https://storage.example.com/files/presigned1",
                     created_at="2024-01-01T00:00:00+00:00",
                 )
 
