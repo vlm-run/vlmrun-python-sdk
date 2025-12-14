@@ -112,7 +112,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": ":white_check_mark: *vlmrun-python-sdk v${{ env.VERSION }} Published to PyPI*\n\n*Version:* `v${{ env.VERSION }}`\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                    "text": ":white_check_mark: :python: *vlmrun-python-sdk v${{ env.VERSION }} Published to PyPI*\n\n*Version:* `v${{ env.VERSION }}`\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
                   }
                 }
               ]
@@ -131,7 +131,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": ":x: *vlmrun-python-sdk Publish Failed*\n\n*Tag:* `${{ github.ref_name }}`\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                    "text": ":x: :python: *vlmrun-python-sdk Publish Failed*\n\n*Tag:* `${{ github.ref_name }}`\n*Workflow:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
                   }
                 }
               ]
