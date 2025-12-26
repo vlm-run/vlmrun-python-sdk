@@ -143,6 +143,7 @@ class Agent:
         config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
         callback_url: Optional[str] = None,
+        model: str = "vlmrun-orion-1:auto",
     ) -> AgentExecutionResponse:
         """Execute an agent with the given arguments.
 
@@ -153,6 +154,7 @@ class Agent:
             config: Optional agent execution configuration
             metadata: Optional request metadata
             callback_url: Optional URL to call when execution is complete
+            model: VLM Run Agent model to use for execution (default: "vlmrun-orion-1:auto")
 
         Returns:
             AgentExecutionResponse: Agent execution response
@@ -161,6 +163,7 @@ class Agent:
             raise NotImplementedError("Batch mode is required for agent execution")
 
         data = {
+            "model": model,
             "name": name,
             "batch": batch,
             "inputs": inputs,
