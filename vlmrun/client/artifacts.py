@@ -49,6 +49,11 @@ class Artifacts:
             bytes: The artifact content if raw_response is True, otherwise
             converted to the appropriate type based on the content type
         """
+        if session_id is None and execution_id is None:
+            raise ValueError("Either `session_id` or `execution_id` is required")
+        if session_id is not None and execution_id is not None:
+            raise ValueError("Only one of `session_id` or `execution_id` is allowed, not both")
+
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="artifacts",
@@ -75,7 +80,8 @@ class Artifacts:
             )
 
         # Create temporary path if not already created
-        tmp_path: Path = VLMRUN_ARTIFACTS_DIR / session_id
+        sess_id: str = session_id or execution_id
+        tmp_path: Path = VLMRUN_ARTIFACTS_DIR / sess_id
         tmp_path.mkdir(parents=True, exist_ok=True)
         match obj_type:
             # In-memory image object
