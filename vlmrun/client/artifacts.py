@@ -10,7 +10,7 @@ from PIL import Image
 from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.constants import VLMRUN_CACHE_DIR
+from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
 
 
 if TYPE_CHECKING:
@@ -63,6 +63,19 @@ class Artifacts:
                 f"Invalid object ID: {object_id}, expected format: <obj_type>_<6-digit-hex-string>"
             )
 
+        # Create artifacts directory with session_id subdirectory
+        artifacts_dir: Path = VLMRUN_ARTIFACTS_DIR / session_id
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extension and content-type mappings for file-based artifacts
+        ext_mapping = {"vid": "mp4", "aud": "mp3", "doc": "pdf", "recon": "spz"}
+        content_type_mapping = {
+            "vid": "video/mp4",
+            "aud": "audio/mpeg",
+            "doc": "application/pdf",
+            "recon": "application/octet-stream",
+        }
+
         match obj_type:
             case "img":
                 assert (
@@ -71,13 +84,23 @@ class Artifacts:
                 return Image.open(io.BytesIO(response)).convert("RGB")
             case "url":
                 return AnyHttpUrl(response.decode("utf-8"))
-            case "vid":
-                # Read the binary response as a video file and write it to a temporary file
+            case "vid" | "aud" | "doc" | "recon":
+                # Validate content type
+                expected_content_type = content_type_mapping[obj_type]
+                actual_content_type = headers.get("Content-Type")
                 assert (
-                    headers["Content-Type"] == "video/mp4"
-                ), f"Expected video/mp4, got {headers['Content-Type']}"
-                tmp_path: Path = VLMRUN_CACHE_DIR / f"{object_id}.mp4"
-                tmp_path.parent.mkdir(parents=True, exist_ok=True)
+                    actual_content_type == expected_content_type
+                ), f"Expected {expected_content_type}, got {actual_content_type}"
+
+                # Build file path with appropriate extension
+                ext = ext_mapping[obj_type]
+                tmp_path: Path = artifacts_dir / f"{object_id}.{ext}"
+
+                # Return cached version if it exists
+                if tmp_path.exists():
+                    return tmp_path
+
+                # Write the binary response to file
                 with tmp_path.open("wb") as f:
                     f.write(response)
                 return tmp_path

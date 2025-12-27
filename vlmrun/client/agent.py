@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 from functools import cached_property
-from typing import Any, Optional
+from typing import Any, Optional, Union
+
+from pydantic import BaseModel
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -28,6 +30,21 @@ class Agent:
         """
         self._client = client
         self._requestor = APIRequestor(client)
+
+    def _process_inputs(
+        self, inputs: Union[dict[str, Any], BaseModel, None]
+    ) -> dict[str, Any] | None:
+        """Process inputs, converting BaseModel to dict if needed.
+
+        Args:
+            inputs: Input data as dict, BaseModel, or None
+
+        Returns:
+            Processed inputs as dict or None
+        """
+        if isinstance(inputs, BaseModel):
+            return inputs.model_dump()
+        return inputs
 
     def get(
         self,
@@ -96,7 +113,7 @@ class Agent:
         self,
         config: AgentCreationConfig,
         name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
         callback_url: Optional[str] = None,
     ) -> AgentCreationResponse:
         """Create an agent.
@@ -104,7 +121,7 @@ class Agent:
         Args:
             config: Agent creation configuration
             name: Optional name of the agent to create
-            inputs: Optional inputs to the agent (e.g. {"image": "https://..."})
+            inputs: Optional inputs to the agent (e.g. {"image": "https://..."}) or a BaseModel instance
             callback_url: Optional URL to call when creation is complete
 
         Returns:
@@ -117,7 +134,7 @@ class Agent:
 
         data = {
             "name": name,
-            "inputs": inputs,
+            "inputs": self._process_inputs(inputs),
             "config": config.model_dump(),
         }
 
@@ -138,7 +155,7 @@ class Agent:
     def execute(
         self,
         name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
@@ -148,7 +165,7 @@ class Agent:
 
         Args:
             name: Name of the agent to execute. If not provided, we use the prompt to identify the unique agent.
-            inputs: Optional inputs to the agent
+            inputs: Optional inputs to the agent or a BaseModel instance
             batch: Whether to process in batch mode (async)
             config: Optional agent execution configuration
             metadata: Optional request metadata
@@ -163,7 +180,7 @@ class Agent:
         data = {
             "name": name,
             "batch": batch,
-            "inputs": inputs,
+            "inputs": self._process_inputs(inputs),
         }
 
         if config:

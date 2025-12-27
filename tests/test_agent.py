@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime
+from pydantic import BaseModel
 from vlmrun.client.types import (
     AgentCreationResponse,
     AgentCreationConfig,
@@ -10,6 +11,14 @@ from vlmrun.client.types import (
     AgentInfo,
     CreditUsage,
 )
+from vlmrun.client.agent import Agent
+
+
+class SampleInputModel(BaseModel):
+    """Sample model for BaseModel input tests."""
+
+    image_url: str
+    prompt: str
 
 
 class TestAgentCreationResponse:
@@ -236,3 +245,54 @@ class TestAgentCompletions:
         async_completions2 = client.agent.async_completions
 
         assert async_completions1 is async_completions2
+
+
+class TestAgentProcessInputs:
+    """Test the Agent._process_inputs helper method."""
+
+    def test_process_inputs_with_dict(self):
+        """Test _process_inputs with dict input."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        inputs = {"image_url": "https://example.com/image.jpg", "prompt": "test"}
+        result = agent._process_inputs(inputs)
+        assert result == inputs
+
+    def test_process_inputs_with_basemodel(self):
+        """Test _process_inputs with BaseModel input."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        inputs = SampleInputModel(
+            image_url="https://example.com/image.jpg", prompt="test"
+        )
+        result = agent._process_inputs(inputs)
+        assert isinstance(result, dict)
+        assert result == {
+            "image_url": "https://example.com/image.jpg",
+            "prompt": "test",
+        }
+
+    def test_process_inputs_with_none(self):
+        """Test _process_inputs with None input."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        result = agent._process_inputs(None)
+        assert result is None
