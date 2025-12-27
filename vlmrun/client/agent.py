@@ -14,7 +14,7 @@ from vlmrun.client.types import (
     AgentCreationConfig,
     AgentCreationResponse,
 )
-from vlmrun.client.exceptions import DependencyError
+from vlmrun.client.exceptions import DependencyError, APIError
 
 
 class Agent:
@@ -34,7 +34,7 @@ class Agent:
         name: str | None = None,
         id: str | None = None,
         prompt: str | None = None,
-    ) -> AgentInfo:
+    ) -> AgentInfo | None:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
         Args:
@@ -43,10 +43,10 @@ class Agent:
             prompt: Prompt of the agent
 
         Raises:
-            APIError: If the agent is not found (404) or the agent name is invalid (400)
+            ValueError: If the agent name is invalid (400)
 
         Returns:
-            AgentInfo: Agent information response
+            AgentInfo | None: Agent information response or None if the agent is not found
         """
         if id:
             if name or prompt:
@@ -74,10 +74,20 @@ class Agent:
             url="agent/lookup",
             data=data,
         )
-
+        if status_code == 400:
+            raise ValueError(
+                f"Invalid agent name [name={name}, id={id}, prompt={prompt}]"
+            )
+        elif status_code == 404:
+            return None
+        elif status_code != 200:
+            raise APIError(
+                f"Failed to lookup agent [name={name}, id={id}, prompt={prompt}]",
+                status_code=status_code,
+                headers=headers,
+            )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
-
         return AgentInfo(**response)
 
     def list(self) -> list[AgentInfo]:

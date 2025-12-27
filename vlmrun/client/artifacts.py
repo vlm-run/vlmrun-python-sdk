@@ -30,12 +30,18 @@ class Artifacts:
         self._requestor = APIRequestor(client)
 
     def get(
-        self, session_id: str, object_id: str, raw_response: bool = False
+        self,
+        object_id: str,
+        session_id: str | None = None,
+        execution_id: str | None = None,
+        raw_response: bool = False,
     ) -> Union[bytes, Image.Image, AnyHttpUrl, Path]:
         """Get an artifact by session ID and object ID.
 
         Args:
+            object_id: Object ID for the artifact
             session_id: Session ID for the artifact
+            execution_id: Execution ID for the artifact
             object_id: Object ID for the artifact
             raw_response: Whether to return the raw response or not
 
@@ -45,7 +51,12 @@ class Artifacts:
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"artifacts/{session_id}/{object_id}",
+            url="artifacts",
+            data={
+                "session_id": session_id,
+                "execution_id": execution_id,
+                "object_id": object_id,
+            },
             raw_response=True,
         )
 
