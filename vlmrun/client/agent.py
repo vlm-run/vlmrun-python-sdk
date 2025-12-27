@@ -3,7 +3,7 @@
 from __future__ import annotations
 from functools import cached_property
 from typing import Any, Optional
-
+from pydantic import BaseModel
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
@@ -14,7 +14,7 @@ from vlmrun.client.types import (
     AgentCreationConfig,
     AgentCreationResponse,
 )
-from vlmrun.client.exceptions import DependencyError
+from vlmrun.client.exceptions import DependencyError, APIError
 
 
 class Agent:
@@ -34,7 +34,7 @@ class Agent:
         name: str | None = None,
         id: str | None = None,
         prompt: str | None = None,
-    ) -> AgentInfo:
+    ) -> AgentInfo | None:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
         Args:
@@ -43,10 +43,10 @@ class Agent:
             prompt: Prompt of the agent
 
         Raises:
-            APIError: If the agent is not found (404) or the agent name is invalid (400)
+            ValueError: If the agent name is invalid (400)
 
         Returns:
-            AgentInfo: Agent information response
+            AgentInfo | None: Agent information response or None if the agent is not found
         """
         if id:
             if name or prompt:
@@ -74,10 +74,20 @@ class Agent:
             url="agent/lookup",
             data=data,
         )
-
+        if status_code == 400:
+            raise ValueError(
+                f"Invalid agent name [name={name}, id={id}, prompt={prompt}]"
+            )
+        elif status_code == 404:
+            return None
+        elif status_code != 200:
+            raise APIError(
+                f"Failed to lookup agent [name={name}, id={id}, prompt={prompt}]",
+                status_code=status_code,
+                headers=headers,
+            )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
-
         return AgentInfo(**response)
 
     def list(self) -> list[AgentInfo]:
@@ -96,7 +106,7 @@ class Agent:
         self,
         config: AgentCreationConfig,
         name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: dict[str, Any] | BaseModel = None,
         callback_url: Optional[str] = None,
     ) -> AgentCreationResponse:
         """Create an agent.
@@ -114,6 +124,9 @@ class Agent:
             raise ValueError(
                 "Prompt is not provided as a request parameter, please provide a prompt."
             )
+
+        if isinstance(inputs, BaseModel):
+            inputs: dict[str, Any] = inputs.model_dump()
 
         data = {
             "name": name,
@@ -138,7 +151,7 @@ class Agent:
     def execute(
         self,
         name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: dict[str, Any] | BaseModel = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
@@ -161,6 +174,9 @@ class Agent:
         """
         if not batch:
             raise NotImplementedError("Batch mode is required for agent execution")
+
+        if isinstance(inputs, BaseModel):
+            inputs: dict[str, Any] = inputs.model_dump()
 
         data = {
             "model": model,

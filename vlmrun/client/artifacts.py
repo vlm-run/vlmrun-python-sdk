@@ -3,33 +3,14 @@
 from __future__ import annotations
 
 import io
-from email.parser import HeaderParser
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Union
+from typing import TYPE_CHECKING, Union
 
 from PIL import Image
 from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.constants import VLMRUN_CACHE_DIR
-
-
-def _get_disposition_params(disposition: str) -> Dict[str, str]:
-    """Parse Content-Disposition header and return parameters.
-
-    Args:
-        disposition: Content-Disposition header value
-
-    Returns:
-        Dictionary of parameters from the header
-    """
-    parser = HeaderParser()
-    msg = parser.parsestr(f"Content-Disposition: {disposition}")
-    params = msg.get_params(header="Content-Disposition", unquote=True)
-    if not params:
-        return {}
-    # First element is the main value (e.g., "attachment"), rest are params
-    return dict(params[1:])
+from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
 
 
 if TYPE_CHECKING:
@@ -49,12 +30,18 @@ class Artifacts:
         self._requestor = APIRequestor(client)
 
     def get(
-        self, session_id: str, object_id: str, raw_response: bool = False
+        self,
+        object_id: str,
+        session_id: str | None = None,
+        execution_id: str | None = None,
+        raw_response: bool = False,
     ) -> Union[bytes, Image.Image, AnyHttpUrl, Path]:
         """Get an artifact by session ID and object ID.
 
         Args:
+            object_id: Object ID for the artifact
             session_id: Session ID for the artifact
+            execution_id: Execution ID for the artifact
             object_id: Object ID for the artifact
             raw_response: Whether to return the raw response or not
 
@@ -62,9 +49,19 @@ class Artifacts:
             bytes: The artifact content if raw_response is True, otherwise
             converted to the appropriate type based on the content type
         """
+        if session_id is None and execution_id is None:
+            raise ValueError("Either `session_id` or `execution_id` is required")
+        if session_id is not None and execution_id is not None:
+            raise ValueError("Only one of `session_id` or `execution_id` is allowed, not both")
+
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"artifacts/{session_id}/{object_id}",
+            url="artifacts",
+            data={
+                "session_id": session_id,
+                "execution_id": execution_id,
+                "object_id": object_id,
+            },
             raw_response=True,
         )
 
@@ -82,45 +79,29 @@ class Artifacts:
                 f"Invalid object ID: {object_id}, expected format: <obj_type>_<6-digit-hex-string>"
             )
 
-        if obj_type == "img":
-            assert (
-                headers["Content-Type"] == "image/jpeg"
-            ), f"Expected image/jpeg, got {headers['Content-Type']}"
-            return Image.open(io.BytesIO(response)).convert("RGB")
-        elif obj_type == "url":
-            return AnyHttpUrl(response.decode("utf-8"))
-        elif obj_type == "vid":
-            # Read the binary response as a video file and write it to a temporary file
-            assert (
-                headers["Content-Type"] == "video/mp4"
-            ), f"Expected video/mp4, got {headers['Content-Type']}"
-
-            # Parse Content-Disposition header to get file extension
-            ext = "mp4"  # default extension
-            disposition = headers.get("Content-Disposition") or headers.get(
-                "content-disposition"
-            )
-            if disposition:
-                params = _get_disposition_params(disposition)
-                filename = params.get("filename")
-                if filename:
-                    suffix = Path(filename).suffix
-                    if suffix:
-                        ext = suffix.lstrip(".")
-
-            # Build cache path with session_id and object_id
-            safe_session_id = session_id.replace("-", "")
-            tmp_path: Path = VLMRUN_CACHE_DIR / f"{safe_session_id}_{object_id}.{ext}"
-
-            # Return cached version if it exists
-            if tmp_path.exists():
+        # Create temporary path if not already created
+        sess_id: str = session_id or execution_id
+        tmp_path: Path = VLMRUN_ARTIFACTS_DIR / sess_id
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        match obj_type:
+            # In-memory image object
+            case "img":
+                assert (
+                    headers["Content-Type"] == "image/jpeg"
+                ), f"Expected image/jpeg, got {headers['Content-Type']}"
+                return Image.open(io.BytesIO(response)).convert("RGB")
+            # Return the
+            case "url":
+                return AnyHttpUrl(response.decode("utf-8"))
+            case "vid" | "aud" | "doc" | "recon":
+                # Read the binary response as a video file and write it to a temporary file
+                ext = {"vid": "mp4", "aud": "mp3", "doc": "pdf", "recon": "spz"}
+                tmp_path = tmp_path / f"{object_id}.{ext}"
+                with tmp_path.open("wb") as f:
+                    f.write(response)
                 return tmp_path
-
-            with tmp_path.open("wb") as f:
-                f.write(response)
-            return tmp_path
-        else:
-            return response
+            case _:
+                return response
 
     def list(self, session_id: str) -> None:
         """List artifacts for a session.
