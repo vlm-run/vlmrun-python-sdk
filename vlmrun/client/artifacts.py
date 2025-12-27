@@ -10,7 +10,7 @@ from PIL import Image
 from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.constants import VLMRUN_CACHE_DIR
+from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
 
 
 if TYPE_CHECKING:
@@ -63,21 +63,23 @@ class Artifacts:
                 f"Invalid object ID: {object_id}, expected format: <obj_type>_<6-digit-hex-string>"
             )
 
+        # Create temporary path if not already created
+        tmp_path: Path = VLMRUN_ARTIFACTS_DIR / session_id
+        tmp_path.mkdir(parents=True, exist_ok=True)
         match obj_type:
+            # In-memory image object
             case "img":
                 assert (
                     headers["Content-Type"] == "image/jpeg"
                 ), f"Expected image/jpeg, got {headers['Content-Type']}"
                 return Image.open(io.BytesIO(response)).convert("RGB")
+            # Return the
             case "url":
                 return AnyHttpUrl(response.decode("utf-8"))
-            case "vid":
+            case "vid" | "aud" | "doc" | "recon":
                 # Read the binary response as a video file and write it to a temporary file
-                assert (
-                    headers["Content-Type"] == "video/mp4"
-                ), f"Expected video/mp4, got {headers['Content-Type']}"
-                tmp_path: Path = VLMRUN_CACHE_DIR / f"{object_id}.mp4"
-                tmp_path.parent.mkdir(parents=True, exist_ok=True)
+                ext = {"vid": "mp4", "aud": "mp3", "doc": "pdf", "recon": "spz"}
+                tmp_path = tmp_path / f"{object_id}.{ext}"
                 with tmp_path.open("wb") as f:
                     f.write(response)
                 return tmp_path
