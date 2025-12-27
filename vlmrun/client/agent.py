@@ -3,7 +3,7 @@
 from __future__ import annotations
 from functools import cached_property
 from typing import Any, Optional
-
+from pydantic import BaseModel
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import (
@@ -96,7 +96,7 @@ class Agent:
         self,
         config: AgentCreationConfig,
         name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: dict[str, Any] | BaseModel = None,
         callback_url: Optional[str] = None,
     ) -> AgentCreationResponse:
         """Create an agent.
@@ -114,6 +114,9 @@ class Agent:
             raise ValueError(
                 "Prompt is not provided as a request parameter, please provide a prompt."
             )
+
+        if isinstance(inputs, BaseModel):
+            inputs: dict[str, Any] = inputs.model_dump()
 
         data = {
             "name": name,
@@ -138,7 +141,7 @@ class Agent:
     def execute(
         self,
         name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: dict[str, Any] | BaseModel = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
@@ -159,6 +162,9 @@ class Agent:
         """
         if not batch:
             raise NotImplementedError("Batch mode is required for agent execution")
+
+        if isinstance(inputs, BaseModel):
+            inputs: dict[str, Any] = inputs.model_dump()
 
         data = {
             "name": name,

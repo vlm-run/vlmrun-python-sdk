@@ -3,27 +3,38 @@
 import uuid
 from typing import Literal
 from pydantic import BaseModel, Field, AnyHttpUrl, model_validator
+from vlmrun.types.refs import (
+    ImageRef as ImageRef,
+    AudioRef as AudioRef,
+    VideoRef as VideoRef,
+    DocumentRef as DocumentRef,
+    ReconRef as ReconRef,
+    ArrayRef as ArrayRef,
+    UrlRef as UrlRef,
+)  # noqa: F401
 
 
 class ImageUrl(BaseModel):
-    url: AnyHttpUrl
-    """The URL of the image"""
-    detail: Literal["auto", "low", "high"] = Field(default="auto")
-    """The detail level to use for the image"""
+    url: AnyHttpUrl = Field(..., description="The URL of the image")
+    detail: Literal["auto", "low", "high"] = Field(
+        default="auto", description="The detail level to use for the image"
+    )
 
 
 class FileUrl(BaseModel):
-    url: AnyHttpUrl
-    """The URL of the file"""
+    url: AnyHttpUrl = Field(..., description="The URL of the file")
 
 
-class VideoUrl(FileUrl): ...
+class VideoUrl(FileUrl):
+    url: AnyHttpUrl = Field(..., description="The URL of the video")
 
 
-class AudioUrl(FileUrl): ...
+class AudioUrl(FileUrl):
+    url: AnyHttpUrl = Field(..., description="The URL of the audio")
 
 
-class DocumentUrl(FileUrl): ...
+class DocumentUrl(FileUrl):
+    url: AnyHttpUrl = Field(..., description="The URL of the document")
 
 
 class MessageContent(BaseModel):
