@@ -76,36 +76,35 @@ class Artifacts:
             "recon": "application/octet-stream",
         }
 
-        match obj_type:
-            case "img":
-                assert (
-                    headers["Content-Type"] == "image/jpeg"
-                ), f"Expected image/jpeg, got {headers['Content-Type']}"
-                return Image.open(io.BytesIO(response)).convert("RGB")
-            case "url":
-                return AnyHttpUrl(response.decode("utf-8"))
-            case "vid" | "aud" | "doc" | "recon":
-                # Validate content type
-                expected_content_type = content_type_mapping[obj_type]
-                actual_content_type = headers.get("Content-Type")
-                assert (
-                    actual_content_type == expected_content_type
-                ), f"Expected {expected_content_type}, got {actual_content_type}"
+        if obj_type == "img":
+            assert (
+                headers["Content-Type"] == "image/jpeg"
+            ), f"Expected image/jpeg, got {headers['Content-Type']}"
+            return Image.open(io.BytesIO(response)).convert("RGB")
+        elif obj_type == "url":
+            return AnyHttpUrl(response.decode("utf-8"))
+        elif obj_type in ("vid", "aud", "doc", "recon"):
+            # Validate content type
+            expected_content_type = content_type_mapping[obj_type]
+            actual_content_type = headers.get("Content-Type")
+            assert (
+                actual_content_type == expected_content_type
+            ), f"Expected {expected_content_type}, got {actual_content_type}"
 
-                # Build file path with appropriate extension
-                ext = ext_mapping[obj_type]
-                tmp_path: Path = artifacts_dir / f"{object_id}.{ext}"
+            # Build file path with appropriate extension
+            ext = ext_mapping[obj_type]
+            tmp_path: Path = artifacts_dir / f"{object_id}.{ext}"
 
-                # Return cached version if it exists
-                if tmp_path.exists():
-                    return tmp_path
-
-                # Write the binary response to file
-                with tmp_path.open("wb") as f:
-                    f.write(response)
+            # Return cached version if it exists
+            if tmp_path.exists():
                 return tmp_path
-            case _:
-                return response
+
+            # Write the binary response to file
+            with tmp_path.open("wb") as f:
+                f.write(response)
+            return tmp_path
+        else:
+            return response
 
     def list(self, session_id: str) -> None:
         """List artifacts for a session.

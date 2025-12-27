@@ -1,7 +1,7 @@
 """Type definitions for VLM Run API."""
 
 import uuid
-from typing import Literal
+from typing import Literal, Optional, Union
 
 from pydantic import AnyHttpUrl, BaseModel, Field, model_validator
 
@@ -56,17 +56,17 @@ class MessageContent(BaseModel):
         "text", "image_url", "video_url", "audio_url", "file_url", "input_file"
     ]
     """The type of the message content"""
-    text: str | None = None
+    text: Optional[str] = None
     """The text content of the message"""
-    image_url: ImageUrl | None = None
+    image_url: Optional[ImageUrl] = None
     """The image URL content of the message"""
-    video_url: VideoUrl | None = None
+    video_url: Optional[VideoUrl] = None
     """The video URL content of the message"""
-    audio_url: AudioUrl | None = None
+    audio_url: Optional[AudioUrl] = None
     """The audio URL content of the message"""
-    file_url: FileUrl | None = None
+    file_url: Optional[FileUrl] = None
     """The file URL content of the message"""
-    file_id: str | uuid.UUID | None = None
+    file_id: Optional[Union[str, uuid.UUID]] = None
     """The file ID content of the message (either a string or a UUID)"""
 
     @model_validator(mode="after")
