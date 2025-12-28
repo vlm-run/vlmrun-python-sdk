@@ -33,7 +33,7 @@ class Agent:
 
     def _process_inputs(
         self, inputs: Union[dict[str, Any], BaseModel, None]
-    ) -> dict[str, Any] | None:
+    ) -> Optional[dict[str, Any]]:
         """Process inputs, converting BaseModel to dict if needed.
 
         Args:
@@ -48,9 +48,9 @@ class Agent:
 
     def get(
         self,
-        name: str | None = None,
-        id: str | None = None,
-        prompt: str | None = None,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        prompt: Optional[str] = None,
     ) -> AgentInfo:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
@@ -112,7 +112,7 @@ class Agent:
     def create(
         self,
         config: AgentCreationConfig,
-        name: str | None = None,
+        name: Optional[str] = None,
         inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
         callback_url: Optional[str] = None,
     ) -> AgentCreationResponse:
@@ -154,7 +154,7 @@ class Agent:
 
     def execute(
         self,
-        name: str | None = None,
+        name: Optional[str] = None,
         inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
