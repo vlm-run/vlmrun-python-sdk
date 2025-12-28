@@ -40,7 +40,9 @@ class DocumentUrl(FileUrl):
 
 
 class MessageContent(BaseModel):
-    type: Literal["text", "image_url", "video_url", "audio_url", "file_url", "input_file"]
+    type: Literal[
+        "text", "image_url", "video_url", "audio_url", "file_url", "input_file"
+    ]
     """The type of the message content"""
     text: str | None = None
     """The text content of the message"""

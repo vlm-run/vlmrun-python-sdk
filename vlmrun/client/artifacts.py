@@ -11,6 +11,7 @@ from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
+from vlmrun.common.utils import download_artifact
 
 
 if TYPE_CHECKING:
@@ -52,7 +53,9 @@ class Artifacts:
         if session_id is None and execution_id is None:
             raise ValueError("Either `session_id` or `execution_id` is required")
         if session_id is not None and execution_id is not None:
-            raise ValueError("Only one of `session_id` or `execution_id` is allowed, not both")
+            raise ValueError(
+                "Only one of `session_id` or `execution_id` is allowed, not both"
+            )
 
         response, status_code, headers = self._requestor.request(
             method="GET",
@@ -90,12 +93,16 @@ class Artifacts:
                     headers["Content-Type"] == "image/jpeg"
                 ), f"Expected image/jpeg, got {headers['Content-Type']}"
                 return Image.open(io.BytesIO(response)).convert("RGB")
-            # Return the
+            # Download the URL and return the local path
             case "url":
-                return AnyHttpUrl(response.decode("utf-8"))
+                url: AnyHttpUrl = AnyHttpUrl(response.decode("utf-8"))
+                path: Path = download_artifact(str(url), format="file")
+                return path
             case "vid" | "aud" | "doc" | "recon":
                 # Read the binary response as a video file and write it to a temporary file
-                ext = {"vid": "mp4", "aud": "mp3", "doc": "pdf", "recon": "spz"}
+                ext = {"vid": "mp4", "aud": "mp3", "doc": "pdf", "recon": "spz"}[
+                    obj_type
+                ]
                 tmp_path = tmp_path / f"{object_id}.{ext}"
                 with tmp_path.open("wb") as f:
                     f.write(response)
