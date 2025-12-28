@@ -104,6 +104,8 @@ class Artifacts:
                     obj_type
                 ]
                 tmp_path = tmp_path / f"{object_id}.{ext}"
+                if tmp_path.exists():
+                    return tmp_path
                 with tmp_path.open("wb") as f:
                     f.write(response)
                 return tmp_path

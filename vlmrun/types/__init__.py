@@ -59,24 +59,12 @@ class MessageContent(BaseModel):
 
     @model_validator(mode="after")
     def check_type_and_content(self) -> "MessageContent":
-        if self.type == "text":
-            if self.text is None:
-                raise ValueError("Must have text")
-        elif self.type == "image_url":
-            if self.image_url is None:
-                raise ValueError("Must have image_url")
-        elif self.type == "video_url":
-            if self.video_url is None:
-                raise ValueError("Must have video_url")
-        elif self.type == "audio_url":
-            if self.audio_url is None:
-                raise ValueError("Must have audio_url")
-        elif self.type == "file_url":
-            if self.file_url is None:
-                raise ValueError("Must have file_url")
+        if self.type in ("text", "image_url", "video_url", "audio_url", "file_url", ):
+            if getattr(self, self.type) is None:
+                raise ValueError(f"Must have {self.type} content [{self}]")
         elif self.type == "input_file":
-            if self.file_id is None and self.file_url is None:
-                raise ValueError("Must have either file_id or file_url")
+            if self.file_id is None:
+                raise ValueError(f"Must have file_id content [{self}]")
         else:
             raise ValueError(f"Invalid type: {self.type}")
         return self
