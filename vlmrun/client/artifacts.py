@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import requests
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -10,6 +11,7 @@ from PIL import Image
 from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.common.utils import _HEADERS
 from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
 
 
@@ -110,7 +112,22 @@ class Artifacts:
             ), f"Expected image/jpeg, got {headers['Content-Type']}"
             return Image.open(io.BytesIO(response)).convert("RGB")
         elif obj_type == "url":
-            return AnyHttpUrl(response.decode("utf-8"))
+            # Get the filename including extension frm the URL by stripping any query parameters
+            url: AnyHttpUrl = AnyHttpUrl(response.decode("utf-8"))
+            path: Path = Path(str(url))
+            filename: str = path.name.split("?")[0]
+            ext: str = filename.split(".")[-1].lower()
+            tmp_path: Path = artifacts_dir / f"{filename}.{ext}"
+            if tmp_path.exists():
+                return tmp_path
+
+            # Download the file, and move it to the appropriate path
+            with requests.get(url, headers=_HEADERS, stream=True) as r:
+                r.raise_for_status()
+                with tmp_path.open("wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            return tmp_path
         elif obj_type in ("vid", "aud", "doc", "recon"):
             # Validate content type
             expected_content_type = content_type_mapping[obj_type]
@@ -120,7 +137,11 @@ class Artifacts:
             ), f"Expected {expected_content_type}, got {actual_content_type}"
 
             # Build file path with appropriate extension
-            ext = ext_mapping[obj_type]
+            ext = ext_mapping.get(obj_type, None)
+            if ext is None:
+                raise IOError(
+                    f"Unsupported file type [file_type={filename}, object_id={object_id}]"
+                )
             tmp_path: Path = artifacts_dir / f"{object_id}.{ext}"
 
             # Return cached version if it exists
