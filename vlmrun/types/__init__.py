@@ -1,9 +1,11 @@
 """Type definitions for VLM Run API."""
 
+import re
 import uuid
-from typing import Literal, Optional, Union
+from typing import Annotated, Literal, Optional, Union
 
-from pydantic import AnyHttpUrl, BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
+from pydantic.functional_validators import AfterValidator
 
 from vlmrun.types.refs import (
     ArrayRef as ArrayRef,
@@ -15,11 +17,24 @@ from vlmrun.types.refs import (
     VideoRef as VideoRef,
 )
 
+# URL pattern for http/https URLs
+URL_PATTERN = r"^https?://.+"
+
+
+def _validate_url(v: str) -> str:
+    """Validate that the string is a valid HTTP/HTTPS URL."""
+    if not re.match(URL_PATTERN, v):
+        raise ValueError("Invalid URL: must start with http:// or https://")
+    return v
+
+
+HttpUrl = Annotated[str, AfterValidator(_validate_url)]
+
 
 class ImageUrl(BaseModel):
     """Image URL with optional detail level."""
 
-    url: AnyHttpUrl = Field(..., description="The URL of the image")
+    url: HttpUrl = Field(..., description="The URL of the image")
     detail: Literal["auto", "low", "high"] = Field(
         default="auto", description="The detail level to use for the image"
     )
@@ -28,25 +43,25 @@ class ImageUrl(BaseModel):
 class FileUrl(BaseModel):
     """Base class for file URLs."""
 
-    url: AnyHttpUrl = Field(..., description="The URL of the file")
+    url: HttpUrl = Field(..., description="The URL of the file")
 
 
 class VideoUrl(FileUrl):
     """Video URL."""
 
-    url: AnyHttpUrl = Field(..., description="The URL of the video")
+    url: HttpUrl = Field(..., description="The URL of the video")
 
 
 class AudioUrl(FileUrl):
     """Audio URL."""
 
-    url: AnyHttpUrl = Field(..., description="The URL of the audio")
+    url: HttpUrl = Field(..., description="The URL of the audio")
 
 
 class DocumentUrl(FileUrl):
     """Document URL."""
 
-    url: AnyHttpUrl = Field(..., description="The URL of the document")
+    url: HttpUrl = Field(..., description="The URL of the document")
 
 
 class MessageContent(BaseModel):
