@@ -91,7 +91,8 @@ class Artifacts:
             )
 
         # Create artifacts directory with session_id subdirectory
-        artifacts_dir: Path = VLMRUN_ARTIFACTS_DIR / session_id
+        sess_id: str = session_id or execution_id
+        artifacts_dir: Path = VLMRUN_ARTIFACTS_DIR / sess_id
         artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         # Extension and content-type mappings for file-based artifacts
