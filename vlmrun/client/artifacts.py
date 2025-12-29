@@ -34,14 +34,21 @@ class Artifacts:
     ) -> Union[bytes, Image.Image, AnyHttpUrl, Path]:
         """Get an artifact by session ID and object ID.
 
+        Supported artifact types:
+            - img: Returns PIL.Image.Image (JPEG)
+            - url: Returns AnyHttpUrl
+            - vid: Returns Path to MP4 file
+            - aud: Returns Path to MP3 file
+            - doc: Returns Path to PDF file
+            - recon: Returns Path to SPZ file
+
         Args:
             session_id: Session ID for the artifact
-            object_id: Object ID for the artifact
-            raw_response: Whether to return the raw response or not
+            object_id: Object ID for the artifact (format: <type>_<6-hex-chars>)
+            raw_response: Whether to return the raw response bytes
 
         Returns:
-            bytes: The artifact content if raw_response is True, otherwise
-            converted to the appropriate type based on the content type
+            The artifact content - type depends on object_id prefix and raw_response flag
         """
         response, status_code, headers = self._requestor.request(
             method="GET",
