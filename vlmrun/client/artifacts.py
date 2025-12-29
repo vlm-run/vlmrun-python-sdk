@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from PIL import Image
 from pydantic import AnyHttpUrl
@@ -30,9 +30,13 @@ class Artifacts:
         self._requestor = APIRequestor(client)
 
     def get(
-        self, session_id: str, object_id: str, raw_response: bool = False
+        self,
+        object_id: str,
+        session_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        raw_response: bool = False,
     ) -> Union[bytes, Image.Image, AnyHttpUrl, Path]:
-        """Get an artifact by session ID and object ID.
+        """Get an artifact by session ID or execution ID and object ID.
 
         Supported artifact types:
             - img: Returns PIL.Image.Image (JPEG)
@@ -43,16 +47,32 @@ class Artifacts:
             - recon: Returns Path to SPZ file
 
         Args:
-            session_id: Session ID for the artifact
             object_id: Object ID for the artifact (format: <type>_<6-hex-chars>)
+            session_id: Session ID for the artifact (mutually exclusive with execution_id)
+            execution_id: Execution ID for the artifact (mutually exclusive with session_id)
             raw_response: Whether to return the raw response bytes
 
         Returns:
             The artifact content - type depends on object_id prefix and raw_response flag
+
+        Raises:
+            ValueError: If neither session_id nor execution_id is provided, or if both are provided
         """
+        if session_id is None and execution_id is None:
+            raise ValueError("Either `session_id` or `execution_id` is required")
+        if session_id is not None and execution_id is not None:
+            raise ValueError(
+                "Only one of `session_id` or `execution_id` is allowed, not both"
+            )
+
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"artifacts/{session_id}/{object_id}",
+            url="artifacts",
+            data={
+                "session_id": session_id,
+                "execution_id": execution_id,
+                "object_id": object_id,
+            },
             raw_response=True,
         )
 

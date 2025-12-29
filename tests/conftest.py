@@ -650,7 +650,21 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def get(self, session_id: str, object_id: str) -> bytes:
+            def get(
+                self,
+                object_id: str,
+                session_id: str = None,
+                execution_id: str = None,
+                raw_response: bool = False,
+            ) -> bytes:
+                if session_id is None and execution_id is None:
+                    raise ValueError(
+                        "Either `session_id` or `execution_id` is required"
+                    )
+                if session_id is not None and execution_id is not None:
+                    raise ValueError(
+                        "Only one of `session_id` or `execution_id` is allowed, not both"
+                    )
                 return b"mock artifact content"
 
             def list(self, session_id: str):
