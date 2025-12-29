@@ -1,6 +1,7 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
+import warnings
 from functools import cached_property
 from typing import Any, Optional, Union
 
@@ -43,7 +44,14 @@ class Agent:
             Processed inputs as dict or None
         """
         if isinstance(inputs, BaseModel):
-            return inputs.model_dump()
+            return inputs.model_dump(exclude_none=True)
+        elif isinstance(inputs, dict):
+            warnings.warn(
+                "Passing inputs as a dictionary will be deprecated in the future. "
+                "Please use a Pydantic BaseModel instead for better type safety and validation.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
         return inputs
 
     def get(
@@ -135,7 +143,7 @@ class Agent:
         data = {
             "name": name,
             "inputs": self._process_inputs(inputs),
-            "config": config.model_dump(),
+            "config": config.model_dump(exclude_none=True),
         }
 
         if callback_url:
@@ -187,10 +195,10 @@ class Agent:
         }
 
         if config:
-            data["config"] = config.model_dump()
+            data["config"] = config.model_dump(exclude_none=True)
 
         if metadata:
-            data["metadata"] = metadata.model_dump()
+            data["metadata"] = metadata.model_dump(exclude_none=True)
 
         if callback_url:
             data["callback_url"] = callback_url
