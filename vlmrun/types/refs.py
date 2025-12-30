@@ -1,11 +1,29 @@
-from pydantic import Field
-from typing import Annotated
+from pydantic import BaseModel, Field
 
 
-ImageRef = Annotated[str, Field(..., pattern=r"^img_\w{6}$")]
-AudioRef = Annotated[str, Field(..., pattern=r"^aud_\w{6}$")]
-VideoRef = Annotated[str, Field(..., pattern=r"^vid_\w{6}$")]
-DocumentRef = Annotated[str, Field(..., pattern=r"^doc_\w{6}$")]
-ReconRef = Annotated[str, Field(..., pattern=r"^recon_\w{6}$")]
-UrlRef = Annotated[str, Field(..., pattern=r"^url_\w{6}$")]
-ArrayRef = Annotated[str, Field(..., pattern=r"^arr_\w{6}$")]
+class ImageRef(BaseModel):
+    id: str = Field(..., pattern=r"^img_\w{6}$")
+
+
+class AudioRef(BaseModel):
+    id: str = Field(..., pattern=r"^aud_\w{6}$")
+
+
+class VideoRef(BaseModel):
+    id: str = Field(..., pattern=r"^vid_\w{6}$")
+
+
+class DocumentRef(BaseModel):
+    id: str = Field(..., pattern=r"^doc_\w{6}$")
+
+
+class ReconRef(BaseModel):
+    id: str = Field(..., pattern=r"^recon_\w{6}$")
+
+
+class ArrayRef(BaseModel):
+    id: str = Field(..., pattern=r"^arr_\w{6}$")
+
+
+class UrlRef(BaseModel):
+    id: str = Field(..., pattern=r"^url_\w{6}$")

@@ -3,33 +3,16 @@
 from __future__ import annotations
 
 import io
-from email.parser import HeaderParser
+import requests
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from PIL import Image
 from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
-from vlmrun.constants import VLMRUN_CACHE_DIR
-
-
-def _get_disposition_params(disposition: str) -> Dict[str, str]:
-    """Parse Content-Disposition header and return parameters.
-
-    Args:
-        disposition: Content-Disposition header value
-
-    Returns:
-        Dictionary of parameters from the header
-    """
-    parser = HeaderParser()
-    msg = parser.parsestr(f"Content-Disposition: {disposition}")
-    params = msg.get_params(header="Content-Disposition", unquote=True)
-    if not params:
-        return {}
-    # First element is the main value (e.g., "attachment"), rest are params
-    return dict(params[1:])
+from vlmrun.common.utils import _HEADERS
+from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
 
 
 if TYPE_CHECKING:
@@ -49,22 +32,52 @@ class Artifacts:
         self._requestor = APIRequestor(client)
 
     def get(
-        self, session_id: str, object_id: str, raw_response: bool = False
+        self,
+        object_id: str,
+        session_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        raw_response: bool = False,
     ) -> Union[bytes, Image.Image, AnyHttpUrl, Path]:
-        """Get an artifact by session ID and object ID.
+        """Get an artifact by session ID or execution ID and object ID.
+
+        Supported artifact types:
+            - img: Returns PIL.Image.Image (JPEG)
+            - url: Returns AnyHttpUrl
+            - vid: Returns Path to MP4 file
+            - aud: Returns Path to MP3 file
+            - doc: Returns Path to PDF file
+            - recon: Returns Path to SPZ file
 
         Args:
-            session_id: Session ID for the artifact
-            object_id: Object ID for the artifact
-            raw_response: Whether to return the raw response or not
+            object_id: Object ID for the artifact (format: <type>_<6-hex-chars>)
+            session_id: Session ID for the artifact (mutually exclusive with execution_id)
+            execution_id: Execution ID for the artifact (mutually exclusive with session_id)
+            raw_response: Whether to return the raw response bytes
 
         Returns:
-            bytes: The artifact content if raw_response is True, otherwise
-            converted to the appropriate type based on the content type
+            The artifact content - type depends on object_id prefix and raw_response flag
+
+        Raises:
+            ValueError: If neither session_id nor execution_id is provided, or if both are provided
         """
+        if session_id is None and execution_id is None:
+            raise ValueError("Either `session_id` or `execution_id` is required")
+        if session_id is not None and execution_id is not None:
+            raise ValueError(
+                "Only one of `session_id` or `execution_id` is allowed, not both"
+            )
+
+        # Build query parameters, filtering out None values
+        query_params = {"object_id": object_id}
+        if session_id is not None:
+            query_params["session_id"] = session_id
+        if execution_id is not None:
+            query_params["execution_id"] = execution_id
+
         response, status_code, headers = self._requestor.request(
             method="GET",
-            url=f"artifacts/{session_id}/{object_id}",
+            url="artifacts",
+            params=query_params,
             raw_response=True,
         )
 
@@ -82,40 +95,63 @@ class Artifacts:
                 f"Invalid object ID: {object_id}, expected format: <obj_type>_<6-digit-hex-string>"
             )
 
+        # Create artifacts directory with session_id subdirectory
+        sess_id: str = session_id or execution_id
+        artifacts_dir: Path = VLMRUN_ARTIFACTS_DIR / sess_id
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extension and content-type mappings for file-based artifacts
+        ext_mapping = {"vid": "mp4", "aud": "mp3", "doc": "pdf", "recon": "spz"}
+        content_type_mapping = {
+            "vid": "video/mp4",
+            "aud": "audio/mpeg",
+            "doc": "application/pdf",
+            "recon": "application/octet-stream",
+        }
+
         if obj_type == "img":
             assert (
                 headers["Content-Type"] == "image/jpeg"
             ), f"Expected image/jpeg, got {headers['Content-Type']}"
             return Image.open(io.BytesIO(response)).convert("RGB")
         elif obj_type == "url":
-            return AnyHttpUrl(response.decode("utf-8"))
-        elif obj_type == "vid":
-            # Read the binary response as a video file and write it to a temporary file
+            # Get the filename including extension frm the URL by stripping any query parameters
+            url: AnyHttpUrl = AnyHttpUrl(response.decode("utf-8"))
+            path: Path = Path(str(url))
+            filename: str = path.name.split("?")[0]
+            ext: str = filename.split(".")[-1].lower()
+            tmp_path: Path = artifacts_dir / f"{filename}.{ext}"
+            if tmp_path.exists():
+                return tmp_path
+
+            # Download the file, and move it to the appropriate path
+            with requests.get(url, headers=_HEADERS, stream=True) as r:
+                r.raise_for_status()
+                with tmp_path.open("wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            return tmp_path
+        elif obj_type in ("vid", "aud", "doc", "recon"):
+            # Validate content type
+            expected_content_type = content_type_mapping[obj_type]
+            actual_content_type = headers.get("Content-Type")
             assert (
-                headers["Content-Type"] == "video/mp4"
-            ), f"Expected video/mp4, got {headers['Content-Type']}"
+                actual_content_type == expected_content_type
+            ), f"Expected {expected_content_type}, got {actual_content_type}"
 
-            # Parse Content-Disposition header to get file extension
-            ext = "mp4"  # default extension
-            disposition = headers.get("Content-Disposition") or headers.get(
-                "content-disposition"
-            )
-            if disposition:
-                params = _get_disposition_params(disposition)
-                filename = params.get("filename")
-                if filename:
-                    suffix = Path(filename).suffix
-                    if suffix:
-                        ext = suffix.lstrip(".")
-
-            # Build cache path with session_id and object_id
-            safe_session_id = session_id.replace("-", "")
-            tmp_path: Path = VLMRUN_CACHE_DIR / f"{safe_session_id}_{object_id}.{ext}"
+            # Build file path with appropriate extension
+            ext = ext_mapping.get(obj_type, None)
+            if ext is None:
+                raise IOError(
+                    f"Unsupported file type [file_type={filename}, object_id={object_id}]"
+                )
+            tmp_path: Path = artifacts_dir / f"{object_id}.{ext}"
 
             # Return cached version if it exists
             if tmp_path.exists():
                 return tmp_path
 
+            # Write the binary response to file
             with tmp_path.open("wb") as f:
                 f.write(response)
             return tmp_path

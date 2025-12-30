@@ -1,8 +1,11 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
+import warnings
 from functools import cached_property
-from typing import Any, Optional
+from typing import Any, Optional, Union
+
+from pydantic import BaseModel
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -29,11 +32,33 @@ class Agent:
         self._client = client
         self._requestor = APIRequestor(client)
 
+    def _process_inputs(
+        self, inputs: Union[dict[str, Any], BaseModel, None]
+    ) -> Optional[dict[str, Any]]:
+        """Process inputs, converting BaseModel to dict if needed.
+
+        Args:
+            inputs: Input data as dict, BaseModel, or None
+
+        Returns:
+            Processed inputs as dict or None
+        """
+        if isinstance(inputs, BaseModel):
+            return inputs.model_dump(exclude_none=True)
+        elif isinstance(inputs, dict):
+            warnings.warn(
+                "Passing inputs as a dictionary will be deprecated in the future. "
+                "Please use a Pydantic BaseModel instead for better type safety and validation.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        return inputs
+
     def get(
         self,
-        name: str | None = None,
-        id: str | None = None,
-        prompt: str | None = None,
+        name: Optional[str] = None,
+        id: Optional[str] = None,
+        prompt: Optional[str] = None,
     ) -> AgentInfo:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
@@ -95,8 +120,8 @@ class Agent:
     def create(
         self,
         config: AgentCreationConfig,
-        name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        name: Optional[str] = None,
+        inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
         callback_url: Optional[str] = None,
     ) -> AgentCreationResponse:
         """Create an agent.
@@ -104,7 +129,7 @@ class Agent:
         Args:
             config: Agent creation configuration
             name: Optional name of the agent to create
-            inputs: Optional inputs to the agent (e.g. {"image": "https://..."})
+            inputs: Optional inputs to the agent (e.g. {"image": "https://..."}) or a BaseModel instance
             callback_url: Optional URL to call when creation is complete
 
         Returns:
@@ -117,8 +142,8 @@ class Agent:
 
         data = {
             "name": name,
-            "inputs": inputs,
-            "config": config.model_dump(),
+            "inputs": self._process_inputs(inputs),
+            "config": config.model_dump(exclude_none=True),
         }
 
         if callback_url:
@@ -137,8 +162,8 @@ class Agent:
 
     def execute(
         self,
-        name: str | None = None,
-        inputs: Optional[dict[str, Any]] = None,
+        name: Optional[str] = None,
+        inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
@@ -149,7 +174,7 @@ class Agent:
 
         Args:
             name: Name of the agent to execute. If not provided, we use the prompt to identify the unique agent.
-            inputs: Optional inputs to the agent
+            inputs: Optional inputs to the agent or a BaseModel instance
             batch: Whether to process in batch mode (async)
             config: Optional agent execution configuration
             metadata: Optional request metadata
@@ -166,14 +191,14 @@ class Agent:
             "model": model,
             "name": name,
             "batch": batch,
-            "inputs": inputs,
+            "inputs": self._process_inputs(inputs),
         }
 
         if config:
-            data["config"] = config.model_dump()
+            data["config"] = config.model_dump(exclude_none=True)
 
         if metadata:
-            data["metadata"] = metadata.model_dump()
+            data["metadata"] = metadata.model_dump(exclude_none=True)
 
         if callback_url:
             data["callback_url"] = callback_url

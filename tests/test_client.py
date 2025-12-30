@@ -112,10 +112,10 @@ def test_client_health():
 )
 @pytest.mark.skipif(not _healthcheck(), reason="API is not healthy")
 def test_client_openai():
-    """Test client OpenAI integration."""
+    """Test client OpenAI integration via agent.completions."""
     client = VLMRun()
-    assert client.openai is not None
-    assert client.openai.models.list() is not None
+    assert client.agent.completions is not None
+    assert client.agent.async_completions is not None
 
 
 def test_client_invalid_api_key(monkeypatch):

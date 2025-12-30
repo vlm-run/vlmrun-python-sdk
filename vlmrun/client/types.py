@@ -561,19 +561,3 @@ class MarkdownDocument(BaseModel):
             if page.figures:
                 figures.extend(page.figures)
         return figures
-
-
-class ImageUrl(BaseModel):
-    url: str = Field(..., description="The URL of the image")
-
-
-class DocumentUrl(BaseModel):
-    url: str = Field(..., description="The URL of the document")
-
-
-class VideoUrl(BaseModel):
-    url: str = Field(..., description="The URL of the video")
-
-
-class AudioUrl(BaseModel):
-    url: str = Field(..., description="The URL of the audio")

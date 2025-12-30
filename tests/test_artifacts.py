@@ -6,7 +6,8 @@ import pytest
 def test_get_artifact(mock_client):
     """Test getting an artifact by session_id and object_id."""
     response = mock_client.artifacts.get(
-        session_id="550e8400-e29b-41d4-a716-446655440000", object_id="test-object-456"
+        object_id="test-object-456",
+        session_id="550e8400-e29b-41d4-a716-446655440000",
     )
     assert isinstance(response, bytes)
     assert response == b"mock artifact content"
