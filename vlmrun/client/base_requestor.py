@@ -29,7 +29,7 @@ from vlmrun.client.exceptions import (
 )
 
 # Constants
-DEFAULT_TIMEOUT = 30.0  # seconds
+DEFAULT_TIMEOUT = 120.0  # seconds
 DEFAULT_MAX_RETRIES = 5
 INITIAL_RETRY_DELAY = 1  # seconds
 MAX_RETRY_DELAY = 10  # seconds
