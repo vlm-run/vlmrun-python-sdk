@@ -67,14 +67,17 @@ class Artifacts:
                 "Only one of `session_id` or `execution_id` is allowed, not both"
             )
 
+        # Build query parameters, filtering out None values
+        query_params = {"object_id": object_id}
+        if session_id is not None:
+            query_params["session_id"] = session_id
+        if execution_id is not None:
+            query_params["execution_id"] = execution_id
+
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="artifacts",
-            data={
-                "session_id": session_id,
-                "execution_id": execution_id,
-                "object_id": object_id,
-            },
+            params=query_params,
             raw_response=True,
         )
 
