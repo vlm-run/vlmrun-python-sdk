@@ -147,7 +147,15 @@ class FinetuningProvisionResponse(BaseModel):
 class FeedbackSubmitRequest(BaseModel):
     """Request model for submitting feedback."""
 
-    request_id: str = Field(..., description="The unique identifier for the request.")
+    request_id: Optional[str] = Field(
+        None, description="The unique identifier for the request."
+    )
+    agent_execution_id: Optional[str] = Field(
+        None, description="The unique identifier for the agent execution."
+    )
+    chat_id: Optional[str] = Field(
+        None, description="The unique identifier for the chat."
+    )
     response: Optional[Dict[str, Any]] = Field(
         None, description="The updated response for the request."
     )
