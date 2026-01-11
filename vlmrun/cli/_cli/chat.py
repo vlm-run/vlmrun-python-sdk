@@ -414,6 +414,7 @@ def chat(
         help="Skip artifact download.",
     ),
 ) -> None:
+    """Process images, videos, and documents with natural language."""
     # Get client from context
     client: VLMRun = ctx.obj
 
