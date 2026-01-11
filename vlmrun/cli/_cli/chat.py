@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -13,10 +15,13 @@ import requests
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.status import Status
+from rich.table import Table
 
 from vlmrun.client import VLMRun
+from vlmrun.client.types import FileResponse
 from vlmrun.constants import (
     VLMRUN_ARTIFACT_CACHE_DIR,
     SUPPORTED_INPUT_FILETYPES,
@@ -42,6 +47,11 @@ MODELS:
   vlmrun-orion-1:fast  Speed-optimized
   vlmrun-orion-1:auto  Auto-select (default)
   vlmrun-orion-1:pro   Most capable
+
+\b
+OUTPUT:
+  --simple    Plain text output (token-efficient for automation)
+  --json      JSON output for programmatic use
 
 \b
 FILES: .jpg .png .gif .mp4 .mov .pdf .doc .mp3 .wav (and more)
@@ -142,53 +152,76 @@ def resolve_prompt(
     return None
 
 
-def upload_files(client: VLMRun, files: List[Path]) -> List[str]:
-    """Upload files and return their public URLs."""
-    urls = []
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Uploading files...", total=len(files))
-
-        for file_path in files:
-            progress.update(task, description=f"Uploading {file_path.name}...")
-
-            try:
-                file_response = client.files.upload(file_path, purpose="assistants")
-
-                # Get public URL
-                public_url = file_response.public_url
-                if not public_url and file_response.id:
-                    public_url = client.files.get_public_url(file_response.id)
-
-                if public_url:
-                    urls.append(public_url)
-
-            except Exception as e:
-                console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
-                raise typer.Exit(1)
-
-            progress.advance(task)
-
-    return urls
+def upload_single_file(client: VLMRun, file_path: Path) -> FileResponse:
+    """Upload a single file and return the FileResponse."""
+    return client.files.upload(file_path, purpose="assistants")
 
 
-def build_messages(prompt: str, file_urls: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+def upload_files_concurrent(
+    client: VLMRun, files: List[Path], simple_output: bool = False
+) -> List[FileResponse]:
+    """Upload files concurrently and return their FileResponses."""
+    file_responses: List[FileResponse] = []
+
+    if simple_output:
+        # Simple output: just upload without progress display
+        with ThreadPoolExecutor(max_workers=min(len(files), 4)) as executor:
+            futures = {
+                executor.submit(upload_single_file, client, f): f for f in files
+            }
+            for future in as_completed(futures):
+                file_path = futures[future]
+                try:
+                    response = future.result()
+                    file_responses.append(response)
+                except Exception as e:
+                    raise typer.Exit(1) from e
+    else:
+        # Rich output with progress bar
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Uploading files...", total=len(files))
+
+            with ThreadPoolExecutor(max_workers=min(len(files), 4)) as executor:
+                futures = {
+                    executor.submit(upload_single_file, client, f): f for f in files
+                }
+                for future in as_completed(futures):
+                    file_path = futures[future]
+                    try:
+                        response = future.result()
+                        file_responses.append(response)
+                        progress.update(
+                            task, description=f"Uploaded {file_path.name}"
+                        )
+                    except Exception as e:
+                        console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
+                        raise typer.Exit(1) from e
+                    progress.advance(task)
+
+    return file_responses
+
+
+def build_messages(
+    prompt: str, file_responses: Optional[List[FileResponse]] = None
+) -> List[Dict[str, Any]]:
     """Build OpenAI-style messages with optional file attachments."""
     content: List[Dict[str, Any]] = []
 
-    # Add file URLs as image_url content parts
-    if file_urls:
-        for url in file_urls:
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": url},
-            })
+    # Add files as image_url content parts using public URLs
+    if file_responses:
+        for file_resp in file_responses:
+            url = file_resp.public_url
+            if url:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": url},
+                })
 
     # Add text prompt
     content.append({
@@ -243,6 +276,81 @@ def download_artifact(url: str, output_dir: Path, filename: Optional[str] = None
     return output_path
 
 
+def format_usage_table(usage: Dict[str, Any], latency_ms: float) -> Table:
+    """Create a usage statistics table."""
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_column("Key", style="dim")
+    table.add_column("Value")
+
+    if usage:
+        if usage.get("prompt_tokens"):
+            table.add_row("Prompt tokens", str(usage["prompt_tokens"]))
+        if usage.get("completion_tokens"):
+            table.add_row("Completion tokens", str(usage["completion_tokens"]))
+        if usage.get("total_tokens"):
+            table.add_row("Total tokens", str(usage["total_tokens"]))
+
+    table.add_row("Latency", f"{latency_ms:.0f}ms")
+    return table
+
+
+def print_simple_output(
+    content: str,
+    model: str,
+    latency_ms: float,
+    usage: Optional[Dict[str, Any]] = None,
+    artifacts: Optional[List[Dict[str, str]]] = None,
+    artifact_dir: Optional[Path] = None,
+) -> None:
+    """Print simple, token-efficient output for automation."""
+    print(content)
+    print()
+    print(f"---")
+    print(f"model: {model}")
+    print(f"latency: {latency_ms:.0f}ms")
+    if usage:
+        tokens = usage.get("total_tokens")
+        if tokens:
+            print(f"tokens: {tokens}")
+    if artifacts and artifact_dir:
+        print(f"artifacts: {artifact_dir}")
+
+
+def print_rich_output(
+    content: str,
+    model: str,
+    latency_ms: float,
+    usage: Optional[Dict[str, Any]] = None,
+    artifacts: Optional[List[Dict[str, str]]] = None,
+    artifact_dir: Optional[Path] = None,
+) -> None:
+    """Print rich-formatted output with panels."""
+    # Main response panel
+    console.print()
+    console.print(
+        Panel(
+            Markdown(content),
+            title="[bold blue]Response[/bold blue]",
+            border_style="blue",
+            padding=(1, 2),
+        )
+    )
+
+    # Footer with usage stats
+    footer_parts = [f"[dim]Model:[/dim] {model}", f"[dim]Latency:[/dim] {latency_ms:.0f}ms"]
+
+    if usage:
+        tokens = usage.get("total_tokens")
+        if tokens:
+            footer_parts.append(f"[dim]Tokens:[/dim] {tokens}")
+
+    if artifacts and artifact_dir:
+        footer_parts.append(f"[dim]Artifacts:[/dim] {artifact_dir}")
+
+    console.print(f"  {'  │  '.join(footer_parts)}")
+    console.print()
+
+
 @app.callback(invoke_without_command=True)
 def chat(
     ctx: typer.Context,
@@ -281,6 +389,12 @@ def chat(
         "--json",
         "-j",
         help="Output JSON instead of formatted text.",
+    ),
+    simple_output: bool = typer.Option(
+        False,
+        "--simple",
+        "-s",
+        help="Plain text output (token-efficient for automation).",
     ),
     no_stream: bool = typer.Option(
         False,
@@ -348,28 +462,35 @@ def chat(
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Upload input files if provided
-        file_urls = []
+        # Upload input files concurrently if provided
+        file_responses: List[FileResponse] = []
         if input_files:
-            if not output_json:
+            if not output_json and not simple_output:
                 console.print(f"\n[dim]Uploading {len(input_files)} file(s)...[/]")
-            file_urls = upload_files(client, input_files)
-            if not output_json:
-                console.print(f"[green]Uploaded {len(file_urls)} file(s)[/]\n")
+
+            file_responses = upload_files_concurrent(
+                client, input_files, simple_output=simple_output or output_json
+            )
+
+            if not output_json and not simple_output:
+                console.print(f"[green]Uploaded {len(file_responses)} file(s)[/]\n")
 
         # Build messages for the chat completion
-        messages = build_messages(final_prompt, file_urls if file_urls else None)
+        messages = build_messages(final_prompt, file_responses if file_responses else None)
 
-        if not output_json and not no_stream:
+        if not output_json and not simple_output and not no_stream:
             console.print(f"[dim]Using model: {model}[/]")
 
         # Call the OpenAI-compatible chat completions API
         openai_client = client.openai
         response_content = ""
+        usage_data: Optional[Dict[str, Any]] = None
+
+        start_time = time.time()
 
         if no_stream:
             # Non-streaming mode
-            if not output_json:
+            if not output_json and not simple_output:
                 with Status("[bold blue]Processing...", console=console, spinner="dots"):
                     response = openai_client.chat.completions.create(
                         model=model,
@@ -383,23 +504,33 @@ def chat(
                     stream=False,
                 )
 
+            latency_ms = (time.time() - start_time) * 1000
             response_content = response.choices[0].message.content or ""
+
+            if response.usage:
+                usage_data = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
 
             if output_json:
                 output = {
                     "id": response.id,
                     "model": response.model,
                     "content": response_content,
-                    "usage": {
-                        "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
-                        "completion_tokens": response.usage.completion_tokens if response.usage else None,
-                        "total_tokens": response.usage.total_tokens if response.usage else None,
-                    } if response.usage else None,
+                    "latency_ms": latency_ms,
+                    "usage": usage_data,
                 }
                 console.print_json(json.dumps(output, indent=2, default=str))
+            elif simple_output:
+                print_simple_output(
+                    response_content, model, latency_ms, usage_data
+                )
             else:
-                console.print()
-                console.print(Markdown(response_content))
+                print_rich_output(
+                    response_content, model, latency_ms, usage_data
+                )
 
         else:
             # Streaming mode
@@ -418,26 +549,32 @@ def chat(
 
                 response_content = "".join(chunks)
 
+            latency_ms = (time.time() - start_time) * 1000
+
             # Display the complete response
             if output_json:
                 output = {
                     "content": response_content,
+                    "latency_ms": latency_ms,
                 }
                 console.print_json(json.dumps(output, indent=2, default=str))
+            elif simple_output:
+                print_simple_output(response_content, model, latency_ms)
             else:
-                console.print()
-                console.print(Markdown(response_content))
+                print_rich_output(response_content, model, latency_ms)
 
         # Extract and download artifacts if present
         if not no_download:
             artifacts = extract_artifacts(response_content)
             if artifacts:
-                console.print(f"\n[dim]Downloading {len(artifacts)} artifact(s)...[/]")
+                if not output_json and not simple_output:
+                    console.print(f"\n[dim]Downloading {len(artifacts)} artifact(s)...[/]")
 
                 with Progress(
                     SpinnerColumn(),
                     TextColumn("[progress.description]{task.description}"),
                     console=console,
+                    disable=simple_output or output_json,
                 ) as progress:
                     task = progress.add_task("Downloading...", total=len(artifacts))
 
@@ -454,7 +591,10 @@ def chat(
 
                         progress.advance(task)
 
-                console.print(f"[green]Artifacts saved to:[/] {artifact_dir}")
+                if not output_json and not simple_output:
+                    console.print(f"[green]Artifacts saved to:[/] {artifact_dir}")
+                elif simple_output:
+                    print(f"artifacts: {artifact_dir}")
 
     except Exception as e:
         console.print(f"[red]Error:[/] {e}")
