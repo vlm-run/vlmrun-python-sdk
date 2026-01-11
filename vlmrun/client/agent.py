@@ -1,7 +1,6 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
-from functools import cached_property
 from typing import Any, Optional
 
 from vlmrun.client.base_requestor import APIRequestor
@@ -27,22 +26,6 @@ class Agent:
         """
         self._client = client
         self._requestor = APIRequestor(client)
-
-    @cached_property
-    def completions(self):
-        """Access the Completions API for chat-style interactions.
-
-        Example:
-            ```python
-            response = client.agent.completions.create(
-                prompt="What's in this image?",
-                files=["photo.jpg"],
-            )
-            print(response.text)
-            ```
-        """
-        from vlmrun.client.completions import Completions
-        return Completions(self._client)
 
     def get(
         self,

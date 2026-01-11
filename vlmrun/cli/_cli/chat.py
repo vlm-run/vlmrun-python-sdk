@@ -6,16 +6,17 @@ import json
 import sys
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
+import requests
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.status import Status
 
 from vlmrun.client import VLMRun
-from vlmrun.client.completions import CompletionChunk, CompletionResponse
 from vlmrun.constants import (
     VLMRUN_ARTIFACT_CACHE_DIR,
     SUPPORTED_INPUT_FILETYPES,
@@ -116,48 +117,105 @@ def resolve_prompt(
     return None
 
 
-def display_response(response: CompletionResponse, output_json: bool = False) -> None:
-    """Display the completion response to the console."""
-    if output_json:
-        # Output raw JSON
-        output = {
-            "id": response.id,
-            "model": response.model,
-            "status": response.status,
-            "content": response.content,
-            "response": response.response,
-            "created_at": response.created_at,
-            "completed_at": response.completed_at,
-            "artifacts": [
-                {
-                    "id": a.id,
-                    "url": a.url,
-                    "filename": a.filename,
-                }
-                for a in response.artifacts
-            ],
-            "usage": {
-                "credits_used": response.usage.credits_used,
-                "elements_processed": response.usage.elements_processed,
-                "element_type": response.usage.element_type,
-            } if response.usage else None,
-        }
-        console.print_json(json.dumps(output, indent=2, default=str))
-    else:
-        # Display formatted response
-        console.print()
+def upload_files(client: VLMRun, files: List[Path]) -> List[str]:
+    """Upload files and return their public URLs."""
+    urls = []
 
-        # Try to get text content
-        text = response.text
-        if text:
-            console.print(Markdown(text))
-        elif response.response:
-            # If no text, print the response dict nicely
-            console.print_json(json.dumps(response.response, indent=2, default=str))
-        elif response.content:
-            console.print(Markdown(response.content))
-        else:
-            console.print("[dim]No text response[/]")
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Uploading files...", total=len(files))
+
+        for file_path in files:
+            progress.update(task, description=f"Uploading {file_path.name}...")
+
+            try:
+                file_response = client.files.upload(file_path, purpose="assistants")
+
+                # Get public URL
+                public_url = file_response.public_url
+                if not public_url and file_response.id:
+                    public_url = client.files.get_public_url(file_response.id)
+
+                if public_url:
+                    urls.append(public_url)
+
+            except Exception as e:
+                console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
+                raise typer.Exit(1)
+
+            progress.advance(task)
+
+    return urls
+
+
+def build_messages(prompt: str, file_urls: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Build OpenAI-style messages with optional file attachments."""
+    content: List[Dict[str, Any]] = []
+
+    # Add file URLs as image_url content parts
+    if file_urls:
+        for url in file_urls:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": url},
+            })
+
+    # Add text prompt
+    content.append({
+        "type": "text",
+        "text": prompt,
+    })
+
+    return [{"role": "user", "content": content}]
+
+
+def extract_artifacts(response_content: str) -> List[Dict[str, str]]:
+    """Extract artifact URLs from response content."""
+    artifacts = []
+
+    # Try to parse as JSON to find artifact URLs
+    try:
+        data = json.loads(response_content)
+        if isinstance(data, dict):
+            # Look for common artifact patterns
+            for key in ["artifacts", "files", "outputs"]:
+                if key in data and isinstance(data[key], list):
+                    for item in data[key]:
+                        if isinstance(item, dict) and "url" in item:
+                            artifacts.append({
+                                "url": item["url"],
+                                "filename": item.get("filename"),
+                            })
+                        elif isinstance(item, str) and item.startswith(("http://", "https://")):
+                            artifacts.append({"url": item, "filename": None})
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return artifacts
+
+
+def download_artifact(url: str, output_dir: Path, filename: Optional[str] = None) -> Path:
+    """Download an artifact from a URL to the output directory."""
+    # Determine filename from URL if not provided
+    if not filename:
+        parsed = urlparse(url)
+        filename = Path(parsed.path).name or f"artifact_{uuid.uuid4().hex[:8]}"
+
+    output_path = output_dir / filename
+
+    response = requests.get(url, stream=True, timeout=60)
+    response.raise_for_status()
+
+    with open(output_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    return output_path
 
 
 @app.callback(invoke_without_command=True)
@@ -289,48 +347,105 @@ def chat(
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Show upload progress if there are files
-        if input_files and not output_json:
-            console.print(f"\n[dim]Uploading {len(input_files)} file(s)...[/]")
+        # Upload input files if provided
+        file_urls = []
+        if input_files:
+            if not output_json:
+                console.print(f"\n[dim]Uploading {len(input_files)} file(s)...[/]")
+            file_urls = upload_files(client, input_files)
+            if not output_json:
+                console.print(f"[green]Uploaded {len(file_urls)} file(s)[/]\n")
 
-        # Use the completions API with streaming
-        if no_stream or output_json:
+        # Build messages for the chat completion
+        messages = build_messages(final_prompt, file_urls if file_urls else None)
+
+        if not output_json and not no_stream:
+            console.print(f"[dim]Using model: {model}[/]")
+
+        # Call the OpenAI-compatible chat completions API
+        openai_client = client.openai
+        response_content = ""
+
+        if no_stream:
             # Non-streaming mode
             if not output_json:
-                with Status("[bold blue]Processing...", console=console, spinner="dots") as status:
-                    response = client.agent.completions.create(
-                        prompt=final_prompt,
-                        files=[str(f) for f in input_files] if input_files else None,
+                with Status("[bold blue]Processing...", console=console, spinner="dots"):
+                    response = openai_client.chat.completions.create(
                         model=model,
+                        messages=messages,
                         stream=False,
                     )
             else:
-                response = client.agent.completions.create(
-                    prompt=final_prompt,
-                    files=[str(f) for f in input_files] if input_files else None,
+                response = openai_client.chat.completions.create(
                     model=model,
+                    messages=messages,
                     stream=False,
                 )
 
-            # Display the response
-            display_response(response, output_json=output_json)
+            response_content = response.choices[0].message.content or ""
 
-            # Download artifacts if requested
-            if not no_download and response.artifacts:
-                console.print(f"\n[dim]Downloading {len(response.artifacts)} artifact(s)...[/]")
+            if output_json:
+                output = {
+                    "id": response.id,
+                    "model": response.model,
+                    "content": response_content,
+                    "usage": {
+                        "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
+                        "completion_tokens": response.usage.completion_tokens if response.usage else None,
+                        "total_tokens": response.usage.total_tokens if response.usage else None,
+                    } if response.usage else None,
+                }
+                console.print_json(json.dumps(output, indent=2, default=str))
+            else:
+                console.print()
+                console.print(Markdown(response_content))
+
+        else:
+            # Streaming mode
+            with Status("[bold blue]Processing...", console=console, spinner="dots") as status:
+                stream = openai_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=True,
+                )
+
+                # Collect streaming content
+                chunks = []
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        chunks.append(chunk.choices[0].delta.content)
+
+                response_content = "".join(chunks)
+
+            # Display the complete response
+            if output_json:
+                output = {
+                    "content": response_content,
+                }
+                console.print_json(json.dumps(output, indent=2, default=str))
+            else:
+                console.print()
+                console.print(Markdown(response_content))
+
+        # Extract and download artifacts if present
+        if not no_download:
+            artifacts = extract_artifacts(response_content)
+            if artifacts:
+                console.print(f"\n[dim]Downloading {len(artifacts)} artifact(s)...[/]")
 
                 with Progress(
                     SpinnerColumn(),
                     TextColumn("[progress.description]{task.description}"),
                     console=console,
                 ) as progress:
-                    task = progress.add_task("Downloading...", total=len(response.artifacts))
+                    task = progress.add_task("Downloading...", total=len(artifacts))
 
-                    for artifact in response.artifacts:
+                    for artifact in artifacts:
                         try:
-                            output_path = client.agent.completions.download_artifact(
-                                artifact,
+                            output_path = download_artifact(
+                                artifact["url"],
                                 artifact_dir,
+                                artifact.get("filename"),
                             )
                             progress.update(task, description=f"Downloaded {output_path.name}")
                         except Exception as e:
@@ -340,87 +455,6 @@ def chat(
 
                 console.print(f"[green]Artifacts saved to:[/] {artifact_dir}")
 
-            # Show usage info (unless JSON output)
-            if not output_json and response.usage and response.usage.credits_used:
-                console.print(f"\n[dim]Credits used: {response.usage.credits_used}[/]")
-
-        else:
-            # Streaming mode
-            if not output_json:
-                console.print(f"[dim]Using model: {model}[/]")
-
-            last_status = None
-            response = None
-
-            with Status("[bold blue]Starting...", console=console, spinner="dots") as status:
-                stream = client.agent.completions.create(
-                    prompt=final_prompt,
-                    files=[str(f) for f in input_files] if input_files else None,
-                    model=model,
-                    stream=True,
-                )
-
-                # Iterate through the stream
-                for chunk in stream:
-                    if isinstance(chunk, CompletionChunk):
-                        # Update status based on chunk
-                        if chunk.status and chunk.status != last_status:
-                            last_status = chunk.status
-                            status_messages = {
-                                "enqueued": "[yellow]Request queued...",
-                                "pending": "[yellow]Waiting to start...",
-                                "running": "[bold blue]Processing your request...",
-                                "completed": "[green]Complete!",
-                                "failed": "[red]Failed",
-                                "paused": "[yellow]Paused",
-                                "error": "[red]Error",
-                            }
-                            status.update(status_messages.get(chunk.status, f"[blue]{chunk.status}..."))
-
-                        if chunk.finished and chunk.status == "failed":
-                            console.print(f"\n[red]Error:[/] {chunk.delta or 'Execution failed'}")
-                            raise typer.Exit(1)
-
-                    elif isinstance(chunk, CompletionResponse):
-                        # This is the final response
-                        response = chunk
-
-            # Display the final response
-            if response:
-                display_response(response, output_json=output_json)
-
-                # Download artifacts if requested
-                if not no_download and response.artifacts:
-                    console.print(f"\n[dim]Downloading {len(response.artifacts)} artifact(s)...[/]")
-
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        console=console,
-                    ) as progress:
-                        task = progress.add_task("Downloading...", total=len(response.artifacts))
-
-                        for artifact in response.artifacts:
-                            try:
-                                output_path = client.agent.completions.download_artifact(
-                                    artifact,
-                                    artifact_dir,
-                                )
-                                progress.update(task, description=f"Downloaded {output_path.name}")
-                            except Exception as e:
-                                progress.update(task, description=f"[red]Failed: {e}[/]")
-
-                            progress.advance(task)
-
-                    console.print(f"[green]Artifacts saved to:[/] {artifact_dir}")
-
-                # Show usage info (unless JSON output)
-                if not output_json and response.usage and response.usage.credits_used:
-                    console.print(f"\n[dim]Credits used: {response.usage.credits_used}[/]")
-
-    except TimeoutError as e:
-        console.print(f"[red]Timeout:[/] {e}")
-        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(1)
