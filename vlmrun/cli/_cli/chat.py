@@ -325,29 +325,34 @@ def print_rich_output(
     artifact_dir: Optional[Path] = None,
 ) -> None:
     """Print rich-formatted output with panels."""
+    # Build subtitle with stats
+    stats = [model, f"{latency_ms:.0f}ms"]
+    if usage:
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        total_tokens = usage.get("total_tokens", 0)
+        if total_tokens:
+            stats.append(f"{prompt_tokens}/{completion_tokens}/{total_tokens} tokens")
+
+    subtitle = " · ".join(stats)
+
     # Main response panel
     console.print()
     console.print(
         Panel(
             Markdown(content),
-            title="[bold blue]Response[/bold blue]",
+            title="[bold]Response[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{subtitle}[/dim]",
+            subtitle_align="right",
             border_style="blue",
             padding=(1, 2),
         )
     )
 
-    # Footer with usage stats
-    footer_parts = [f"[dim]Model:[/dim] {model}", f"[dim]Latency:[/dim] {latency_ms:.0f}ms"]
-
-    if usage:
-        tokens = usage.get("total_tokens")
-        if tokens:
-            footer_parts.append(f"[dim]Tokens:[/dim] {tokens}")
-
     if artifacts and artifact_dir:
-        footer_parts.append(f"[dim]Artifacts:[/dim] {artifact_dir}")
+        console.print(f"  [dim]Artifacts:[/dim] {artifact_dir}")
 
-    console.print(f"  {'  │  '.join(footer_parts)}")
     console.print()
 
 
