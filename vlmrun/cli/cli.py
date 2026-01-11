@@ -21,7 +21,7 @@ from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.datasets import app as dataset_app
 from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.config import app as config_app, get_config
-from vlmrun.cli._cli.chat import app as chat_app
+from vlmrun.cli._cli.chat import chat as chat_command
 from vlmrun.constants import DEFAULT_BASE_URL
 
 app = typer.Typer(
@@ -125,7 +125,7 @@ def main(
 
 
 # Add subcommands
-app.add_typer(chat_app, name="chat")
+app.command(name="chat", help=chat_command.__doc__)(chat_command)
 app.add_typer(files_app, name="files")
 app.add_typer(predictions_app, name="predictions")
 app.add_typer(fine_tuning_app, name="fine-tuning")

@@ -356,7 +356,7 @@ def print_rich_output(
     console.print()
 
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def chat(
     ctx: typer.Context,
     prompt: Optional[str] = typer.Argument(
