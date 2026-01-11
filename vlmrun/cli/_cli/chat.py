@@ -22,8 +22,33 @@ from vlmrun.constants import (
     SUPPORTED_INPUT_FILETYPES,
 )
 
+CHAT_HELP = """Process images, videos, and documents with natural language.
+
+\b
+PROMPT SOURCES (precedence order):
+  1. Argument   vlmrun chat "prompt" -i file.jpg
+  2. -p option  vlmrun chat -p prompt.txt -i file.jpg
+  3. Stdin      echo "prompt" | vlmrun chat - -i file.jpg
+
+\b
+EXAMPLES:
+  vlmrun chat "Describe this" -i photo.jpg
+  vlmrun chat "Compare" -i a.jpg -i b.jpg
+  vlmrun chat -p prompt.txt -i doc.pdf --json
+  echo "Summarize" | vlmrun chat -p stdin -i video.mp4
+
+\b
+MODELS:
+  vlmrun-orion-1:fast  Speed-optimized
+  vlmrun-orion-1:auto  Auto-select (default)
+  vlmrun-orion-1:pro   Most capable
+
+\b
+FILES: .jpg .png .gif .mp4 .mov .pdf .doc .mp3 .wav (and more)
+"""
+
 app = typer.Typer(
-    help="Chat with VLM Run's Orion visual AI agent",
+    help=CHAT_HELP,
     no_args_is_help=False,
 )
 
@@ -223,19 +248,19 @@ def chat(
     ctx: typer.Context,
     prompt: Optional[str] = typer.Argument(
         None,
-        help="The prompt to send to Orion. Use '-' to read from stdin.",
+        help="Prompt text. Use '-' for stdin.",
     ),
     prompt_file: Optional[str] = typer.Option(
         None,
         "--prompt",
         "-p",
-        help="Prompt text, file path, or 'stdin' for piped input.",
+        help="Prompt: text string, file path, or 'stdin'.",
     ),
     input_files: Optional[List[Path]] = typer.Option(
         None,
         "--input",
         "-i",
-        help="Input file(s): images, videos, or documents. Can be repeated.",
+        help="Input file (image/video/document). Repeatable.",
         exists=True,
         readable=True,
     ),
@@ -243,25 +268,25 @@ def chat(
         None,
         "--output",
         "-o",
-        help="Directory for artifacts (default: ~/.vlm/cache/artifacts/)",
+        help="Artifact output directory. [default: ~/.vlm/cache/artifacts/<id>]",
     ),
     model: str = typer.Option(
         DEFAULT_MODEL,
         "--model",
         "-m",
-        help="Model to use for processing.",
+        help="Model: vlmrun-orion-1:fast|auto|pro",
     ),
     output_json: bool = typer.Option(
         False,
         "--json",
         "-j",
-        help="Output raw JSON response.",
+        help="Output JSON instead of formatted text.",
     ),
     no_stream: bool = typer.Option(
         False,
         "--no-stream",
         "-ns",
-        help="Do not stream the response in real-time.",
+        help="Disable streaming (wait for complete response).",
     ),
     no_download: bool = typer.Option(
         False,
@@ -270,30 +295,6 @@ def chat(
         help="Skip artifact download.",
     ),
 ) -> None:
-    """Chat with VLM Run's Orion visual AI agent.
-
-    Process images, videos, and documents with natural language.
-
-    Prompt Sources (in order of precedence):
-
-    1. Command line argument
-
-    2. -p option (text, file path, or 'stdin')
-
-    3. Auto-detected piped stdin
-
-    Examples:
-
-        vlmrun chat "What's in this image?" -i photo.jpg
-
-        vlmrun chat -p "What's in this image?" -i photo.jpg
-
-        vlmrun chat -p long_prompt.txt -i photo.jpg
-
-        echo "Describe this image" | vlmrun chat - -i photo.jpg
-
-        echo "Describe this image" | vlmrun chat -p stdin -i photo.jpg
-    """
     # Get client from context
     client: VLMRun = ctx.obj
 
