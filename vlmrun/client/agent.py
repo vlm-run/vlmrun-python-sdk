@@ -1,11 +1,8 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
-import warnings
 from functools import cached_property
-from typing import Any, Optional, Union
-
-from pydantic import BaseModel
+from typing import Any, Optional
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
@@ -17,7 +14,6 @@ from vlmrun.client.types import (
     AgentCreationConfig,
     AgentCreationResponse,
 )
-from vlmrun.client.exceptions import DependencyError
 
 
 class Agent:
@@ -32,33 +28,27 @@ class Agent:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def _process_inputs(
-        self, inputs: Union[dict[str, Any], BaseModel, None]
-    ) -> Optional[dict[str, Any]]:
-        """Process inputs, converting BaseModel to dict if needed.
+    @cached_property
+    def completions(self):
+        """Access the Completions API for chat-style interactions.
 
-        Args:
-            inputs: Input data as dict, BaseModel, or None
-
-        Returns:
-            Processed inputs as dict or None
-        """
-        if isinstance(inputs, BaseModel):
-            return inputs.model_dump(exclude_none=True)
-        elif isinstance(inputs, dict):
-            warnings.warn(
-                "Passing inputs as a dictionary will be deprecated in the future. "
-                "Please use a Pydantic BaseModel instead for better type safety and validation.",
-                DeprecationWarning,
-                stacklevel=3,
+        Example:
+            ```python
+            response = client.agent.completions.create(
+                prompt="What's in this image?",
+                files=["photo.jpg"],
             )
-        return inputs
+            print(response.text)
+            ```
+        """
+        from vlmrun.client.completions import Completions
+        return Completions(self._client)
 
     def get(
         self,
-        name: Optional[str] = None,
-        id: Optional[str] = None,
-        prompt: Optional[str] = None,
+        name: str | None = None,
+        id: str | None = None,
+        prompt: str | None = None,
     ) -> AgentInfo:
         """Get an agent by name, id, or prompt. Only one of `name`, `id`, or `prompt` can be provided.
 
@@ -120,8 +110,8 @@ class Agent:
     def create(
         self,
         config: AgentCreationConfig,
-        name: Optional[str] = None,
-        inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
+        name: str | None = None,
+        inputs: Optional[dict[str, Any]] = None,
         callback_url: Optional[str] = None,
     ) -> AgentCreationResponse:
         """Create an agent.
@@ -129,7 +119,7 @@ class Agent:
         Args:
             config: Agent creation configuration
             name: Optional name of the agent to create
-            inputs: Optional inputs to the agent (e.g. {"image": "https://..."}) or a BaseModel instance
+            inputs: Optional inputs to the agent (e.g. {"image": "https://..."})
             callback_url: Optional URL to call when creation is complete
 
         Returns:
@@ -142,8 +132,8 @@ class Agent:
 
         data = {
             "name": name,
-            "inputs": self._process_inputs(inputs),
-            "config": config.model_dump(exclude_none=True),
+            "inputs": inputs,
+            "config": config.model_dump(),
         }
 
         if callback_url:
@@ -162,24 +152,22 @@ class Agent:
 
     def execute(
         self,
-        name: Optional[str] = None,
-        inputs: Optional[Union[dict[str, Any], BaseModel]] = None,
+        name: str | None = None,
+        inputs: Optional[dict[str, Any]] = None,
         batch: bool = True,
         config: Optional[AgentExecutionConfig] = None,
         metadata: Optional[RequestMetadata] = None,
         callback_url: Optional[str] = None,
-        model: str = "vlmrun-orion-1:auto",
     ) -> AgentExecutionResponse:
         """Execute an agent with the given arguments.
 
         Args:
             name: Name of the agent to execute. If not provided, we use the prompt to identify the unique agent.
-            inputs: Optional inputs to the agent or a BaseModel instance
+            inputs: Optional inputs to the agent
             batch: Whether to process in batch mode (async)
             config: Optional agent execution configuration
             metadata: Optional request metadata
             callback_url: Optional URL to call when execution is complete
-            model: VLM Run Agent model to use for execution (default: "vlmrun-orion-1:auto")
 
         Returns:
             AgentExecutionResponse: Agent execution response
@@ -188,17 +176,16 @@ class Agent:
             raise NotImplementedError("Batch mode is required for agent execution")
 
         data = {
-            "model": model,
             "name": name,
             "batch": batch,
-            "inputs": self._process_inputs(inputs),
+            "inputs": inputs,
         }
 
         if config:
-            data["config"] = config.model_dump(exclude_none=True)
+            data["config"] = config.model_dump()
 
         if metadata:
-            data["metadata"] = metadata.model_dump(exclude_none=True)
+            data["metadata"] = metadata.model_dump()
 
         if callback_url:
             data["callback_url"] = callback_url
@@ -232,102 +219,3 @@ class Agent:
             raise TypeError("Expected dict response")
 
         return AgentInfo(**response)
-
-    @cached_property
-    def completions(self):
-        """OpenAI-compatible chat completions interface (synchronous).
-
-        Returns an OpenAI Completions object configured to use the VLMRun
-        agent endpoint. This allows you to use the familiar OpenAI API
-        for chat completions.
-
-        Example:
-            ```python
-            from vlmrun import VLMRun
-
-            client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
-
-            response = client.agent.completions.create(
-                model="vlmrun-orion-1",
-                messages=[
-                    {"role": "user", "content": "Hello!"}
-                ]
-            )
-            ```
-
-        Raises:
-            DependencyError: If openai package is not installed
-
-        Returns:
-            OpenAI Completions object configured for VLMRun agent endpoint
-        """
-        try:
-            from openai import OpenAI
-        except ImportError:
-            raise DependencyError(
-                message="OpenAI SDK is not installed",
-                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
-                error_type="missing_dependency",
-            )
-
-        base_url = f"{self._client.base_url}/openai"
-        openai_client = OpenAI(
-            api_key=self._client.api_key,
-            base_url=base_url,
-            timeout=self._client.timeout,
-            max_retries=self._client.max_retries,
-        )
-
-        return openai_client.chat.completions
-
-    @cached_property
-    def async_completions(self):
-        """OpenAI-compatible chat completions interface (asynchronous).
-
-        Returns an OpenAI AsyncCompletions object configured to use the VLMRun
-        agent endpoint. This allows you to use the familiar OpenAI async API
-        for chat completions.
-
-        Example:
-            ```python
-            from vlmrun import VLMRun
-            import asyncio
-
-            client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
-
-            async def main():
-                response = await client.agent.async_completions.create(
-                    model="vlmrun-orion-1",
-                    messages=[
-                        {"role": "user", "content": "Hello!"}
-                    ]
-                )
-                return response
-
-            asyncio.run(main())
-            ```
-
-        Raises:
-            DependencyError: If openai package is not installed
-
-        Returns:
-            OpenAI AsyncCompletions object configured for VLMRun agent endpoint
-        """
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            raise DependencyError(
-                message="OpenAI SDK is not installed",
-                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
-                error_type="missing_dependency",
-            )
-
-        base_url = f"{self._client.base_url}/openai"
-        async_openai_client = AsyncOpenAI(
-            api_key=self._client.api_key,
-            base_url=base_url,
-            timeout=self._client.timeout,
-            max_retries=self._client.max_retries,
-        )
-
-        return async_openai_client.chat.completions

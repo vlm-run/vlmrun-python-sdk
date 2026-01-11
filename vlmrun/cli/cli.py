@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Optional
 import os
+import sys
+from typing import Optional
 
 import typer
 from rich import print as rprint
@@ -20,6 +21,7 @@ from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.datasets import app as dataset_app
 from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.config import app as config_app, get_config
+from vlmrun.cli._cli.chat import app as chat_app
 from vlmrun.constants import DEFAULT_BASE_URL
 
 app = typer.Typer(
@@ -78,6 +80,11 @@ def check_credentials(
         ctx.meta["has_shown_base_url_notice"] = True
 
 
+def is_help_requested() -> bool:
+    """Check if --help or -h is in the command line arguments."""
+    return "--help" in sys.argv or "-h" in sys.argv
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -108,12 +115,17 @@ def main(
     ),
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
+    # Skip credential check if just showing help or during tab completion
+    if ctx.resilient_parsing or is_help_requested():
+        return
+
     if ctx.invoked_subcommand is not None:
         check_credentials(ctx, api_key, base_url)
         ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
 
 
 # Add subcommands
+app.add_typer(chat_app, name="chat")
 app.add_typer(files_app, name="files")
 app.add_typer(predictions_app, name="predictions")
 app.add_typer(fine_tuning_app, name="fine-tuning")
