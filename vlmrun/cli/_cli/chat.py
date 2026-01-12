@@ -23,6 +23,7 @@ from vlmrun.client.types import FileResponse
 from vlmrun.constants import (
     VLMRUN_ARTIFACT_CACHE_DIR,
     SUPPORTED_INPUT_FILETYPES,
+    DEFAULT_AGENT_BASE_URL,
 )
 
 CHAT_HELP = """Process images, videos, and documents with natural language.
@@ -414,6 +415,11 @@ def chat(
         "-o",
         help="Artifact output directory. [default: ~/.vlm/cache/artifacts/<id>]",
     ),
+    base_url: Optional[str] = typer.Option(
+        DEFAULT_AGENT_BASE_URL,
+        "--base-url",
+        help="VLM Run Agent API base URL.",
+    ),
     model: str = typer.Option(
         DEFAULT_MODEL,
         "--model",
@@ -442,6 +448,7 @@ def chat(
     """Process images, videos, and documents with natural language."""
     # Get client from context
     client: VLMRun = ctx.obj
+    client.base_url = base_url
 
     if client is None:
         console.print("[red]Error:[/] Client not initialized. Check your API key.")

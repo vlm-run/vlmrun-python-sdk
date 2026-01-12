@@ -1,8 +1,8 @@
 from pathlib import Path
 import os
 
-DEFAULT_BASE_URL = "https://api.vlm.run/v1"
-DEFAULT_AGENT_BASE_URL = "https://agent.vlm.run/v1"
+DEFAULT_BASE_URL = os.getenv("VLMRUN_BASE_URL", "https://api.vlm.run/v1")
+DEFAULT_AGENT_BASE_URL = os.getenv("VLMRUN_AGENT_BASE_URL", "https://agent.vlm.run/v1")
 
 # Cache directories - use VLMRUN_CACHE_DIR env var if set, otherwise default to ~/.vlm/cache
 _cache_base = os.getenv("VLMRUN_CACHE_DIR", str(Path.home() / ".vlm" / "cache"))

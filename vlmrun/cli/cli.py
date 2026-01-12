@@ -14,11 +14,8 @@ from rich.text import Text
 
 from vlmrun.client import VLMRun
 from vlmrun.cli._cli.files import app as files_app
-from vlmrun.cli._cli.fine_tuning import app as fine_tuning_app
-from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
-from vlmrun.cli._cli.datasets import app as dataset_app
 from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.config import app as config_app, get_config
 from vlmrun.cli._cli.chat import chat as chat_command
@@ -125,15 +122,15 @@ def main(
 
 
 # Add subcommands
-app.command(name="chat", help=chat_command.__doc__)(chat_command)
 app.add_typer(files_app, name="files")
-app.add_typer(predictions_app, name="predictions")
-app.add_typer(fine_tuning_app, name="fine-tuning")
-app.add_typer(models_app, name="models")
+app.command(name="chat", help=chat_command.__doc__)(chat_command)
 app.add_typer(generate_app, name="generate")
+app.add_typer(predictions_app, name="predictions")
 app.add_typer(hub_app, name="hub")
-app.add_typer(dataset_app, name="datasets")
 app.add_typer(config_app, name="config")
+# app.add_typer(fine_tuning_app, name="fine-tuning")
+# app.add_typer(models_app, name="models")
+# app.add_typer(dataset_app, name="datasets")
 
 if __name__ == "__main__":
     app()
