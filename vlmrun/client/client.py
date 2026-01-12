@@ -77,7 +77,7 @@ class VLMRun:
 
         # Handle base URL
         if self.base_url is None:
-            self.base_url = DEFAULT_BASE_URL
+            self.base_url = os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)
 
         # Initialize requestor for API key validation
         requestor = APIRequestor(

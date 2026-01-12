@@ -203,13 +203,20 @@ class TestChatCommand:
 
     def test_chat_help(self, runner, config_file, mock_client):
         """Test chat --help shows documentation."""
+        import re
+
         result = runner.invoke(app, ["chat", "--help"])
         assert result.exit_code == 0
+
+        # Strip ANSI codes for easier testing
+        ansi_escape = re.compile(r"\x1b\[[0-9;]*m")
+        plain_output = ansi_escape.sub("", result.stdout)
+
         # Check that key options are documented
-        assert "--prompt" in result.stdout
-        assert "--input" in result.stdout
-        assert "--model" in result.stdout
-        assert "--json" in result.stdout
+        assert "--prompt" in plain_output
+        assert "--input" in plain_output
+        assert "--model" in plain_output
+        assert "--json" in plain_output
 
     def test_chat_no_prompt_error(self, runner, config_file, mock_client):
         """Test error when no prompt provided."""

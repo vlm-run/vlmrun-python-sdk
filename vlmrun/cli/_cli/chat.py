@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import threading
@@ -414,7 +415,7 @@ def chat(
         help="Artifact output directory. [default: ~/.vlm/cache/artifacts/<id>]",
     ),
     base_url: Optional[str] = typer.Option(
-        DEFAULT_AGENT_BASE_URL,
+        os.getenv("VLMRUN_AGENT_BASE_URL", DEFAULT_AGENT_BASE_URL),
         "--base-url",
         help="VLM Run Agent API base URL.",
     ),
