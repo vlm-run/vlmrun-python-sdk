@@ -268,7 +268,7 @@ class TestChatCommand:
         test_file.write_bytes(b"fake image data")
 
         with patch.object(mock_client, "openai", mock_client.openai):
-            result = runner.invoke(
+            _result = runner.invoke(
                 app,
                 [
                     "chat",

@@ -4,7 +4,7 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Union, Literal, Dict, Any
-from loguru import logger
+from vlmrun.common.logging import logger
 
 import tarfile
 import requests

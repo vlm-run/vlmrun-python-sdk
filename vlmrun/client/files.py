@@ -8,7 +8,7 @@ import hashlib
 from pathlib import Path
 from typing import Optional, Union, List, Literal
 
-from loguru import logger
+from vlmrun.common.logging import logger
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.types.abstract import VLMRunProtocol
 from vlmrun.client.types import FileResponse, PresignedUrlRequest, PresignedUrlResponse

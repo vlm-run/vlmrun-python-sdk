@@ -16,7 +16,6 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.status import Status
-from rich.table import Table
 from rich.tree import Tree
 
 from vlmrun.client import VLMRun
@@ -156,8 +155,10 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size_bytes}B"
     elif size_bytes < 1024 * 1024:
         return f"{size_bytes / 1024:.1f}KB"
-    else:
+    elif size_bytes < 1024 * 1024 * 1024:
         return f"{size_bytes / (1024 * 1024):.1f}MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f}GB"
 
 
 def upload_files_concurrent(
@@ -208,16 +209,15 @@ def build_messages(
     prompt: str, file_responses: Optional[List[FileResponse]] = None
 ) -> List[Dict[str, Any]]:
     """Build OpenAI-style messages with optional file attachments."""
-    content: List[Dict[str, Any]] = []
-
-    # Add files using file IDs
-    if file_responses:
-        for file_response in file_responses:
-            content.append({"type": "input_file", "file_id": file_response.id})
-
     # Add text prompt
-    content.append({"type": "text", "text": prompt})
-
+    content = [{"type": "text", "text": prompt}]
+    # Add files using file IDs
+    content.extend(
+        [
+            {"type": "input_file", "file_id": file_response.id}
+            for file_response in file_responses or []
+        ]
+    )
     return [{"role": "user", "content": content}]
 
 
@@ -246,21 +246,6 @@ def extract_artifact_refs(response_content: str) -> List[str]:
     return sorted(list(refs))
 
 
-def get_file_extension(ref_id: str) -> str:
-    """Get appropriate file extension based on reference type."""
-    prefix = ref_id.split("_")[0]
-    extensions = {
-        "img": ".png",
-        "aud": ".mp3",
-        "vid": ".mp4",
-        "doc": ".pdf",
-        "recon": ".obj",
-        "arr": ".npy",
-        "url": ".txt",
-    }
-    return extensions.get(prefix, ".bin")
-
-
 def download_artifact(
     client: VLMRun, session_id: str, ref_id: str, output_dir: Path
 ) -> Path:
@@ -275,29 +260,28 @@ def download_artifact(
     Returns:
         Path to the downloaded artifact file
     """
+    from typing import Union
     from PIL import Image
     from pydantic import AnyHttpUrl
     import shutil
 
     # Get the artifact from the API
-    artifact = client.artifacts.get(session_id=session_id, object_id=ref_id)
-
-    # Determine filename
-    extension = get_file_extension(ref_id)
-    filename = f"{ref_id}{extension}"
-    output_path = output_dir / filename
+    artifact: Union[Path, Image.Image, AnyHttpUrl] = client.artifacts.get(
+        session_id=session_id, object_id=ref_id
+    )
 
     # Handle different artifact types
+    output_path = None
     if isinstance(artifact, Image.Image):
         # Save PIL Image to file
-        artifact.save(output_path, format="JPEG", quality=95)
+        output_path = output_dir / f"{ref_id}.jpg"
+        if not output_path.exists():
+            artifact.save(output_path, format="JPEG", quality=95)
     elif isinstance(artifact, Path):
         # Copy file from temp location to output directory
-        shutil.copy2(artifact, output_path)
-    elif isinstance(artifact, AnyHttpUrl):
-        # Save URL to text file
-        with open(output_path, "w") as f:
-            f.write(str(artifact))
+        output_path = output_dir / f"{ref_id}{artifact.suffix}"
+        if not output_path.exists():
+            shutil.copy2(artifact, output_path)
     else:
         raise TypeError(f"Unexpected artifact type: {type(artifact)}")
 
@@ -359,49 +343,31 @@ class TimedStatus:
             time.sleep(0.1)  # Update every 100ms
 
 
-def format_usage_table(usage: Dict[str, Any], latency_ms: float) -> Table:
-    """Create a usage statistics table."""
-    table = Table(show_header=False, box=None, padding=(0, 1))
-    table.add_column("Key", style="dim")
-    table.add_column("Value")
-
-    if usage:
-        if usage.get("prompt_tokens"):
-            table.add_row("Prompt tokens", str(usage["prompt_tokens"]))
-        if usage.get("completion_tokens"):
-            table.add_row("Completion tokens", str(usage["completion_tokens"]))
-        if usage.get("total_tokens"):
-            table.add_row("Total tokens", str(usage["total_tokens"]))
-
-    table.add_row("Latency", f"{latency_ms:.0f}ms")
-    return table
-
-
 def print_rich_output(
     content: str,
     model: str,
-    latency_ms: float,
+    latency_s: float,
     usage: Optional[Dict[str, Any]] = None,
     artifacts: Optional[List[Dict[str, str]]] = None,
     artifact_dir: Optional[Path] = None,
 ) -> None:
     """Print rich-formatted output with panels."""
     # Build subtitle with stats
-    latency_formatted = format_time(latency_ms / 1000)
-    stats = [model, latency_formatted]
+    stats = [model]
     if usage:
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
-        if total_tokens:
+        if total_tokens and False:  # TODO: Add back in when usage is implemented
             stats.append(
                 f"P:{prompt_tokens} / C:{completion_tokens} / T:{total_tokens} tokens"
             )
         # Add credits if available
         credits = usage.get("credits_used")
         if credits is not None:
-            stats.append(f"{credits} credits")
+            stats.append(f"{credits} credit(s)")
 
+    stats.append(f"{format_time(latency_s)}")
     subtitle = " · ".join(stats)
 
     # Main response panel
@@ -556,7 +522,9 @@ def chat(
             # Non-streaming mode
             if not output_json:
                 with TimedStatus(
-                    f"Processing ([bold]{model}[/bold])...", console=console, spinner="dots"
+                    f"Processing ([bold]{model}[/bold])...",
+                    console=console,
+                    spinner="dots",
                 ):
                     response = client.agent.completions.create(
                         model=model,
@@ -571,7 +539,7 @@ def chat(
                     stream=False,
                 )
 
-            latency_ms = (time.time() - start_time) * 1000
+            latency_s = time.time() - start_time
             response_content = response.choices[0].message.content or ""
             response_id = response.session_id
 
@@ -599,24 +567,27 @@ def chat(
                     "session_id": response.session_id,
                     "model": response.model,
                     "content": response_content,
-                    "latency_ms": latency_ms,
+                    "latency_s": latency_s,
                     "usage": usage_data,
                 }
                 console.print_json(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(response_content, model, latency_ms, usage_data)
+                print_rich_output(response_content, model, latency_s, usage_data)
 
         else:
             # Streaming mode
-            with TimedStatus(f"Processing ([bold]{model}[/bold])...", console=console, spinner="dots"):
+            with TimedStatus(
+                f"Processing ([bold]{model}[/bold])...", console=console, spinner="dots"
+            ):
                 stream = client.agent.completions.create(
                     model=model,
                     messages=messages,
                     stream=True,
                 )
 
-                # Collect streaming content
+                # Collect streaming content and usage data
                 chunks = []
+                stream_usage_data = None
                 for chunk in stream:
                     # Capture session_id from first chunk
                     if not response_id and hasattr(chunk, "session_id"):
@@ -627,20 +598,40 @@ def chat(
                         and chunk.choices[0].delta.content
                     ):
                         chunks.append(chunk.choices[0].delta.content)
+                    # Capture usage data from the final chunk
+                    if hasattr(chunk, "usage") and chunk.usage:
+                        stream_usage_data = {
+                            "prompt_tokens": chunk.usage.prompt_tokens,
+                            "completion_tokens": chunk.usage.completion_tokens,
+                            "total_tokens": chunk.usage.total_tokens,
+                        }
+                        # Add credits if available
+                        if (
+                            hasattr(chunk.usage, "credits_used")
+                            and chunk.usage.credits_used is not None
+                        ):
+                            stream_usage_data["credits_used"] = chunk.usage.credits_used
+                        elif (
+                            hasattr(chunk.usage, "credits")
+                            and chunk.usage.credits is not None
+                        ):
+                            stream_usage_data["credits_used"] = chunk.usage.credits
 
                 response_content = "".join(chunks)
 
-            latency_ms = (time.time() - start_time) * 1000
+            latency_s = time.time() - start_time
 
             # Display the complete response
             if output_json:
                 output = {
                     "content": response_content,
-                    "latency_ms": latency_ms,
+                    "latency_s": latency_s,
                 }
+                if stream_usage_data:
+                    output["usage"] = stream_usage_data
                 console.print_json(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(response_content, model, latency_ms)
+                print_rich_output(response_content, model, latency_s, stream_usage_data)
 
         # Extract and download artifacts if present
         if not no_download:
