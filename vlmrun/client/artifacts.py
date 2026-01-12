@@ -12,7 +12,7 @@ from pydantic import AnyHttpUrl
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.common.utils import _HEADERS
-from vlmrun.constants import VLMRUN_ARTIFACTS_DIR
+from vlmrun.constants import VLMRUN_ARTIFACTS_CACHE_DIR
 
 
 if TYPE_CHECKING:
@@ -97,7 +97,7 @@ class Artifacts:
 
         # Create artifacts directory with session_id subdirectory
         sess_id: str = session_id or execution_id
-        artifacts_dir: Path = VLMRUN_ARTIFACTS_DIR / sess_id
+        artifacts_dir: Path = VLMRUN_ARTIFACTS_CACHE_DIR / sess_id
         artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         # Extension and content-type mappings for file-based artifacts

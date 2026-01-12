@@ -4,7 +4,7 @@ from pathlib import Path
 from rich.table import Table
 from rich.console import Console
 
-from loguru import logger
+from vlmrun.common.logging import logger
 from vlmrun.client import VLMRun
 from vlmrun.client.types import DatasetResponse
 from vlmrun.constants import VLMRUN_TMP_DIR

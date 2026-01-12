@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import List, Optional, Union
 from PIL import Image
-from loguru import logger
+from vlmrun.common.logging import logger
 
 import time
 from vlmrun.common.image import encode_image, _open_image_with_exif
