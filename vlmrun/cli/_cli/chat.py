@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
+import threading
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional, Set
 
-import requests
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.status import Status
 from rich.table import Table
+from rich.tree import Tree
 
 from vlmrun.client import VLMRun
 from vlmrun.client.types import FileResponse
@@ -50,7 +49,6 @@ MODELS:
 
 \b
 OUTPUT:
-  --simple    Plain text output (token-efficient for automation)
   --json      JSON output for programmatic use
 
 \b
@@ -59,7 +57,7 @@ FILES: .jpg .png .gif .mp4 .mov .pdf .doc .mp3 .wav (and more)
 
 app = typer.Typer(
     help=CHAT_HELP,
-    no_args_is_help=False,
+    no_args_is_help=True,
 )
 
 console = Console()
@@ -152,57 +150,56 @@ def resolve_prompt(
     return None
 
 
-def upload_single_file(client: VLMRun, file_path: Path) -> FileResponse:
-    """Upload a single file and return the FileResponse."""
-    return client.files.upload(file_path, purpose="assistants")
+def format_file_size(size_bytes: int) -> str:
+    """Format file size in human-readable format."""
+    if size_bytes < 1024:
+        return f"{size_bytes}B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f}KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f}MB"
 
 
 def upload_files_concurrent(
-    client: VLMRun, files: List[Path], simple_output: bool = False
+    client: VLMRun, files: List[Path], show_progress: bool = True
 ) -> List[FileResponse]:
-    """Upload files concurrently and return their FileResponses."""
+    """Upload files concurrently and return their file responses."""
     file_responses: List[FileResponse] = []
 
-    if simple_output:
-        # Simple output: just upload without progress display
+    if not show_progress:
+        # JSON output: upload without progress display
         with ThreadPoolExecutor(max_workers=min(len(files), 4)) as executor:
             futures = {
-                executor.submit(upload_single_file, client, f): f for f in files
+                executor.submit(client.files.upload, file=f, purpose="assistants"): f
+                for f in files
             }
             for future in as_completed(futures):
                 file_path = futures[future]
                 try:
-                    response = future.result()
-                    file_responses.append(response)
+                    file_response = future.result()
+                    file_responses.append(file_response)
                 except Exception as e:
+                    console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
                     raise typer.Exit(1) from e
     else:
-        # Rich output with progress bar
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Uploading files...", total=len(files))
-
+        # Rich output - upload with status spinner
+        with Status("Uploading...", console=console, spinner="dots") as status:
             with ThreadPoolExecutor(max_workers=min(len(files), 4)) as executor:
                 futures = {
-                    executor.submit(upload_single_file, client, f): f for f in files
+                    executor.submit(
+                        client.files.upload, file=f, purpose="assistants"
+                    ): f
+                    for f in files
                 }
                 for future in as_completed(futures):
                     file_path = futures[future]
                     try:
-                        response = future.result()
-                        file_responses.append(response)
-                        progress.update(
-                            task, description=f"Uploaded {file_path.name}"
-                        )
+                        file_response = future.result()
+                        file_responses.append(file_response)
+                        status.update(f"Uploading {file_path.name}...")
                     except Exception as e:
                         console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
                         raise typer.Exit(1) from e
-                    progress.advance(task)
 
     return file_responses
 
@@ -213,67 +210,153 @@ def build_messages(
     """Build OpenAI-style messages with optional file attachments."""
     content: List[Dict[str, Any]] = []
 
-    # Add files as image_url content parts using public URLs
+    # Add files using file IDs
     if file_responses:
-        for file_resp in file_responses:
-            url = file_resp.public_url
-            if url:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": url},
-                })
+        for file_response in file_responses:
+            content.append({"type": "input_file", "file_id": file_response.id})
 
     # Add text prompt
-    content.append({
-        "type": "text",
-        "text": prompt,
-    })
+    content.append({"type": "text", "text": prompt})
 
     return [{"role": "user", "content": content}]
 
 
-def extract_artifacts(response_content: str) -> List[Dict[str, str]]:
-    """Extract artifact URLs from response content."""
-    artifacts = []
+def extract_artifact_refs(response_content: str) -> List[str]:
+    """Extract artifact reference IDs from response content.
 
-    # Try to parse as JSON to find artifact URLs
-    try:
-        data = json.loads(response_content)
-        if isinstance(data, dict):
-            # Look for common artifact patterns
-            for key in ["artifacts", "files", "outputs"]:
-                if key in data and isinstance(data[key], list):
-                    for item in data[key]:
-                        if isinstance(item, dict) and "url" in item:
-                            artifacts.append({
-                                "url": item["url"],
-                                "filename": item.get("filename"),
-                            })
-                        elif isinstance(item, str) and item.startswith(("http://", "https://")):
-                            artifacts.append({"url": item, "filename": None})
-    except (json.JSONDecodeError, TypeError):
-        pass
+    Looks for patterns like img_XXXXXX, aud_XXXXXX, vid_XXXXXX, doc_XXXXXX,
+    recon_XXXXXX, arr_XXXXXX, url_XXXXXX in the response text.
+    """
+    # Reference patterns from vlmrun/types/refs.py
+    patterns = [
+        r"\bimg_\w{6}\b",  # ImageRef
+        r"\baud_\w{6}\b",  # AudioRef
+        r"\bvid_\w{6}\b",  # VideoRef
+        r"\bdoc_\w{6}\b",  # DocumentRef
+        r"\brecon_\w{6}\b",  # ReconRef
+        r"\barr_\w{6}\b",  # ArrayRef
+        r"\burl_\w{6}\b",  # UrlRef
+    ]
 
-    return artifacts
+    refs: Set[str] = set()
+    for pattern in patterns:
+        matches = re.findall(pattern, response_content)
+        refs.update(matches)
+
+    return sorted(list(refs))
 
 
-def download_artifact(url: str, output_dir: Path, filename: Optional[str] = None) -> Path:
-    """Download an artifact from a URL to the output directory."""
-    # Determine filename from URL if not provided
-    if not filename:
-        parsed = urlparse(url)
-        filename = Path(parsed.path).name or f"artifact_{uuid.uuid4().hex[:8]}"
+def get_file_extension(ref_id: str) -> str:
+    """Get appropriate file extension based on reference type."""
+    prefix = ref_id.split("_")[0]
+    extensions = {
+        "img": ".png",
+        "aud": ".mp3",
+        "vid": ".mp4",
+        "doc": ".pdf",
+        "recon": ".obj",
+        "arr": ".npy",
+        "url": ".txt",
+    }
+    return extensions.get(prefix, ".bin")
 
+
+def download_artifact(
+    client: VLMRun, session_id: str, ref_id: str, output_dir: Path
+) -> Path:
+    """Download an artifact using the artifacts API.
+
+    Args:
+        client: VLMRun client instance
+        session_id: The session ID from the chat response
+        ref_id: The artifact reference ID (e.g., img_abc123)
+        output_dir: Directory to save the artifact
+
+    Returns:
+        Path to the downloaded artifact file
+    """
+    from PIL import Image
+    from pydantic import AnyHttpUrl
+    import shutil
+
+    # Get the artifact from the API
+    artifact = client.artifacts.get(session_id=session_id, object_id=ref_id)
+
+    # Determine filename
+    extension = get_file_extension(ref_id)
+    filename = f"{ref_id}{extension}"
     output_path = output_dir / filename
 
-    response = requests.get(url, stream=True, timeout=60)
-    response.raise_for_status()
-
-    with open(output_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+    # Handle different artifact types
+    if isinstance(artifact, Image.Image):
+        # Save PIL Image to file
+        artifact.save(output_path, format="JPEG", quality=95)
+    elif isinstance(artifact, Path):
+        # Copy file from temp location to output directory
+        shutil.copy2(artifact, output_path)
+    elif isinstance(artifact, AnyHttpUrl):
+        # Save URL to text file
+        with open(output_path, "w") as f:
+            f.write(str(artifact))
+    else:
+        raise TypeError(f"Unexpected artifact type: {type(artifact)}")
 
     return output_path
+
+
+def format_time(seconds: float) -> str:
+    """Format time in human-readable format (e.g., '0.45s', '3.12s', '1m 2s')."""
+    if seconds < 60:
+        return f"{seconds:.2f}s"
+    else:
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes}m {secs}s"
+
+
+class TimedStatus:
+    """A status display that shows elapsed time."""
+
+    def __init__(self, message: str, console: Console, spinner: str = "dots"):
+        self.base_message = message
+        self.console = console
+        self.spinner = spinner
+        self.start_time = None
+        self.status = None
+        self._stop_event = threading.Event()
+        self._timer_thread = None
+
+    def __enter__(self):
+        self.start_time = time.time()
+        self.status = Status(
+            f"[bold blue]{self.base_message}",
+            console=self.console,
+            spinner=self.spinner,
+        )
+        self.status.start()
+
+        # Start timer thread
+        self._timer_thread = threading.Thread(target=self._update_timer, daemon=True)
+        self._timer_thread.start()
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._stop_event.set()
+        if self._timer_thread:
+            self._timer_thread.join(timeout=0.5)
+        if self.status:
+            self.status.stop()
+        return False
+
+    def _update_timer(self):
+        """Update the status message with elapsed time."""
+        while not self._stop_event.is_set():
+            if self.status and self.start_time:
+                elapsed = time.time() - self.start_time
+                time_str = format_time(elapsed)
+                self.status.update(f"[bold blue]{self.base_message} ({time_str})")
+            time.sleep(0.1)  # Update every 100ms
 
 
 def format_usage_table(usage: Dict[str, Any], latency_ms: float) -> Table:
@@ -294,28 +377,6 @@ def format_usage_table(usage: Dict[str, Any], latency_ms: float) -> Table:
     return table
 
 
-def print_simple_output(
-    content: str,
-    model: str,
-    latency_ms: float,
-    usage: Optional[Dict[str, Any]] = None,
-    artifacts: Optional[List[Dict[str, str]]] = None,
-    artifact_dir: Optional[Path] = None,
-) -> None:
-    """Print simple, token-efficient output for automation."""
-    print(content)
-    print()
-    print(f"---")
-    print(f"model: {model}")
-    print(f"latency: {latency_ms:.0f}ms")
-    if usage:
-        tokens = usage.get("total_tokens")
-        if tokens:
-            print(f"tokens: {tokens}")
-    if artifacts and artifact_dir:
-        print(f"artifacts: {artifact_dir}")
-
-
 def print_rich_output(
     content: str,
     model: str,
@@ -326,18 +387,24 @@ def print_rich_output(
 ) -> None:
     """Print rich-formatted output with panels."""
     # Build subtitle with stats
-    stats = [model, f"{latency_ms:.0f}ms"]
+    latency_formatted = format_time(latency_ms / 1000)
+    stats = [model, latency_formatted]
     if usage:
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
         if total_tokens:
-            stats.append(f"{prompt_tokens}/{completion_tokens}/{total_tokens} tokens")
+            stats.append(
+                f"P:{prompt_tokens} / C:{completion_tokens} / T:{total_tokens} tokens"
+            )
+        # Add credits if available
+        credits = usage.get("credits_used")
+        if credits is not None:
+            stats.append(f"{credits} credits")
 
     subtitle = " · ".join(stats)
 
     # Main response panel
-    console.print()
     console.print(
         Panel(
             Markdown(content),
@@ -352,8 +419,6 @@ def print_rich_output(
 
     if artifacts and artifact_dir:
         console.print(f"  [dim]Artifacts:[/dim] {artifact_dir}")
-
-    console.print()
 
 
 @app.command()
@@ -395,12 +460,6 @@ def chat(
         "-j",
         help="Output JSON instead of formatted text.",
     ),
-    simple_output: bool = typer.Option(
-        False,
-        "--simple",
-        "-s",
-        help="Plain text output (token-efficient for automation).",
-    ),
     no_stream: bool = typer.Option(
         False,
         "--no-stream",
@@ -432,16 +491,16 @@ def chat(
     if not final_prompt:
         console.print("[red]Error:[/] No prompt provided.")
         console.print("\nUsage:")
-        console.print("  vlmrun chat \"Your prompt here\" -i file.jpg")
+        console.print('  vlmrun chat "Your prompt here" -i file.jpg')
         console.print("  vlmrun chat -p prompt.txt -i file.jpg")
-        console.print("  echo \"Your prompt\" | vlmrun chat - -i file.jpg")
+        console.print('  echo "Your prompt" | vlmrun chat - -i file.jpg')
         console.print("\nRun [green]vlmrun chat --help[/] for more options.")
         raise typer.Exit(1)
 
     # Validate model
     if model not in AVAILABLE_MODELS:
         console.print(f"[red]Error:[/] Invalid model '{model}'")
-        console.print(f"\nAvailable models:")
+        console.print("\nAvailable models:")
         for m in AVAILABLE_MODELS:
             default_marker = " (default)" if m == DEFAULT_MODEL else ""
             console.print(f"  - {m}{default_marker}")
@@ -453,58 +512,60 @@ def chat(
             suffix = file_path.suffix.lower()
             if suffix not in SUPPORTED_INPUT_FILETYPES:
                 console.print(f"[red]Error:[/] Unsupported file type: {suffix}")
-                console.print(f"\nSupported types: {', '.join(SUPPORTED_INPUT_FILETYPES)}")
+                console.print(
+                    f"\nSupported types: {', '.join(SUPPORTED_INPUT_FILETYPES)}"
+                )
                 raise typer.Exit(1)
-
-    # Generate a session ID for artifact organization
-    session_id = uuid.uuid4().hex[:12]
-
-    # Set up output directory
-    if output_dir:
-        artifact_dir = output_dir
-    else:
-        artifact_dir = VLMRUN_ARTIFACT_CACHE_DIR / session_id
-
-    artifact_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         # Upload input files concurrently if provided
         file_responses: List[FileResponse] = []
         if input_files:
-            if not output_json and not simple_output:
-                console.print(f"\n[dim]Uploading {len(input_files)} file(s)...[/]")
-
             file_responses = upload_files_concurrent(
-                client, input_files, simple_output=simple_output or output_json
+                client, input_files, show_progress=not output_json
             )
 
-            if not output_json and not simple_output:
-                console.print(f"[green]Uploaded {len(file_responses)} file(s)[/]\n")
+            if not output_json:
+                # Create tree view of uploaded files
+                tree = Tree("", guide_style="dim", hide_root=True)
+                for file_path in input_files:
+                    size_str = format_file_size(file_path.stat().st_size)
+                    tree.add(f"{file_path.name} [dim]({size_str})[/dim]")
+                console.print(
+                    Panel(
+                        tree,
+                        title=f"Uploaded {len(file_responses)} file(s)",
+                        title_align="left",
+                        border_style="dim",
+                    )
+                )
 
         # Build messages for the chat completion
-        messages = build_messages(final_prompt, file_responses if file_responses else None)
-
-        if not output_json and not simple_output and not no_stream:
-            console.print(f"[dim]Using model: {model}[/]")
+        messages = build_messages(
+            final_prompt, file_responses if file_responses else None
+        )
 
         # Call the OpenAI-compatible chat completions API
-        openai_client = client.openai
         response_content = ""
         usage_data: Optional[Dict[str, Any]] = None
+        response_id: Optional[str] = None
 
         start_time = time.time()
 
         if no_stream:
             # Non-streaming mode
-            if not output_json and not simple_output:
-                with Status("[bold blue]Processing...", console=console, spinner="dots"):
-                    response = openai_client.chat.completions.create(
+            if not output_json:
+                with TimedStatus(
+                    f"Processing ([bold]{model}[/bold])...", console=console, spinner="dots"
+                ):
+                    response = client.agent.completions.create(
                         model=model,
                         messages=messages,
                         stream=False,
                     )
             else:
-                response = openai_client.chat.completions.create(
+                console.print(f"Processing ([bold]{model}[/bold])...")
+                response = client.agent.completions.create(
                     model=model,
                     messages=messages,
                     stream=False,
@@ -512,6 +573,7 @@ def chat(
 
             latency_ms = (time.time() - start_time) * 1000
             response_content = response.choices[0].message.content or ""
+            response_id = response.session_id
 
             if response.usage:
                 usage_data = {
@@ -519,29 +581,35 @@ def chat(
                     "completion_tokens": response.usage.completion_tokens,
                     "total_tokens": response.usage.total_tokens,
                 }
+                # Add credits if available (may be in custom fields)
+                if (
+                    hasattr(response.usage, "credits_used")
+                    and response.usage.credits_used is not None
+                ):
+                    usage_data["credits_used"] = response.usage.credits_used
+                elif (
+                    hasattr(response.usage, "credits")
+                    and response.usage.credits is not None
+                ):
+                    usage_data["credits_used"] = response.usage.credits
 
             if output_json:
                 output = {
                     "id": response.id,
+                    "session_id": response.session_id,
                     "model": response.model,
                     "content": response_content,
                     "latency_ms": latency_ms,
                     "usage": usage_data,
                 }
                 console.print_json(json.dumps(output, indent=2, default=str))
-            elif simple_output:
-                print_simple_output(
-                    response_content, model, latency_ms, usage_data
-                )
             else:
-                print_rich_output(
-                    response_content, model, latency_ms, usage_data
-                )
+                print_rich_output(response_content, model, latency_ms, usage_data)
 
         else:
             # Streaming mode
-            with Status("[bold blue]Processing...", console=console, spinner="dots") as status:
-                stream = openai_client.chat.completions.create(
+            with TimedStatus(f"Processing ([bold]{model}[/bold])...", console=console, spinner="dots"):
+                stream = client.agent.completions.create(
                     model=model,
                     messages=messages,
                     stream=True,
@@ -550,7 +618,14 @@ def chat(
                 # Collect streaming content
                 chunks = []
                 for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.content:
+                    # Capture session_id from first chunk
+                    if not response_id and hasattr(chunk, "session_id"):
+                        response_id = chunk.session_id
+                    if (
+                        chunk.choices
+                        and chunk.choices[0].delta
+                        and chunk.choices[0].delta.content
+                    ):
                         chunks.append(chunk.choices[0].delta.content)
 
                 response_content = "".join(chunks)
@@ -564,43 +639,79 @@ def chat(
                     "latency_ms": latency_ms,
                 }
                 console.print_json(json.dumps(output, indent=2, default=str))
-            elif simple_output:
-                print_simple_output(response_content, model, latency_ms)
             else:
                 print_rich_output(response_content, model, latency_ms)
 
         # Extract and download artifacts if present
         if not no_download:
-            artifacts = extract_artifacts(response_content)
-            if artifacts:
-                if not output_json and not simple_output:
-                    console.print(f"\n[dim]Downloading {len(artifacts)} artifact(s)...[/]")
+            artifact_refs = extract_artifact_refs(response_content)
+            if artifact_refs:
+                # Use response_id as session_id if available
+                if not response_id:
+                    console.print(
+                        "[yellow]Warning:[/] No session_id available, artifacts may not download correctly"
+                    )
+                    session_id = "unknown"
+                else:
+                    session_id = response_id
 
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    console=console,
-                    disable=simple_output or output_json,
-                ) as progress:
-                    task = progress.add_task("Downloading...", total=len(artifacts))
+                # Set up output directory
+                if output_dir:
+                    artifact_dir = output_dir
+                else:
+                    artifact_dir = VLMRUN_ARTIFACT_CACHE_DIR / session_id
+                artifact_dir.mkdir(parents=True, exist_ok=True)
 
-                    for artifact in artifacts:
+                downloaded_files = []
+
+                # Download artifacts with status spinner
+                if not output_json:
+                    with Status(
+                        "Downloading artifacts...", console=console, spinner="dots"
+                    ):
+                        for ref_id in artifact_refs:
+                            try:
+                                output_path = download_artifact(
+                                    client,
+                                    session_id,
+                                    ref_id,
+                                    artifact_dir,
+                                )
+                                downloaded_files.append(output_path)
+                            except Exception as e:
+                                console.print(
+                                    f"[red]Failed to download {ref_id}: {e}[/]"
+                                )
+                else:
+                    # JSON output mode - download without progress
+                    for ref_id in artifact_refs:
                         try:
                             output_path = download_artifact(
-                                artifact["url"],
+                                client,
+                                session_id,
+                                ref_id,
                                 artifact_dir,
-                                artifact.get("filename"),
                             )
-                            progress.update(task, description=f"Downloaded {output_path.name}")
+                            downloaded_files.append(output_path)
                         except Exception as e:
-                            progress.update(task, description=f"[red]Failed: {e}[/]")
+                            console.print(f"[red]Failed to download {ref_id}: {e}[/]")
 
-                        progress.advance(task)
+                if not output_json and downloaded_files:
+                    # Create elegant tree view of artifacts
+                    tree = Tree(f"{artifact_dir}", guide_style="dim")
+                    for file_path in sorted(downloaded_files):
+                        # Get file size
+                        size_str = format_file_size(file_path.stat().st_size)
+                        tree.add(f"{file_path.name} [dim]({size_str})[/dim]")
 
-                if not output_json and not simple_output:
-                    console.print(f"[green]Artifacts saved to:[/] {artifact_dir}")
-                elif simple_output:
-                    print(f"artifacts: {artifact_dir}")
+                    console.print(
+                        Panel(
+                            tree,
+                            title=f"Downloaded {len(downloaded_files)} artifact(s)",
+                            title_align="left",
+                            border_style="dim",
+                        )
+                    )
 
     except Exception as e:
         console.print(f"[red]Error:[/] {e}")
