@@ -33,7 +33,7 @@ uv pip install "vlmrun[cli]"
 ### `vlmrun chat` - Visual AI Chat
 
 The main command for interacting with VLM Run's Orion visual AI agent.
-Artifacts are automatically downloaded to `~/.vlm/cache/artifacts/<session_id>/`.
+Artifacts are automatically downloaded to `~/.vlmrun/cache/artifacts/<session_id>/`.
 
 **Prompt Sources (in order of precedence):**
 1. Command line argument
@@ -55,7 +55,7 @@ echo "Describe this image" | vlmrun chat -p stdin -i photo.jpg
 # Compare multiple images
 vlmrun chat "Compare these two images" -i img1.jpg -i img2.jpg
 
-# Save to custom directory (by default, artifacts are saved to ~/.vlm/cache/artifacts/)
+# Save to custom directory (by default, artifacts are saved to ~/.vlmrun/cache/artifacts/)
 vlmrun chat "Detect faces and visualize" -i photo.jpg -o ./results/
 
 # Skip artifact download (by default, artifacts are downloaded)
@@ -68,7 +68,7 @@ vlmrun chat "Quick description" -i photo.jpg -nd
 |--------|-------|-------------|
 | `--prompt` | `-p` | Prompt text, file path, or 'stdin' for piped input |
 | `--input` | `-i` | Input file(s): images, videos, or documents (repeatable) |
-| `--output` | `-o` | Directory for artifacts (default: ~/.vlm/cache/artifacts/) |
+| `--output` | `-o` | Directory for artifacts (default: ~/.vlmrun/cache/artifacts/) |
 | `--model` | `-m` | Model (default: `vlmrun-orion-1:auto`) |
 | `--json` | `-j` | Output raw JSON response (default: text) |
 | `--no-stream` | `-ns` | Do not stream the response in real-time (default: stream) |
@@ -124,7 +124,7 @@ vlmrun chat "Remove the background from this image" -i product.jpg
 vlmrun chat "Summarize this video in 3 bullet points" -i meeting.mp4
 
 # Extract highlights
-# This should generate 3 artifacts (.mp4 clips) in the output directory (default: ~/.vlm/cache/artifacts/)
+# This should generate 3 artifacts (.mp4 clips) in the output directory (default: ~/.vlmrun/cache/artifacts/)
 vlmrun chat "Find the top 3 most interesting moments and create clips" -i sports.mp4
 
 # Transcription
@@ -155,7 +155,7 @@ vlmrun chat "Analyze this document and classify each page type" -i multi_page.pd
 | Variable | Description |
 |----------|-------------|
 | `VLMRUN_API_KEY` | Your VLM Run API key (required) |
-| `VLMRUN_CACHE_DIR` | Custom cache directory (default: `~/.vlm/cache/artifacts`) |
+| `VLMRUN_CACHE_DIR` | Custom cache directory (default: `~/.vlmrun/cache/artifacts`) |
 
 ## How It Works
 

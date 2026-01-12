@@ -244,7 +244,7 @@ class TestChatCommand:
         assert result.exit_code == 1
         assert "Unsupported file type" in result.stdout
 
-    @patch("vlmrun.cli._cli.chat.upload_files_concurrent")
+    @patch("vlmrun.cli._cli.chat.upload_files")
     def test_chat_with_file_json_output(
         self,
         mock_upload,

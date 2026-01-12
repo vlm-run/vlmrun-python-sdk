@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 import typer
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -22,10 +23,77 @@ from rich.tree import Tree
 from vlmrun.client import VLMRun
 from vlmrun.client.types import FileResponse
 from vlmrun.constants import (
-    VLMRUN_ARTIFACT_CACHE_DIR,
+    DEFAULT_BASE_URL,
     SUPPORTED_INPUT_FILETYPES,
-    DEFAULT_AGENT_BASE_URL,
+    VLMRUN_ARTIFACTS_CACHE_DIR,
 )
+
+console = Console()
+
+
+class handle_api_errors:
+    """Context manager to gracefully handle OpenAI API errors with user-friendly messages."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            return False
+
+        if issubclass(exc_type, AuthenticationError):
+            console.print(
+                Panel(
+                    f"{exc_val}\n\nPlease check your API key with: [cyan]vlmrun config show[/cyan]",
+                    title="[red]Authentication Error[/red]",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+        elif issubclass(exc_type, RateLimitError):
+            console.print(
+                Panel(
+                    f"{exc_val}\n\nYou've exceeded your rate limit. Please try again later.",
+                    title="[red]Rate Limit Error[/red]",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+        elif issubclass(exc_type, APIConnectionError):
+            console.print(
+                Panel(
+                    f"{exc_val}\n\nFailed to connect to the API. Please check your internet connection.",
+                    title="[red]Connection Error[/red]",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+        elif issubclass(exc_type, APIError):
+            console.print(
+                Panel(
+                    str(exc_val),
+                    title="[red]API Error[/red]",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+        elif issubclass(exc_type, Exception):
+            console.print(
+                Panel(
+                    str(exc_val),
+                    title="[red]Unexpected Error[/red]",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+
+        return False
+
 
 CHAT_HELP = """Process images, videos, and documents with natural language.
 
@@ -60,8 +128,6 @@ app = typer.Typer(
     help=CHAT_HELP,
     no_args_is_help=True,
 )
-
-console = Console()
 
 # Available models
 AVAILABLE_MODELS = [
@@ -163,7 +229,7 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f}GB"
 
 
-def upload_files_concurrent(
+def upload_files(
     client: VLMRun, files: List[Path], show_progress: bool = True
 ) -> List[FileResponse]:
     """Upload files concurrently and return their file responses."""
@@ -376,7 +442,7 @@ def print_rich_output(
             Markdown(content),
             title="[bold]Response[/bold]",
             title_align="left",
-            subtitle=f"[dim]{subtitle}[/dim]",
+            subtitle=f"[dim][white]{subtitle}[/white][/dim]",
             subtitle_align="right",
             border_style="blue",
             padding=(1, 2),
@@ -412,10 +478,10 @@ def chat(
         None,
         "--output",
         "-o",
-        help="Artifact output directory. [default: ~/.vlm/cache/artifacts/<id>]",
+        help="Artifact output directory. [default: ~/.vlmrun/cache/artifacts/<id>]",
     ),
     base_url: Optional[str] = typer.Option(
-        os.getenv("VLMRUN_AGENT_BASE_URL", DEFAULT_AGENT_BASE_URL),
+        os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL),
         "--base-url",
         help="VLM Run Agent API base URL.",
     ),
@@ -447,8 +513,6 @@ def chat(
     """Process images, videos, and documents with natural language."""
     # Get client from context
     client: VLMRun = ctx.obj
-    client.base_url = base_url
-
     if client is None:
         console.print("[red]Error:[/] Client not initialized. Check your API key.")
         raise typer.Exit(1)
@@ -493,7 +557,7 @@ def chat(
         # Upload input files concurrently if provided
         file_responses: List[FileResponse] = []
         if input_files:
-            file_responses = upload_files_concurrent(
+            file_responses = upload_files(
                 client, input_files, show_progress=not output_json
             )
 
@@ -527,10 +591,13 @@ def chat(
         if no_stream:
             # Non-streaming mode
             if not output_json:
-                with TimedStatus(
-                    f"Processing ([bold]{model}[/bold])...",
-                    console=console,
-                    spinner="dots",
+                with (
+                    TimedStatus(
+                        f"Processing ([bold]{model}[/bold])...",
+                        console=console,
+                        spinner="dots",
+                    ),
+                    handle_api_errors(),
                 ):
                     response = client.agent.completions.create(
                         model=model,
@@ -539,11 +606,12 @@ def chat(
                     )
             else:
                 # JSON output: no status messages, just make the API call
-                response = client.agent.completions.create(
-                    model=model,
-                    messages=messages,
-                    stream=False,
-                )
+                with handle_api_errors():
+                    response = client.agent.completions.create(
+                        model=model,
+                        messages=messages,
+                        stream=False,
+                    )
 
             latency_s = time.time() - start_time
             response_content = response.choices[0].message.content or ""
@@ -582,8 +650,13 @@ def chat(
 
         else:
             # Streaming mode
-            with TimedStatus(
-                f"Processing ([bold]{model}[/bold])...", console=console, spinner="dots"
+            with (
+                TimedStatus(
+                    f"Processing ([bold]{model}[/bold])...",
+                    console=console,
+                    spinner="dots",
+                ),
+                handle_api_errors(),
             ):
                 stream = client.agent.completions.create(
                     model=model,
@@ -646,9 +719,9 @@ def chat(
                 # Use response_id as session_id if available
                 if not response_id:
                     console.print(
-                        "[yellow]Warning:[/] No session_id available, artifacts may not download correctly"
+                        "[yellow]Warning:[/] No session_id available, artifacts download skipped"
                     )
-                    session_id = "unknown"
+                    return
                 else:
                     session_id = response_id
 
@@ -656,7 +729,7 @@ def chat(
                 if output_dir:
                     artifact_dir = output_dir
                 else:
-                    artifact_dir = VLMRUN_ARTIFACT_CACHE_DIR / session_id
+                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / session_id
                 artifact_dir.mkdir(parents=True, exist_ok=True)
 
                 downloaded_files = []

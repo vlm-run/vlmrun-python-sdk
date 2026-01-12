@@ -1,12 +1,13 @@
 """Logging configuration for VLMRun SDK."""
 
 import os
+import sys
 from loguru import logger
 
 # Configure logger with WARNING level by default
 logger.remove()  # Remove default handler
 logger.add(
-    lambda msg: print(msg, end=""),
+    sys.stderr,
     level=os.getenv("VLMRUN_LOGGING_LEVEL", "WARNING"),
 )
 
