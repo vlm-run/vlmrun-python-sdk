@@ -306,8 +306,8 @@ class TestModels:
 
 # Integration Tests - Only run when environment is configured
 @pytest.mark.skipif(
-    not os.getenv("VLMRUN_API_KEY") or not os.getenv("VLMRUN_BASE_URL"),
-    reason="No VLMRUN_API_KEY and VLMRUN_BASE_URL in environment",
+    not os.getenv("VLMRUN_API_KEY") or not os.getenv("VLMRUN_AGENT_BASE_URL"),
+    reason="No VLMRUN_API_KEY and VLMRUN_AGENT_BASE_URL in environment",
 )
 class TestChatIntegration:
     """Integration tests for chat command that require a real API key."""
@@ -328,12 +328,22 @@ class TestChatIntegration:
     def test_chat_json_output(self, real_runner):
         """Test chat with JSON output."""
         result = real_runner.invoke(app, ["chat", "Say hello", "--json", "--no-stream"])
-        assert result.exit_code == 0
-        # Parse JSON output
-        output = json.loads(result.stdout)
-        assert "content" in output
-        assert "latency_ms" in output
-        assert isinstance(output["latency_ms"], (int, float))
+        assert result.exit_code == 0, f"Command failed with: {result.stdout}"
+
+        # Parse JSON output - should be pure JSON with no extra output
+        try:
+            output = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            raise AssertionError(
+                f"Failed to parse JSON output. Error: {e}\n"
+                f"Output was: {result.stdout!r}"
+            )
+
+        assert "content" in output, f"Missing 'content' in output: {output.keys()}"
+        assert "latency_s" in output, f"Missing 'latency_s' in output: {output.keys()}"
+        assert isinstance(
+            output["latency_s"], (int, float)
+        ), f"latency_s should be numeric, got {type(output['latency_s'])}"
 
     def test_chat_streaming_mode(self, real_runner):
         """Test chat with default streaming mode."""

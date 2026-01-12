@@ -19,6 +19,7 @@ from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.config import app as config_app, get_config
 from vlmrun.cli._cli.chat import chat as chat_command
+from vlmrun.cli._cli.models import app as models_app
 from vlmrun.constants import DEFAULT_BASE_URL
 
 app = typer.Typer(
@@ -128,8 +129,8 @@ app.add_typer(generate_app, name="generate")
 app.add_typer(predictions_app, name="predictions")
 app.add_typer(hub_app, name="hub")
 app.add_typer(config_app, name="config")
+app.add_typer(models_app, name="models")
 # app.add_typer(fine_tuning_app, name="fine-tuning")
-# app.add_typer(models_app, name="models")
 # app.add_typer(dataset_app, name="datasets")
 
 if __name__ == "__main__":

@@ -210,15 +210,13 @@ def build_messages(
     prompt: str, file_responses: Optional[List[FileResponse]] = None
 ) -> List[Dict[str, Any]]:
     """Build OpenAI-style messages with optional file attachments."""
-    # Add text prompt
-    content = [{"type": "text", "text": prompt}]
-    # Add files using file IDs
-    content.extend(
-        [
-            {"type": "input_file", "file_id": file_response.id}
-            for file_response in file_responses or []
-        ]
-    )
+    # Add files first using file IDs
+    content = [
+        {"type": "input_file", "file_id": file_response.id}
+        for file_response in file_responses or []
+    ]
+    # Add text prompt after files
+    content.append({"type": "text", "text": prompt})
     return [{"role": "user", "content": content}]
 
 
@@ -539,7 +537,7 @@ def chat(
                         stream=False,
                     )
             else:
-                console.print(f"Processing ([bold]{model}[/bold])...")
+                # JSON output: no status messages, just make the API call
                 response = client.agent.completions.create(
                     model=model,
                     messages=messages,
@@ -577,7 +575,7 @@ def chat(
                     "latency_s": latency_s,
                     "usage": usage_data,
                 }
-                console.print_json(json.dumps(output, indent=2, default=str))
+                print(json.dumps(output, indent=2, default=str))
             else:
                 print_rich_output(response_content, model, latency_s, usage_data)
 
@@ -636,7 +634,7 @@ def chat(
                 }
                 if stream_usage_data:
                     output["usage"] = stream_usage_data
-                console.print_json(json.dumps(output, indent=2, default=str))
+                print(json.dumps(output, indent=2, default=str))
             else:
                 print_rich_output(response_content, model, latency_s, stream_usage_data)
 
