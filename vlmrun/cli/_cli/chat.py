@@ -725,20 +725,20 @@ def chat(
         if not no_download:
             artifact_refs = extract_artifact_refs(response_content)
             if artifact_refs:
-                # Use response_id as artifact_session_id if available
+                # Use response_id as _session_id if available
                 if not response_id:
                     console.print(
                         "[yellow]Warning:[/] No session_id available, artifacts download skipped"
                     )
                     return
                 else:
-                    artifact_session_id = response_id
+                    _session_id = response_id
 
                 # Set up output directory
                 if output_dir:
                     artifact_dir = output_dir
                 else:
-                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / artifact_session_id
+                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / _session_id
                 artifact_dir.mkdir(parents=True, exist_ok=True)
 
                 downloaded_files = []
@@ -752,7 +752,7 @@ def chat(
                             try:
                                 output_path = download_artifact(
                                     client,
-                                    artifact_session_id,
+                                    _session_id,
                                     ref_id,
                                     artifact_dir,
                                 )
@@ -767,7 +767,7 @@ def chat(
                         try:
                             output_path = download_artifact(
                                 client,
-                                artifact_session_id,
+                                _session_id,
                                 ref_id,
                                 artifact_dir,
                             )

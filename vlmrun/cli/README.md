@@ -73,6 +73,7 @@ vlmrun chat "Quick description" -i photo.jpg -nd
 | `--json` | `-j` | Output raw JSON response (default: text) |
 | `--no-stream` | `-ns` | Do not stream the response in real-time (default: stream) |
 | `--no-download` | `-nd` | Skip artifact download (default: download artifacts) |
+| `--session-id` | `-s` | Session UUID for stateful conversations (persists chat history) |
 
 **Models:**
 
@@ -148,6 +149,33 @@ vlmrun chat "Summarize the key terms and obligations" -i contract.pdf
 
 # Multi-page analysis
 vlmrun chat "Analyze this document and classify each page type" -i multi_page.pdf
+```
+
+### Stateful Conversations
+
+Use the `--session-id` flag to continue a previous conversation with persistent context. This enables multi-turn interactions where the AI remembers previous messages.
+
+```bash
+# Start a conversation with a session ID
+vlmrun chat "What objects do you see in this image?" -i photo.jpg --session-id my-session-123
+
+# Continue the same conversation (AI remembers the previous context)
+vlmrun chat "Can you describe the largest object in more detail?" --session-id my-session-123
+
+# Ask follow-up questions without re-uploading the image
+vlmrun chat "What colors are present?" --session-id my-session-123
+```
+
+You can use any unique string as a session ID, or generate a UUID for guaranteed uniqueness:
+
+```bash
+# Generate a UUID for the session
+SESSION_ID=$(uuidgen)
+
+# Use it across multiple commands
+vlmrun chat "Analyze this document" -i report.pdf --session-id $SESSION_ID
+vlmrun chat "What are the key findings?" --session-id $SESSION_ID
+vlmrun chat "Summarize in 3 bullet points" --session-id $SESSION_ID
 ```
 
 ## Environment Variables
