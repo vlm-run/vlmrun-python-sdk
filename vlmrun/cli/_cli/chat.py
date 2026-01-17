@@ -416,6 +416,7 @@ def print_rich_output(
     usage: Optional[Dict[str, Any]] = None,
     artifacts: Optional[List[Dict[str, str]]] = None,
     artifact_dir: Optional[Path] = None,
+    session_id: Optional[str] = None,
 ) -> None:
     """Print rich-formatted output with panels."""
     # Build subtitle with stats
@@ -436,11 +437,17 @@ def print_rich_output(
     stats.append(f"{format_time(latency_s)}")
     subtitle = " · ".join(stats)
 
+    # Build title with optional session_id
+    if session_id:
+        title = f"[bold]Response[/bold] [dim](id={session_id})[/dim]"
+    else:
+        title = "[bold]Response[/bold]"
+
     # Main response panel
     console.print(
         Panel(
             Markdown(content),
-            title="[bold]Response[/bold]",
+            title=title,
             title_align="left",
             subtitle=f"[dim][white]{subtitle}[/white][/dim]",
             subtitle_align="right",
@@ -654,7 +661,13 @@ def chat(
                 }
                 print(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(response_content, model, latency_s, usage_data)
+                print_rich_output(
+                    response_content,
+                    model,
+                    latency_s,
+                    usage_data,
+                    session_id=response_id,
+                )
 
         else:
             # Streaming mode
@@ -719,7 +732,13 @@ def chat(
                     output["usage"] = stream_usage_data
                 print(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(response_content, model, latency_s, stream_usage_data)
+                print_rich_output(
+                    response_content,
+                    model,
+                    latency_s,
+                    stream_usage_data,
+                    session_id=response_id,
+                )
 
         # Extract and download artifacts if present
         if not no_download:

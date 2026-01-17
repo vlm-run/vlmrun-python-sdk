@@ -157,13 +157,13 @@ Use the `--session-id` flag to continue a previous conversation with persistent 
 
 ```bash
 # Start a conversation with a session ID
-vlmrun chat "What objects do you see in this image?" -i photo.jpg --session-id my-session-123
+vlmrun chat "What objects do you see in this image?" -i photo.jpg --session-id <session-uuid>
 
 # Continue the same conversation (AI remembers the previous context)
-vlmrun chat "Can you describe the largest object in more detail?" --session-id my-session-123
+vlmrun chat "Can you describe the largest object in more detail?" --session-id <session-uuid>
 
 # Ask follow-up questions without re-uploading the image
-vlmrun chat "What colors are present?" --session-id my-session-123
+vlmrun chat "What colors are present?" --session-id <session-uuid>
 ```
 
 You can use any unique string as a session ID, or generate a UUID for guaranteed uniqueness:
