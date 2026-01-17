@@ -509,6 +509,12 @@ def chat(
         "-nd",
         help="Skip artifact download.",
     ),
+    session_id: Optional[str] = typer.Option(
+        None,
+        "--session-id",
+        "-s",
+        help="Session UUID for persisting chat history (stateful conversations).",
+    ),
 ) -> None:
     """Process images, videos, and documents with natural language."""
     # Get client from context
@@ -603,6 +609,7 @@ def chat(
                         model=model,
                         messages=messages,
                         stream=False,
+                        session_id=session_id,
                     )
             else:
                 # JSON output: no status messages, just make the API call
@@ -611,6 +618,7 @@ def chat(
                         model=model,
                         messages=messages,
                         stream=False,
+                        session_id=session_id,
                     )
 
             latency_s = time.time() - start_time
@@ -662,6 +670,7 @@ def chat(
                     model=model,
                     messages=messages,
                     stream=True,
+                    session_id=session_id,
                 )
 
                 # Collect streaming content and usage data
@@ -716,20 +725,20 @@ def chat(
         if not no_download:
             artifact_refs = extract_artifact_refs(response_content)
             if artifact_refs:
-                # Use response_id as session_id if available
+                # Use response_id as artifact_session_id if available
                 if not response_id:
                     console.print(
                         "[yellow]Warning:[/] No session_id available, artifacts download skipped"
                     )
                     return
                 else:
-                    session_id = response_id
+                    artifact_session_id = response_id
 
                 # Set up output directory
                 if output_dir:
                     artifact_dir = output_dir
                 else:
-                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / session_id
+                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / artifact_session_id
                 artifact_dir.mkdir(parents=True, exist_ok=True)
 
                 downloaded_files = []
@@ -743,7 +752,7 @@ def chat(
                             try:
                                 output_path = download_artifact(
                                     client,
-                                    session_id,
+                                    artifact_session_id,
                                     ref_id,
                                     artifact_dir,
                                 )
@@ -758,7 +767,7 @@ def chat(
                         try:
                             output_path = download_artifact(
                                 client,
-                                session_id,
+                                artifact_session_id,
                                 ref_id,
                                 artifact_dir,
                             )

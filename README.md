@@ -34,7 +34,7 @@ The package provides optional features that can be installed based on your needs
   ```bash
   pip install "vlmrun[cli]"
   ```
-  
+
 - Video processing features (numpy, opencv-python):
   ```bash
   pip install "vlmrun[video]"
