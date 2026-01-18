@@ -71,6 +71,24 @@ class PredictionResponse(BaseModel):
     domain: Optional[str] = None
 
 
+StreamEventType = Literal["status", "heartbeat", "result", "error"]
+
+
+class StreamEvent(BaseModel):
+    """Server-Sent Event for streaming status updates during long-running requests."""
+
+    type: StreamEventType = Field(..., description="Type of the stream event: 'status' for status updates, 'heartbeat' for keep-alive, 'result' for final response, 'error' for errors.")
+    id: str = Field(..., description="Request ID associated with this event.")
+    status: JobStatus = Field(..., description="Current status of the request.")
+    message: Optional[str] = Field(None, description="Human-readable status message.")
+    elapsed_seconds: Optional[float] = Field(None, description="Time elapsed since request started in seconds.")
+    response: Optional[Any] = Field(None, description="The response data (only present in 'result' events).")
+    usage: Optional[CreditUsage] = Field(None, description="Usage metrics (only present in 'result' events).")
+    domain: Optional[str] = Field(None, description="The domain of the prediction.")
+    created_at: Optional[datetime] = Field(None, description="When the request was created.")
+    completed_at: Optional[datetime] = Field(None, description="When the request completed (only present in 'result' events).")
+
+
 class ModelInfo(BaseModel):
     model: str
     domain: str

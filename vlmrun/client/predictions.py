@@ -3,7 +3,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Generator, List, Optional, Union
 from PIL import Image
 from vlmrun.common.logging import logger
 
@@ -18,6 +18,7 @@ from vlmrun.client.types import (
     RequestMetadata,
     SchemaResponse,
     MarkdownDocument,
+    StreamEvent,
 )
 from typing import Type
 from pydantic import BaseModel
@@ -482,6 +483,85 @@ def FilePredictions(route: str):
             elif autocast:
                 self._cast_response_to_schema(prediction, domain, config)
             return prediction
+
+        def generate_stream(
+            self,
+            file: Optional[Union[Path, str]] = None,
+            url: Optional[str] = None,
+            model: str = "vlm-1",
+            domain: Optional[str] = None,
+            config: Optional[GenerationConfig] = GenerationConfig(),
+            metadata: Optional[RequestMetadata] = RequestMetadata(),
+        ) -> Generator[StreamEvent, None, None]:
+            """Generate a document prediction with streaming status updates.
+
+            This method returns a generator that yields StreamEvent objects as the
+            prediction progresses. Events include:
+            - 'status': Initial status when processing starts
+            - 'heartbeat': Periodic keep-alive events during processing
+            - 'result': Final response with the prediction result
+            - 'error': Error event if processing fails
+
+            Args:
+                model: Model to use for prediction
+                file: File (pathlib.Path) or file_id to generate prediction from
+                url: URL to generate prediction from
+                domain: Domain to use for prediction
+                config: GenerateConfig to use for prediction
+                metadata: Metadata to include in prediction
+
+            Yields:
+                StreamEvent: Stream events with status updates and final result
+
+            Example:
+                ```python
+                for event in client.document.generate_stream(
+                    file="path/to/document.pdf",
+                    domain="document.invoice"
+                ):
+                    if event.type == "heartbeat":
+                        print(f"Processing... ({event.elapsed_seconds}s)")
+                    elif event.type == "result":
+                        print(f"Completed: {event.response}")
+                    elif event.type == "error":
+                        print(f"Error: {event.message}")
+                ```
+            """
+            is_url, file_or_url = self._handle_file_or_url(file, url)
+
+            additional_kwargs = {}
+            if config:
+                additional_kwargs["config"] = config.model_dump()
+            if metadata:
+                additional_kwargs["metadata"] = metadata.model_dump()
+
+            response = self._requestor.request_stream(
+                method="POST",
+                url=f"{route}/generate",
+                data={
+                    "model": model,
+                    "url" if is_url else "file_id": file_or_url,
+                    "domain": domain,
+                    "batch": False,
+                    "stream": True,
+                    **additional_kwargs,
+                },
+            )
+
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("data: "):
+                    data = line_str[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        event_data = json.loads(data)
+                        yield StreamEvent(**event_data)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse stream event: {e}")
+                        continue
 
         def execute(
             self,

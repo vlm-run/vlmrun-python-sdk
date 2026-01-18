@@ -273,3 +273,138 @@ class APIRequestor:
             raise APIError(
                 f"Request failed after {self._max_retries} retries: {str(last_exception)}"
             ) from last_exception
+
+    def request_stream(
+        self,
+        method: str,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Optional[float] = None,
+    ) -> requests.Response:
+        """Make a streaming API request.
+
+        This method returns a Response object that can be iterated over to
+        receive Server-Sent Events (SSE) as they arrive. The connection is
+        kept open until the stream is complete.
+
+        Args:
+            method: HTTP method
+            url: API endpoint
+            params: Query parameters
+            data: Request body
+            headers: Request headers
+            timeout: Request timeout in seconds (default: 600 for streaming)
+
+        Returns:
+            requests.Response: Response object for streaming iteration
+
+        Raises:
+            AuthenticationError: If authentication fails
+            ValidationError: If request validation fails
+            RateLimitError: If rate limit is exceeded
+            ResourceNotFoundError: If resource is not found
+            ServerError: If server returns 5xx error
+            APIError: For other API errors
+            RequestTimeoutError: If request times out
+            NetworkError: If a network error occurs
+        """
+        _headers = {} if headers is None else headers.copy()
+
+        if self._client.api_key:
+            _headers["Authorization"] = f"Bearer {self._client.api_key}"
+
+        if "X-Client-Id" not in _headers:
+            _headers["X-Client-Id"] = f"python-sdk-{__version__}"
+
+        _headers["Accept"] = "text/event-stream"
+
+        full_url = urljoin(self._base_url.rstrip("/") + "/", url.lstrip("/"))
+
+        try:
+            response = self._session.request(
+                method=method,
+                url=full_url,
+                params=params,
+                json=data,
+                headers=_headers,
+                timeout=timeout or 600,
+                stream=True,
+            )
+
+            response.raise_for_status()
+            return response
+
+        except requests.exceptions.RequestException as e:
+            if isinstance(e, requests.exceptions.HTTPError):
+                try:
+                    error_data = e.response.json()
+                    error_obj = error_data.get("error", {})
+                    message = error_obj.get("message")
+                    if message is None:
+                        message = error_data.get("detail", str(e))
+                    error_type = error_obj.get("type")
+                    request_id = error_obj.get("id")
+                except Exception:
+                    message = str(e)
+                    error_type = None
+                    request_id = None
+
+                status_code = e.response.status_code
+                headers = dict(e.response.headers)
+
+                if status_code == 401:
+                    raise AuthenticationError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif status_code == 400:
+                    raise ValidationError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif status_code == 404:
+                    raise ResourceNotFoundError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif status_code == 429:
+                    raise RateLimitError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                elif 500 <= status_code < 600:
+                    raise ServerError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+                else:
+                    raise APIError(
+                        message=message,
+                        http_status=status_code,
+                        headers=headers,
+                        request_id=request_id,
+                        error_type=error_type,
+                    ) from e
+            elif isinstance(e, requests.exceptions.Timeout):
+                raise RequestTimeoutError(f"Request timed out: {str(e)}") from e
+            elif isinstance(e, requests.exceptions.ConnectionError):
+                raise NetworkError(f"Connection error: {str(e)}") from e
+            else:
+                raise APIError(str(e)) from e
