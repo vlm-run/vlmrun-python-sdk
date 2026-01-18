@@ -416,6 +416,7 @@ def print_rich_output(
     usage: Optional[Dict[str, Any]] = None,
     artifacts: Optional[List[Dict[str, str]]] = None,
     artifact_dir: Optional[Path] = None,
+    session_id: Optional[str] = None,
 ) -> None:
     """Print rich-formatted output with panels."""
     # Build subtitle with stats
@@ -436,11 +437,17 @@ def print_rich_output(
     stats.append(f"{format_time(latency_s)}")
     subtitle = " · ".join(stats)
 
+    # Build title with optional session_id
+    if session_id:
+        title = f"[bold]Response[/bold] [dim](id={session_id})[/dim]"
+    else:
+        title = "[bold]Response[/bold]"
+
     # Main response panel
     console.print(
         Panel(
             Markdown(content),
-            title="[bold]Response[/bold]",
+            title=title,
             title_align="left",
             subtitle=f"[dim][white]{subtitle}[/white][/dim]",
             subtitle_align="right",
@@ -508,6 +515,12 @@ def chat(
         "--no-download",
         "-nd",
         help="Skip artifact download.",
+    ),
+    session_id: Optional[str] = typer.Option(
+        None,
+        "--session-id",
+        "-s",
+        help="Session UUID for persisting chat history (stateful conversations).",
     ),
 ) -> None:
     """Process images, videos, and documents with natural language."""
@@ -603,6 +616,7 @@ def chat(
                         model=model,
                         messages=messages,
                         stream=False,
+                        session_id=session_id,
                     )
             else:
                 # JSON output: no status messages, just make the API call
@@ -611,6 +625,7 @@ def chat(
                         model=model,
                         messages=messages,
                         stream=False,
+                        session_id=session_id,
                     )
 
             latency_s = time.time() - start_time
@@ -646,7 +661,13 @@ def chat(
                 }
                 print(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(response_content, model, latency_s, usage_data)
+                print_rich_output(
+                    response_content,
+                    model,
+                    latency_s,
+                    usage_data,
+                    session_id=response_id,
+                )
 
         else:
             # Streaming mode
@@ -662,6 +683,7 @@ def chat(
                     model=model,
                     messages=messages,
                     stream=True,
+                    session_id=session_id,
                 )
 
                 # Collect streaming content and usage data
@@ -710,26 +732,32 @@ def chat(
                     output["usage"] = stream_usage_data
                 print(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(response_content, model, latency_s, stream_usage_data)
+                print_rich_output(
+                    response_content,
+                    model,
+                    latency_s,
+                    stream_usage_data,
+                    session_id=response_id,
+                )
 
         # Extract and download artifacts if present
         if not no_download:
             artifact_refs = extract_artifact_refs(response_content)
             if artifact_refs:
-                # Use response_id as session_id if available
+                # Use response_id as _session_id if available
                 if not response_id:
                     console.print(
                         "[yellow]Warning:[/] No session_id available, artifacts download skipped"
                     )
                     return
                 else:
-                    session_id = response_id
+                    _session_id = response_id
 
                 # Set up output directory
                 if output_dir:
                     artifact_dir = output_dir
                 else:
-                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / session_id
+                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / _session_id
                 artifact_dir.mkdir(parents=True, exist_ok=True)
 
                 downloaded_files = []
@@ -743,7 +771,7 @@ def chat(
                             try:
                                 output_path = download_artifact(
                                     client,
-                                    session_id,
+                                    _session_id,
                                     ref_id,
                                     artifact_dir,
                                 )
@@ -758,7 +786,7 @@ def chat(
                         try:
                             output_path = download_artifact(
                                 client,
-                                session_id,
+                                _session_id,
                                 ref_id,
                                 artifact_dir,
                             )
