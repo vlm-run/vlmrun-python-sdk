@@ -246,10 +246,8 @@ class TestChatCommand:
         assert result.exit_code == 1
         assert "Unsupported file type" in result.stdout
 
-    @patch("vlmrun.client.chat._upload_files")
     def test_chat_with_file_json_output(
         self,
-        mock_upload,
         runner,
         config_file,
         mock_client,
@@ -257,9 +255,13 @@ class TestChatCommand:
         tmp_path,
     ):
         """Test chat with file and JSON output."""
+        import sys
+
+        # Get the actual chat module (not the function)
+        chat_module = sys.modules["vlmrun.client.chat"]
 
         # Setup mocks - return FileResponse
-        mock_upload.return_value = [
+        mock_file_response = [
             FileResponse(
                 id="file-123",
                 filename="test.jpg",
@@ -276,7 +278,10 @@ class TestChatCommand:
         test_file = tmp_path / "test.jpg"
         test_file.write_bytes(b"fake image data")
 
-        with patch.object(mock_client, "openai", mock_client.openai):
+        with (
+            patch.object(chat_module, "_upload_files", return_value=mock_file_response),
+            patch.object(mock_client, "openai", mock_client.openai),
+        ):
             _result = runner.invoke(
                 app,
                 [
