@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 import typer
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
@@ -21,7 +19,15 @@ from rich.status import Status
 from rich.tree import Tree
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import FileResponse
+from vlmrun.client.chat import (
+    AVAILABLE_MODELS,
+    DEFAULT_MODEL,
+    ChatError,
+    ChatResponse,
+    chat as chat_core,
+    chat_stream as chat_stream_core,
+    extract_artifact_refs,
+)
 from vlmrun.constants import (
     DEFAULT_BASE_URL,
     SUPPORTED_INPUT_FILETYPES,
@@ -81,6 +87,16 @@ class handle_api_errors:
                 )
             )
             raise typer.Exit(1)
+        elif issubclass(exc_type, ChatError):
+            console.print(
+                Panel(
+                    str(exc_val),
+                    title="[red]Chat Error[/red]",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
         elif issubclass(exc_type, Exception):
             console.print(
                 Panel(
@@ -128,15 +144,6 @@ app = typer.Typer(
     help=CHAT_HELP,
     no_args_is_help=True,
 )
-
-# Available models
-AVAILABLE_MODELS = [
-    "vlmrun-orion-1:fast",
-    "vlmrun-orion-1:auto",
-    "vlmrun-orion-1:pro",
-]
-
-DEFAULT_MODEL = "vlmrun-orion-1:auto"
 
 
 def read_prompt_from_stdin() -> Optional[str]:
@@ -229,87 +236,16 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f}GB"
 
 
-def upload_files(
-    client: VLMRun, files: List[Path], show_progress: bool = True
-) -> List[FileResponse]:
-    """Upload files concurrently and return their file responses."""
-    file_responses: List[FileResponse] = []
-
-    if not show_progress:
-        # JSON output: upload without progress display
-        with ThreadPoolExecutor(max_workers=min(len(files), 4)) as executor:
-            futures = {
-                executor.submit(client.files.upload, file=f, purpose="assistants"): f
-                for f in files
-            }
-            for future in as_completed(futures):
-                file_path = futures[future]
-                try:
-                    file_response = future.result()
-                    file_responses.append(file_response)
-                except Exception as e:
-                    console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
-                    raise typer.Exit(1) from e
-    else:
-        # Rich output - upload with status spinner
-        with Status("Uploading...", console=console, spinner="dots") as status:
-            with ThreadPoolExecutor(max_workers=min(len(files), 4)) as executor:
-                futures = {
-                    executor.submit(
-                        client.files.upload, file=f, purpose="assistants"
-                    ): f
-                    for f in files
-                }
-                for future in as_completed(futures):
-                    file_path = futures[future]
-                    try:
-                        file_response = future.result()
-                        file_responses.append(file_response)
-                        status.update(f"Uploading {file_path.name}...")
-                    except Exception as e:
-                        console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
-                        raise typer.Exit(1) from e
-
-    return file_responses
-
-
 def build_messages(
-    prompt: str, file_responses: Optional[List[FileResponse]] = None
+    prompt: str, file_responses: Optional[List[Any]] = None
 ) -> List[Dict[str, Any]]:
     """Build OpenAI-style messages with optional file attachments."""
-    # Add files first using file IDs
-    content = [
+    content: List[Dict[str, Any]] = [
         {"type": "input_file", "file_id": file_response.id}
         for file_response in file_responses or []
     ]
-    # Add text prompt after files
     content.append({"type": "text", "text": prompt})
     return [{"role": "user", "content": content}]
-
-
-def extract_artifact_refs(response_content: str) -> List[str]:
-    """Extract artifact reference IDs from response content.
-
-    Looks for patterns like img_XXXXXX, aud_XXXXXX, vid_XXXXXX, doc_XXXXXX,
-    recon_XXXXXX, arr_XXXXXX, url_XXXXXX in the response text.
-    """
-    # Reference patterns from vlmrun/types/refs.py
-    patterns = [
-        r"\bimg_\w{6}\b",  # ImageRef
-        r"\baud_\w{6}\b",  # AudioRef
-        r"\bvid_\w{6}\b",  # VideoRef
-        r"\bdoc_\w{6}\b",  # DocumentRef
-        r"\brecon_\w{6}\b",  # ReconRef
-        r"\barr_\w{6}\b",  # ArrayRef
-        r"\burl_\w{6}\b",  # UrlRef
-    ]
-
-    refs: Set[str] = set()
-    for pattern in patterns:
-        matches = re.findall(pattern, response_content)
-        refs.update(matches)
-
-    return sorted(list(refs))
 
 
 def download_artifact(
@@ -371,10 +307,10 @@ class TimedStatus:
         self.base_message = message
         self.console = console
         self.spinner = spinner
-        self.start_time = None
-        self.status = None
+        self.start_time: Optional[float] = None
+        self.status: Optional[Status] = None
         self._stop_event = threading.Event()
-        self._timer_thread = None
+        self._timer_thread: Optional[threading.Thread] = None
 
     def __enter__(self):
         self.start_time = time.time()
@@ -410,43 +346,39 @@ class TimedStatus:
 
 
 def print_rich_output(
-    content: str,
-    model: str,
-    latency_s: float,
-    usage: Optional[Dict[str, Any]] = None,
+    response: ChatResponse,
     artifacts: Optional[List[Dict[str, str]]] = None,
     artifact_dir: Optional[Path] = None,
-    session_id: Optional[str] = None,
 ) -> None:
     """Print rich-formatted output with panels."""
     # Build subtitle with stats
-    stats = [model]
-    if usage:
-        prompt_tokens = usage.get("prompt_tokens", 0)
-        completion_tokens = usage.get("completion_tokens", 0)
-        total_tokens = usage.get("total_tokens", 0)
+    stats = [response.model]
+    if response.usage:
+        prompt_tokens = response.usage.get("prompt_tokens", 0)
+        completion_tokens = response.usage.get("completion_tokens", 0)
+        total_tokens = response.usage.get("total_tokens", 0)
         if total_tokens and False:  # TODO: Add back in when usage is implemented
             stats.append(
                 f"P:{prompt_tokens} / C:{completion_tokens} / T:{total_tokens} tokens"
             )
         # Add credits if available
-        credits = usage.get("credits_used")
+        credits = response.usage.get("credits_used")
         if credits is not None:
             stats.append(f"{credits} credit(s)")
 
-    stats.append(f"{format_time(latency_s)}")
+    stats.append(f"{format_time(response.latency_s)}")
     subtitle = " · ".join(stats)
 
     # Build title with optional session_id
-    if session_id:
-        title = f"[bold]Response[/bold] [dim](id={session_id})[/dim]"
+    if response.session_id:
+        title = f"[bold]Response[/bold] [dim](id={response.session_id})[/dim]"
     else:
         title = "[bold]Response[/bold]"
 
     # Main response panel
     console.print(
         Panel(
-            Markdown(content),
+            Markdown(response.content),
             title=title,
             title_align="left",
             subtitle=f"[dim][white]{subtitle}[/white][/dim]",
@@ -458,6 +390,92 @@ def print_rich_output(
 
     if artifacts and artifact_dir:
         console.print(f"  [dim]Artifacts:[/dim] {artifact_dir}")
+
+
+def _handle_artifact_download(
+    client: VLMRun,
+    response: ChatResponse,
+    output_dir: Optional[Path],
+    output_json: bool,
+) -> Optional[List[Path]]:
+    """Handle artifact download from a chat response.
+
+    Args:
+        client: VLMRun client instance
+        response: The chat response containing artifact refs
+        output_dir: Optional output directory for artifacts
+        output_json: Whether JSON output mode is enabled
+
+    Returns:
+        List of downloaded file paths, or None if no artifacts
+    """
+    artifact_refs = response.artifact_refs
+    if not artifact_refs:
+        return None
+
+    if not response.session_id:
+        console.print(
+            "[yellow]Warning:[/] No session_id available, artifacts download skipped"
+        )
+        return None
+
+    _session_id = response.session_id
+
+    # Set up output directory
+    if output_dir:
+        artifact_dir = output_dir
+    else:
+        artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / _session_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    downloaded_files: List[Path] = []
+
+    # Download artifacts with status spinner
+    if not output_json:
+        with Status("Downloading artifacts...", console=console, spinner="dots"):
+            for ref_id in artifact_refs:
+                try:
+                    output_path = download_artifact(
+                        client,
+                        _session_id,
+                        ref_id,
+                        artifact_dir,
+                    )
+                    downloaded_files.append(output_path)
+                except Exception as e:
+                    console.print(f"[red]Failed to download {ref_id}: {e}[/]")
+    else:
+        # JSON output mode - download without progress
+        for ref_id in artifact_refs:
+            try:
+                output_path = download_artifact(
+                    client,
+                    _session_id,
+                    ref_id,
+                    artifact_dir,
+                )
+                downloaded_files.append(output_path)
+            except Exception as e:
+                console.print(f"[red]Failed to download {ref_id}: {e}[/]")
+
+    if not output_json and downloaded_files:
+        # Create elegant tree view of artifacts
+        tree = Tree(f"{artifact_dir}", guide_style="dim")
+        for file_path in sorted(downloaded_files):
+            # Get file size
+            size_str = format_file_size(file_path.stat().st_size)
+            tree.add(f"{file_path.name} [dim]({size_str})[/dim]")
+
+        console.print(
+            Panel(
+                tree,
+                title=f"Downloaded {len(downloaded_files)} artifact(s)",
+                title_align="left",
+                border_style="dim",
+            )
+        )
+
+    return downloaded_files
 
 
 @app.command()
@@ -567,42 +585,24 @@ def chat(
                 raise typer.Exit(1)
 
     try:
-        # Upload input files concurrently if provided
-        file_responses: List[FileResponse] = []
-        if input_files:
-            file_responses = upload_files(
-                client, input_files, show_progress=not output_json
+        # Show file upload info for rich output
+        if input_files and not output_json:
+            # Create tree view of files to be uploaded
+            tree = Tree("", guide_style="dim", hide_root=True)
+            for file_path in input_files:
+                size_str = format_file_size(file_path.stat().st_size)
+                tree.add(f"{file_path.name} [dim]({size_str})[/dim]")
+            console.print(
+                Panel(
+                    tree,
+                    title=f"Uploading {len(input_files)} file(s)",
+                    title_align="left",
+                    border_style="dim",
+                )
             )
 
-            if not output_json:
-                # Create tree view of uploaded files
-                tree = Tree("", guide_style="dim", hide_root=True)
-                for file_path in input_files:
-                    size_str = format_file_size(file_path.stat().st_size)
-                    tree.add(f"{file_path.name} [dim]({size_str})[/dim]")
-                console.print(
-                    Panel(
-                        tree,
-                        title=f"Uploaded {len(file_responses)} file(s)",
-                        title_align="left",
-                        border_style="dim",
-                    )
-                )
-
-        # Build messages for the chat completion
-        messages = build_messages(
-            final_prompt, file_responses if file_responses else None
-        )
-
-        # Call the OpenAI-compatible chat completions API
-        response_content = ""
-        usage_data: Optional[Dict[str, Any]] = None
-        response_id: Optional[str] = None
-
-        start_time = time.time()
-
         if no_stream:
-            # Non-streaming mode
+            # Non-streaming mode - use the reusable chat function
             if not output_json:
                 with (
                     TimedStatus(
@@ -612,65 +612,39 @@ def chat(
                     ),
                     handle_api_errors(),
                 ):
-                    response = client.agent.completions.create(
+                    response = chat_core(
+                        client=client,
+                        prompt=final_prompt,
+                        inputs=input_files,
                         model=model,
-                        messages=messages,
-                        stream=False,
                         session_id=session_id,
                     )
             else:
-                # JSON output: no status messages, just make the API call
+                # JSON output: no status messages
                 with handle_api_errors():
-                    response = client.agent.completions.create(
+                    response = chat_core(
+                        client=client,
+                        prompt=final_prompt,
+                        inputs=input_files,
                         model=model,
-                        messages=messages,
-                        stream=False,
                         session_id=session_id,
                     )
-
-            latency_s = time.time() - start_time
-            response_content = response.choices[0].message.content or ""
-            response_id = response.session_id
-
-            if response.usage:
-                usage_data = {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                }
-                # Add credits if available (may be in custom fields)
-                if (
-                    hasattr(response.usage, "credits_used")
-                    and response.usage.credits_used is not None
-                ):
-                    usage_data["credits_used"] = response.usage.credits_used
-                elif (
-                    hasattr(response.usage, "credits")
-                    and response.usage.credits is not None
-                ):
-                    usage_data["credits_used"] = response.usage.credits
 
             if output_json:
                 output = {
                     "id": response.id,
                     "session_id": response.session_id,
                     "model": response.model,
-                    "content": response_content,
-                    "latency_s": latency_s,
-                    "usage": usage_data,
+                    "content": response.content,
+                    "latency_s": response.latency_s,
+                    "usage": response.usage,
                 }
                 print(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(
-                    response_content,
-                    model,
-                    latency_s,
-                    usage_data,
-                    session_id=response_id,
-                )
+                print_rich_output(response)
 
         else:
-            # Streaming mode
+            # Streaming mode - use the reusable chat_stream function
             with (
                 TimedStatus(
                     f"Processing ([bold]{model}[/bold])...",
@@ -679,138 +653,63 @@ def chat(
                 ),
                 handle_api_errors(),
             ):
-                stream = client.agent.completions.create(
+                stream = chat_stream_core(
+                    client=client,
+                    prompt=final_prompt,
+                    inputs=input_files,
                     model=model,
-                    messages=messages,
-                    stream=True,
                     session_id=session_id,
                 )
 
-                # Collect streaming content and usage data
-                chunks = []
-                stream_usage_data = None
+                # Collect streaming content
+                chunks: List[str] = []
+                response_session_id: Optional[str] = None
+                stream_usage_data: Optional[Dict[str, Any]] = None
+
+                start_time = time.time()
                 for chunk in stream:
-                    # Capture session_id from first chunk
-                    if not response_id and hasattr(chunk, "session_id"):
-                        response_id = chunk.session_id
-                    if (
-                        chunk.choices
-                        and chunk.choices[0].delta
-                        and chunk.choices[0].delta.content
-                    ):
-                        chunks.append(chunk.choices[0].delta.content)
-                    # Capture usage data from the final chunk
-                    if hasattr(chunk, "usage") and chunk.usage:
-                        stream_usage_data = {
-                            "prompt_tokens": chunk.usage.prompt_tokens,
-                            "completion_tokens": chunk.usage.completion_tokens,
-                            "total_tokens": chunk.usage.total_tokens,
-                        }
-                        # Add credits if available
-                        if (
-                            hasattr(chunk.usage, "credits_used")
-                            and chunk.usage.credits_used is not None
-                        ):
-                            stream_usage_data["credits_used"] = chunk.usage.credits_used
-                        elif (
-                            hasattr(chunk.usage, "credits")
-                            and chunk.usage.credits is not None
-                        ):
-                            stream_usage_data["credits_used"] = chunk.usage.credits
+                    if chunk.content:
+                        chunks.append(chunk.content)
+                    if chunk.session_id:
+                        response_session_id = chunk.session_id
+                    if chunk.usage:
+                        stream_usage_data = chunk.usage
 
-                response_content = "".join(chunks)
+                latency_s = time.time() - start_time
 
-            latency_s = time.time() - start_time
+            response_content = "".join(chunks)
+            artifact_refs = extract_artifact_refs(response_content)
+
+            # Create a ChatResponse for consistent handling
+            response = ChatResponse(
+                content=response_content,
+                session_id=response_session_id,
+                model=model,
+                latency_s=latency_s,
+                usage=stream_usage_data,
+                artifact_refs=artifact_refs,
+            )
 
             # Display the complete response
             if output_json:
                 output = {
-                    "content": response_content,
-                    "latency_s": latency_s,
+                    "content": response.content,
+                    "session_id": response.session_id,
+                    "latency_s": response.latency_s,
                 }
                 if stream_usage_data:
                     output["usage"] = stream_usage_data
                 print(json.dumps(output, indent=2, default=str))
             else:
-                print_rich_output(
-                    response_content,
-                    model,
-                    latency_s,
-                    stream_usage_data,
-                    session_id=response_id,
-                )
+                print_rich_output(response)
 
         # Extract and download artifacts if present
         if not no_download:
-            artifact_refs = extract_artifact_refs(response_content)
-            if artifact_refs:
-                # Use response_id as _session_id if available
-                if not response_id:
-                    console.print(
-                        "[yellow]Warning:[/] No session_id available, artifacts download skipped"
-                    )
-                    return
-                else:
-                    _session_id = response_id
+            _handle_artifact_download(client, response, output_dir, output_json)
 
-                # Set up output directory
-                if output_dir:
-                    artifact_dir = output_dir
-                else:
-                    artifact_dir = VLMRUN_ARTIFACTS_CACHE_DIR / _session_id
-                artifact_dir.mkdir(parents=True, exist_ok=True)
-
-                downloaded_files = []
-
-                # Download artifacts with status spinner
-                if not output_json:
-                    with Status(
-                        "Downloading artifacts...", console=console, spinner="dots"
-                    ):
-                        for ref_id in artifact_refs:
-                            try:
-                                output_path = download_artifact(
-                                    client,
-                                    _session_id,
-                                    ref_id,
-                                    artifact_dir,
-                                )
-                                downloaded_files.append(output_path)
-                            except Exception as e:
-                                console.print(
-                                    f"[red]Failed to download {ref_id}: {e}[/]"
-                                )
-                else:
-                    # JSON output mode - download without progress
-                    for ref_id in artifact_refs:
-                        try:
-                            output_path = download_artifact(
-                                client,
-                                _session_id,
-                                ref_id,
-                                artifact_dir,
-                            )
-                            downloaded_files.append(output_path)
-                        except Exception as e:
-                            console.print(f"[red]Failed to download {ref_id}: {e}[/]")
-
-                if not output_json and downloaded_files:
-                    # Create elegant tree view of artifacts
-                    tree = Tree(f"{artifact_dir}", guide_style="dim")
-                    for file_path in sorted(downloaded_files):
-                        # Get file size
-                        size_str = format_file_size(file_path.stat().st_size)
-                        tree.add(f"{file_path.name} [dim]({size_str})[/dim]")
-
-                    console.print(
-                        Panel(
-                            tree,
-                            title=f"Downloaded {len(downloaded_files)} artifact(s)",
-                            title_align="left",
-                            border_style="dim",
-                        )
-                    )
-
+    except ChatError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(1)

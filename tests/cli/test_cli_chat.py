@@ -12,6 +12,8 @@ from vlmrun.cli.cli import app
 from vlmrun.cli._cli.chat import (
     resolve_prompt,
     build_messages,
+)
+from vlmrun.client.chat import (
     extract_artifact_refs,
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
@@ -244,7 +246,7 @@ class TestChatCommand:
         assert result.exit_code == 1
         assert "Unsupported file type" in result.stdout
 
-    @patch("vlmrun.cli._cli.chat.upload_files")
+    @patch("vlmrun.client.chat._upload_files")
     def test_chat_with_file_json_output(
         self,
         mock_upload,
