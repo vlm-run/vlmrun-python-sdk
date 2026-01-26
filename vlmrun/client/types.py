@@ -15,14 +15,13 @@ JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "pa
 # AgentToolset type - tool categories available for agent execution
 AgentToolset = Literal[
     "core",
-    "image_analysis",
-    "image_generation",
+    "image",
+    "image-gen",
     "3d_reconstruction",
-    "visualization",
+    "viz",
     "document",
     "video",
     "web",
-    "skills",
 ]
 
 
