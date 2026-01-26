@@ -273,6 +273,28 @@ def upload_files(
     return file_responses
 
 
+def _completion_create_kwargs(
+    model: str,
+    messages: List[Dict[str, Any]],
+    stream: bool,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build kwargs for agent.completions.create() (CLI-only).
+
+    session_id is a VLM Run-specific parameter. The OpenAI client does not accept
+    it as a top-level argument; we pass it via extra_body so the backend gets it
+    without changing the OpenAI client.
+    """
+    kwargs: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": stream,
+    }
+    if session_id is not None:
+        kwargs["extra_body"] = {"session_id": session_id}
+    return kwargs
+
+
 def build_messages(
     prompt: str, file_responses: Optional[List[FileResponse]] = None
 ) -> List[Dict[str, Any]]:
@@ -613,19 +635,17 @@ def chat(
                     handle_api_errors(),
                 ):
                     response = client.agent.completions.create(
-                        model=model,
-                        messages=messages,
-                        stream=False,
-                        session_id=session_id,
+                        **_completion_create_kwargs(
+                            model, messages, False, session_id
+                        )
                     )
             else:
                 # JSON output: no status messages, just make the API call
                 with handle_api_errors():
                     response = client.agent.completions.create(
-                        model=model,
-                        messages=messages,
-                        stream=False,
-                        session_id=session_id,
+                        **_completion_create_kwargs(
+                            model, messages, False, session_id
+                        )
                     )
 
             latency_s = time.time() - start_time
@@ -680,10 +700,9 @@ def chat(
                 handle_api_errors(),
             ):
                 stream = client.agent.completions.create(
-                    model=model,
-                    messages=messages,
-                    stream=True,
-                    session_id=session_id,
+                    **_completion_create_kwargs(
+                        model, messages, True, session_id
+                    )
                 )
 
                 # Collect streaming content and usage data

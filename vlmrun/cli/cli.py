@@ -20,7 +20,7 @@ from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.config import app as config_app, get_config
 from vlmrun.cli._cli.chat import chat as chat_command
 from vlmrun.cli._cli.models import app as models_app
-from vlmrun.constants import DEFAULT_BASE_URL
+from vlmrun.constants import DEFAULT_AGENT_BASE_URL, DEFAULT_BASE_URL
 
 app = typer.Typer(
     name="vlmrun",
@@ -119,7 +119,11 @@ def main(
 
     if ctx.invoked_subcommand is not None:
         check_credentials(ctx, api_key, base_url)
-        ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
+        # Chat subcommand uses the Agent API; use agent base URL when none set
+        client_base_url = base_url
+        if ctx.invoked_subcommand == "chat" and client_base_url is None:
+            client_base_url = DEFAULT_AGENT_BASE_URL
+        ctx.obj = VLMRun(api_key=api_key, base_url=client_base_url)
 
 
 # Add subcommands
