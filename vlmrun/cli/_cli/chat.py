@@ -598,6 +598,7 @@ def chat(
         response_content = ""
         usage_data: Optional[Dict[str, Any]] = None
         response_id: Optional[str] = None
+        extra_body: Optional[Dict[str, Any]] = {"session_id": session_id} if session_id else None
 
         start_time = time.time()
 
@@ -612,11 +613,12 @@ def chat(
                     ),
                     handle_api_errors(),
                 ):
+                    
                     response = client.agent.completions.create(
                         model=model,
                         messages=messages,
                         stream=False,
-                        session_id=session_id,
+                        extra_body=extra_body,
                     )
             else:
                 # JSON output: no status messages, just make the API call
@@ -625,7 +627,7 @@ def chat(
                         model=model,
                         messages=messages,
                         stream=False,
-                        session_id=session_id,
+                        extra_body=extra_body,
                     )
 
             latency_s = time.time() - start_time
@@ -683,7 +685,7 @@ def chat(
                     model=model,
                     messages=messages,
                     stream=True,
-                    session_id=session_id,
+                    extra_body=extra_body,
                 )
 
                 # Collect streaming content and usage data
