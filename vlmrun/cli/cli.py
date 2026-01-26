@@ -117,7 +117,8 @@ def main(
     if ctx.resilient_parsing or is_help_requested():
         return
 
-    if ctx.invoked_subcommand is not None:
+    # Skip credential check for config commands (needed to set API key)
+    if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "config":
         check_credentials(ctx, api_key, base_url)
         ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
 
