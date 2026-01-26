@@ -3,7 +3,7 @@
 from __future__ import annotations
 import warnings
 from functools import cached_property
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -16,6 +16,7 @@ from vlmrun.client.types import (
     AgentExecutionConfig,
     AgentCreationConfig,
     AgentCreationResponse,
+    AgentToolset,
 )
 from vlmrun.client.exceptions import DependencyError
 
@@ -169,6 +170,7 @@ class Agent:
         metadata: Optional[RequestMetadata] = None,
         callback_url: Optional[str] = None,
         model: str = "vlmrun-orion-1:auto",
+        toolsets: Optional[List[AgentToolset]] = None,
     ) -> AgentExecutionResponse:
         """Execute an agent with the given arguments.
 
@@ -180,6 +182,11 @@ class Agent:
             metadata: Optional request metadata
             callback_url: Optional URL to call when execution is complete
             model: VLM Run Agent model to use for execution (default: "vlmrun-orion-1:auto")
+            toolsets: Optional list of tool categories to enable for this execution.
+                Available categories: core, image, image-gen, 3d_reconstruction,
+                viz, document, video, web.
+                When specified, only tools from these categories will be available.
+                If None, defaults to 'core' tools only.
 
         Returns:
             AgentExecutionResponse: Agent execution response
@@ -202,6 +209,9 @@ class Agent:
 
         if callback_url:
             data["callback_url"] = callback_url
+
+        if toolsets is not None:
+            data["toolsets"] = toolsets
 
         response, status_code, headers = self._requestor.request(
             method="POST",

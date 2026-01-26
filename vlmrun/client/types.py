@@ -12,6 +12,18 @@ import pandas as pd
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
+# AgentToolset type - tool categories available for agent execution
+AgentToolset = Literal[
+    "core",
+    "image",
+    "image-gen",
+    "3d_reconstruction",
+    "viz",
+    "document",
+    "video",
+    "web",
+]
+
 
 @dataclass
 class APIError(Exception):
