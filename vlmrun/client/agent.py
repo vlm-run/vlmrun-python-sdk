@@ -170,7 +170,7 @@ class Agent:
         metadata: Optional[RequestMetadata] = None,
         callback_url: Optional[str] = None,
         model: str = "vlmrun-orion-1:auto",
-        toolset: Optional[List[AgentToolset]] = None,
+        toolsets: Optional[List[AgentToolset]] = None,
     ) -> AgentExecutionResponse:
         """Execute an agent with the given arguments.
 
@@ -182,7 +182,7 @@ class Agent:
             metadata: Optional request metadata
             callback_url: Optional URL to call when execution is complete
             model: VLM Run Agent model to use for execution (default: "vlmrun-orion-1:auto")
-            toolset: Optional list of tool categories to enable for this execution.
+            toolsets: Optional list of tool categories to enable for this execution.
                 Available categories: core, image_analysis, image_generation, 3d_reconstruction,
                 visualization, document, video, web, skills.
                 When specified, only tools from these categories will be available.
@@ -210,8 +210,8 @@ class Agent:
         if callback_url:
             data["callback_url"] = callback_url
 
-        if toolset is not None:
-            data["toolset"] = toolset
+        if toolsets is not None:
+            data["toolsets"] = toolsets
 
         response, status_code, headers = self._requestor.request(
             method="POST",
