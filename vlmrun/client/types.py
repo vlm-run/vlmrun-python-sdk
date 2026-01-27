@@ -17,7 +17,7 @@ AgentToolset = Literal[
     "core",
     "image",
     "image-gen",
-    "3d_reconstruction",
+    "world_gen",
     "viz",
     "document",
     "video",

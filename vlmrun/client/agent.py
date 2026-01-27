@@ -183,7 +183,7 @@ class Agent:
             callback_url: Optional URL to call when execution is complete
             model: VLM Run Agent model to use for execution (default: "vlmrun-orion-1:auto")
             toolsets: Optional list of tool categories to enable for this execution.
-                Available categories: core, image, image-gen, 3d_reconstruction,
+                Available categories: core, image, image-gen, world_gen,
                 viz, document, video, web.
                 When specified, only tools from these categories will be available.
                 If None, defaults to 'core' tools only.
