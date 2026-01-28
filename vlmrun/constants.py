@@ -18,8 +18,17 @@ VLMRUN_TMP_DIR = VLMRUN_HOME / "tmp"
 VLMRUN_TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 SUPPORTED_VIDEO_FILETYPES = [".mp4", ".mov", ".avi", ".mkv", ".webm"]
-SUPPORTED_IMAGE_FILETYPES = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"]
-SUPPORTED_DOCUMENT_FILETYPES = [".pdf", ".doc", ".docx"]
+SUPPORTED_IMAGE_FILETYPES = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".webp",
+]
+SUPPORTED_DOCUMENT_FILETYPES = [".pdf", ".doc", ".docx", ".tif", ".tiff"]
 SUPPORTED_AUDIO_FILETYPES = [".mp3", ".wav", ".m4a", ".flac", ".ogg"]
 
 # All supported file types for the chat CLI
