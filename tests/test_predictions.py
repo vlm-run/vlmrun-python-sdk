@@ -191,6 +191,118 @@ def test_image_generate_with_url(mock_client):
     assert response.id is not None
 
 
+def test_image_generate_batch_with_file(mock_client, tmp_path):
+    """Test batch image generation with a local file returns pending status."""
+    img_path = tmp_path / "test.jpg"
+    img = Image.new("RGB", (100, 100), color="blue")
+    img.save(img_path)
+
+    client = mock_client
+    response = client.image.generate(
+        domain="test-domain",
+        images=[img_path],
+        batch=True,
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.id is not None
+    assert response.status == "pending"
+    assert response.response is None
+    assert response.completed_at is None
+
+
+def test_image_generate_batch_with_url(mock_client):
+    """Test batch image generation with URLs returns pending status."""
+    client = mock_client
+    response = client.image.generate(
+        domain="test-domain",
+        urls=["https://example.com/image.jpg"],
+        batch=True,
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.id is not None
+    assert response.status == "pending"
+    assert response.response is None
+    assert response.completed_at is None
+
+
+def test_image_generate_batch_with_multiple_images(mock_client, tmp_path):
+    """Test batch image generation with multiple images."""
+    images = []
+    for i in range(3):
+        img_path = tmp_path / f"test_{i}.jpg"
+        img = Image.new("RGB", (100, 100), color="green")
+        img.save(img_path)
+        images.append(img_path)
+
+    client = mock_client
+    response = client.image.generate(
+        domain="test-domain",
+        images=images,
+        batch=True,
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.status == "pending"
+    assert response.response is None
+
+
+def test_image_generate_batch_with_pil_images(mock_client):
+    """Test batch image generation with PIL Image objects."""
+    images = [Image.new("RGB", (100, 100), color="red") for _ in range(2)]
+
+    client = mock_client
+    response = client.image.generate(
+        domain="test-domain",
+        images=images,
+        batch=True,
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.status == "pending"
+    assert response.response is None
+
+
+def test_image_generate_non_batch_still_works(mock_client, tmp_path):
+    """Test that non-batch image generation still returns completed status."""
+    img_path = tmp_path / "test.jpg"
+    img = Image.new("RGB", (100, 100), color="red")
+    img.save(img_path)
+
+    client = mock_client
+    response = client.image.generate(
+        domain="test-domain",
+        images=[img_path],
+        batch=False,
+    )
+    assert isinstance(response, PredictionResponse)
+    assert response.status == "completed"
+    assert response.response is not None
+    assert response.completed_at is not None
+
+
+def test_image_generate_batch_then_wait(mock_client, tmp_path, monkeypatch):
+    """Test batch image generation followed by polling until completion."""
+    img_path = tmp_path / "test.jpg"
+    img = Image.new("RGB", (100, 100), color="red")
+    img.save(img_path)
+
+    client = mock_client
+    response = client.image.generate(
+        domain="test-domain",
+        images=[img_path],
+        batch=True,
+    )
+    assert response.status == "pending"
+
+    def mock_sleep(seconds):
+        pass
+
+    monkeypatch.setattr("time.sleep", mock_sleep)
+
+    completed = client.predictions.wait(response.id, timeout=10)
+    assert isinstance(completed, PredictionResponse)
+    assert completed.status == "completed"
+    assert completed.response is not None
+
+
 def test_image_generate_validation(mock_client):
     """Test validation of image generate parameters."""
     client = mock_client
