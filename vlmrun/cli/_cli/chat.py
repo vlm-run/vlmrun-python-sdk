@@ -488,9 +488,9 @@ def chat(
         help="Artifact output directory. [default: ~/.vlmrun/cache/artifacts/<id>]",
     ),
     base_url: Optional[str] = typer.Option(
-        os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL),
+        os.getenv("VLMRUN_AGENT_BASE_URL", os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)),
         "--base-url",
-        help="VLM Run Agent API base URL.",
+        help="VLM Run Agent API base URL. Falls back to VLMRUN_AGENT_BASE_URL, then VLMRUN_BASE_URL.",
     ),
     model: str = typer.Option(
         DEFAULT_MODEL,

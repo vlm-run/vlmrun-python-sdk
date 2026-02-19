@@ -280,7 +280,7 @@ class Agent:
                 error_type="missing_dependency",
             )
 
-        base_url = f"{self._client.base_url}/openai"
+        base_url = f"{self._client.agent_base_url}/openai"
         openai_client = OpenAI(
             api_key=self._client.api_key,
             base_url=base_url,
@@ -332,7 +332,7 @@ class Agent:
                 error_type="missing_dependency",
             )
 
-        base_url = f"{self._client.base_url}/openai"
+        base_url = f"{self._client.agent_base_url}/openai"
         async_openai_client = AsyncOpenAI(
             api_key=self._client.api_key,
             base_url=base_url,
