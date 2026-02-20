@@ -230,6 +230,10 @@ class AgentExecutionOrCreationConfig(BaseModel):
     json_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="The JSON schema response model of the agent"
     )
+    skills: Optional[List[AgentSkill]] = Field(
+        default=None,
+        description="List of agent skills to enable for this execution.",
+    )
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -308,11 +312,44 @@ class AgentCreationResponse(BaseModel):
     status: JobStatus = Field(..., description="The status of the agent")
 
 
+class AgentSkill(BaseModel):
+    """A skill that provides domain-specific expertise.
+
+    Provide either ``skill_id`` or ``skill_name``.
+    ``version`` is used with ``skill_name`` to pin a specific skill version;
+    it defaults to ``"latest"``.
+    """
+
+    type: str = Field(
+        default="vlm-run",
+        description="The type of the skill (e.g., 'vlm-run').",
+    )
+    skill_id: Optional[str] = Field(
+        default=None,
+        description="The unique identifier of the skill (UUID or name string).",
+    )
+    skill_name: Optional[str] = Field(
+        default=None,
+        description="Human-readable skill name for lookup. Alternative to skill_id.",
+    )
+    version: str = Field(
+        default="latest",
+        description="The version of the skill (e.g., 'latest', '20260219-abc123').",
+    )
+
+    @model_validator(mode="after")
+    def _require_skill_id_or_name(self):
+        if not self.skill_id and not self.skill_name:
+            raise ValueError("Either 'skill_id' or 'skill_name' must be provided")
+        return self
+
+
 class GenerationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None)
     response_model: Optional[Type[BaseModel]] = Field(default=None)
     json_schema: Optional[Dict[str, Any]] = Field(default=None)
     gql_stmt: Optional[str] = Field(default=None)
+    skills: Optional[List[AgentSkill]] = Field(default=None)
     max_retries: int = Field(default=3)
     max_tokens: int = Field(default=65535)
     temperature: float = Field(default=0.0)
