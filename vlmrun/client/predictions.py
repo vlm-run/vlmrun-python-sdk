@@ -287,7 +287,9 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         Raises:
             ValueError: If neither images nor urls are provided, or if both are provided
         """
-        has_skills = config is not None and config.skills is not None and len(config.skills) > 0
+        has_skills = (
+            config is not None and config.skills is not None and len(config.skills) > 0
+        )
         if not domain and not has_skills:
             raise ValueError("Either `domain` or `config.skills` must be provided")
 
@@ -421,7 +423,11 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
-            has_skills = config is not None and config.skills is not None and len(config.skills) > 0
+            has_skills = (
+                config is not None
+                and config.skills is not None
+                and len(config.skills) > 0
+            )
             if not domain and not has_skills:
                 raise ValueError("Either `domain` or `config.skills` must be provided")
 
