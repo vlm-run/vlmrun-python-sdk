@@ -258,7 +258,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
 
     def generate(
         self,
-        domain: str,
+        domain: Optional[str] = None,
         images: Optional[List[Union[Path, Image.Image]]] = None,
         urls: Optional[List[str]] = None,
         model: str = "vlm-1",
@@ -271,7 +271,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         """Generate a document prediction.
 
         Args:
-            domain: Domain to use for prediction
+            domain: Domain to use for prediction. Optional when skills are provided via config.
             images: List of file paths (Path) or PIL Image objects to process. Either images or urls must be provided.
             urls: List of HTTP URLs pointing to images. Either images or urls must be provided.
             model: Model to use for prediction
@@ -287,35 +287,11 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         Raises:
             ValueError: If neither images nor urls are provided, or if both are provided
         """
-        # Input validation
-        if not images and not urls:
-            raise ValueError("Either `images` or `urls` must be provided")
-        if images and urls:
-            raise ValueError("Only one of `images` or `urls` can be provided")
-
-        if images:
-            # Check if all images are of the same type
-            image_type = type(images[0])
-            if not all(isinstance(image, image_type) for image in images):
-                raise ValueError("All images must be of the same type")
-            if isinstance(images[0], Path):
-                images = [_open_image_with_exif(str(image)) for image in images]
-            elif isinstance(images[0], Image.Image):
-                pass
-            else:
-                raise ValueError("Image must be a path or a PIL Image")
-            images_data = [encode_image(image, format="JPEG") for image in images]
-        else:
-            # URL handling
-            if not urls:
-                raise ValueError("URLs list cannot be empty")
-            if not isinstance(urls[0], str):
-                raise ValueError("URLs must be strings")
-            if not all(isinstance(url, str) for url in urls):
-                raise ValueError("All URLs must be strings")
-            if not all(url.startswith("http") for url in urls):
-                raise ValueError("URLs must start with 'http'")
-            images_data = urls
+        has_skills = (
+            config is not None and config.skills is not None and len(config.skills) > 0
+        )
+        if not domain and not has_skills:
+            raise ValueError("Either `domain` or `config.skills` must be provided")
 
         images_data = self._handle_images_or_urls(images, urls)
         additional_kwargs = {}
@@ -323,23 +299,25 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             additional_kwargs["config"] = config.model_dump()
         if metadata:
             additional_kwargs["metadata"] = metadata.model_dump()
+        data = {
+            "model": model,
+            "images": images_data,
+            "batch": batch,
+            "callback_url": callback_url,
+            **additional_kwargs,
+        }
+        if domain is not None:
+            data["domain"] = domain
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="image/generate",
-            data={
-                "model": model,
-                "images": images_data,
-                "domain": domain,
-                "batch": batch,
-                "callback_url": callback_url,
-                **additional_kwargs,
-            },
+            data=data,
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
         prediction = PredictionResponse(**response)
 
-        if autocast:
+        if autocast and domain:
             self._cast_response_to_schema(prediction, domain, config)
         return prediction
 
@@ -435,7 +413,7 @@ def FilePredictions(route: str):
                 model: Model to use for prediction
                 file: File (pathlib.Path) or file_id to generate prediction from
                 url: URL to generate prediction from
-                domain: Domain to use for prediction
+                domain: Domain to use for prediction. Optional when skills are provided via config.
                 batch: Whether to run prediction in batch mode
                 config: GenerateConfig to use for prediction
                 metadata: Metadata to include in prediction
@@ -445,6 +423,14 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
+            has_skills = (
+                config is not None
+                and config.skills is not None
+                and len(config.skills) > 0
+            )
+            if not domain and not has_skills:
+                raise ValueError("Either `domain` or `config.skills` must be provided")
+
             is_url, file_or_url = self._handle_file_or_url(file, url)
 
             additional_kwargs = {}
@@ -452,17 +438,19 @@ def FilePredictions(route: str):
                 additional_kwargs["config"] = config.model_dump()
             if metadata:
                 additional_kwargs["metadata"] = metadata.model_dump()
+            data = {
+                "model": model,
+                "url" if is_url else "file_id": file_or_url,
+                "batch": batch,
+                "callback_url": callback_url,
+                **additional_kwargs,
+            }
+            if domain is not None:
+                data["domain"] = domain
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url=f"{route}/generate",
-                data={
-                    "model": model,
-                    "url" if is_url else "file_id": file_or_url,
-                    "domain": domain,
-                    "batch": batch,
-                    "callback_url": callback_url,
-                    **additional_kwargs,
-                },
+                data=data,
             )
             if not isinstance(response, dict):
                 raise TypeError("Expected dict response")
@@ -479,7 +467,7 @@ def FilePredictions(route: str):
                 except Exception as e:
                     logger.warning(f"Failed to cast response to MarkdownDocument: {e}")
             # Handle other domains with autocast
-            elif autocast:
+            elif autocast and domain:
                 self._cast_response_to_schema(prediction, domain, config)
             return prediction
 
