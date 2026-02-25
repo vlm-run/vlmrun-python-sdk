@@ -42,6 +42,8 @@ class VLMRun:
             or VLMRUN_API_KEY environment variable.
         base_url: Base URL for API. Defaults to None, which falls back to
             VLMRUN_BASE_URL environment variable or https://api.vlm.run/v1.
+        agent_base_url: Base URL for the agent (OpenAI-compatible completions) endpoint.
+            Falls back to VLMRUN_AGENT_BASE_URL environment variable, then to base_url.
         timeout: Request timeout in seconds. Defaults to 120.0.
         max_retries: Maximum number of retry attempts for failed requests. Defaults to 5.
         files: Files resource for managing files
@@ -51,6 +53,7 @@ class VLMRun:
 
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    agent_base_url: Optional[str] = None
     timeout: float = 120.0
     max_retries: int = 5
 
@@ -79,6 +82,10 @@ class VLMRun:
         # Handle base URL
         if self.base_url is None:
             self.base_url = os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)
+
+        # Handle agent base URL (for OpenAI-compatible completions endpoint)
+        if self.agent_base_url is None:
+            self.agent_base_url = os.getenv("VLMRUN_AGENT_BASE_URL", self.base_url)
 
         # Initialize requestor for API key validation
         requestor = APIRequestor(

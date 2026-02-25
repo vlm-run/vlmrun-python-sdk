@@ -14,6 +14,7 @@ class VLMRunProtocol(Protocol):
 
     api_key: Optional[str]
     base_url: str
+    agent_base_url: str
     timeout: float
     files: Any
     datasets: Any
