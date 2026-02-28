@@ -280,14 +280,25 @@ def mock_client(monkeypatch):
                 if images and urls:
                     raise ValueError("Only one of `images` or `urls` can be provided")
 
-                prediction = PredictionResponse(
-                    id="prediction1",
-                    status="completed",
-                    created_at="2024-01-01T00:00:00+00:00",
-                    completed_at="2024-01-01T00:00:01+00:00",
-                    response={"invoice_number": "INV-001", "total_amount": 100.0},
-                    usage=CreditUsage(credits_used=100),
-                )
+                batch = kwargs.get("batch", False)
+                if batch:
+                    prediction = PredictionResponse(
+                        id="prediction1",
+                        status="pending",
+                        created_at="2024-01-01T00:00:00+00:00",
+                        completed_at=None,
+                        response=None,
+                        usage=CreditUsage(credits_used=0),
+                    )
+                else:
+                    prediction = PredictionResponse(
+                        id="prediction1",
+                        status="completed",
+                        created_at="2024-01-01T00:00:00+00:00",
+                        completed_at="2024-01-01T00:00:01+00:00",
+                        response={"invoice_number": "INV-001", "total_amount": 100.0},
+                        usage=CreditUsage(credits_used=100),
+                    )
 
                 if kwargs.get("autocast", False):
                     self._cast_response_to_schema(
