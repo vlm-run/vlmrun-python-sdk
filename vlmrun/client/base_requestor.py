@@ -1,7 +1,6 @@
 """VLM Run API requestor implementation."""
 
 from typing import Any, Dict, Tuple, TYPE_CHECKING, Union, Optional
-from urllib.parse import urljoin
 
 if TYPE_CHECKING:
     from vlmrun.types.abstract import VLMRunProtocol
@@ -49,12 +48,13 @@ class APIRequestor:
 
         Args:
             client: VLMRun API instance
-            base_url: Base URL for API
+            base_url: Base URL for API (without trailing slash)
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts
         """
         self._client = client
-        self._base_url = base_url or client.base_url
+        # Normalize: strip trailing slashes for consistent URL building
+        self._base_url = (base_url or client.base_url).rstrip("/")
         self._timeout = timeout
         self._max_retries = (
             max_retries
@@ -131,8 +131,8 @@ class APIRequestor:
             if "X-Client-Id" not in _headers:
                 _headers["X-Client-Id"] = f"python-sdk-{__version__}"
 
-            # Build full URL
-            full_url = urljoin(self._base_url.rstrip("/") + "/", url.lstrip("/"))
+            # Build full URL (base_url is pre-normalized without trailing slash)
+            full_url = f"{self._base_url}/{url.lstrip('/')}"
 
             try:
                 response = self._session.request(

@@ -33,15 +33,42 @@ from vlmrun.client.exceptions import (
 )
 
 
+def _resolve_base_url(base_url: Optional[str]) -> str:
+    """Resolve base_url with priority: arg > env > default.
+
+    Also normalizes the URL by removing trailing slashes.
+    """
+    url = base_url or os.getenv("VLMRUN_BASE_URL") or DEFAULT_BASE_URL
+    return url.rstrip("/")
+
+
+def _resolve_api_key(api_key: Optional[str]) -> str:
+    """Resolve api_key with priority: arg > env.
+
+    Raises ConfigurationError if no API key is found.
+    """
+    resolved = api_key or os.getenv("VLMRUN_API_KEY")
+    if not resolved:
+        raise ConfigurationError(
+            message="Missing API key",
+            error_type="missing_api_key",
+            suggestion="Please provide your VLM Run API key:\n\n"
+            "1. Set it in your code:\n"
+            "   client = VLMRun(api_key='your-api-key')\n\n"
+            "2. Or set the environment variable:\n"
+            "   export VLMRUN_API_KEY='your-api-key'\n\n"
+            "Get your API key at https://app.vlm.run/dashboard",
+        )
+    return resolved
+
+
 @dataclass
 class VLMRun:
     """VLM Run API client.
 
     Attributes:
-        api_key: API key for authentication. Can be provided through constructor
-            or VLMRUN_API_KEY environment variable.
-        base_url: Base URL for API. Defaults to None, which falls back to
-            VLMRUN_BASE_URL environment variable or https://api.vlm.run/v1.
+        api_key: API key for authentication. Priority: arg > VLMRUN_API_KEY env var.
+        base_url: Base URL for API. Priority: arg > VLMRUN_BASE_URL env var > default.
         timeout: Request timeout in seconds. Defaults to 120.0.
         max_retries: Maximum number of retry attempts for failed requests. Defaults to 5.
         files: Files resource for managing files
@@ -55,30 +82,9 @@ class VLMRun:
     max_retries: int = 5
 
     def __post_init__(self):
-        """Initialize the client after dataclass initialization.
-
-        This method handles environment variable fallbacks:
-        - api_key: Falls back to VLMRUN_API_KEY environment variable
-        - base_url: Can be overridden by constructor or VLMRUN_BASE_URL environment variable
-        """
-        # Handle API key first
-        if not self.api_key:  # Handle both None and empty string
-            self.api_key = os.getenv("VLMRUN_API_KEY", None)
-            if not self.api_key:  # Still None or empty after env check
-                raise ConfigurationError(
-                    message="Missing API key",
-                    error_type="missing_api_key",
-                    suggestion="Please provide your VLM Run API key:\n\n"
-                    "1. Set it in your code:\n"
-                    "   client = VLMRun(api_key='your-api-key')\n\n"
-                    "2. Or set the environment variable:\n"
-                    "   export VLMRUN_API_KEY='your-api-key'\n\n"
-                    "Get your API key at https://app.vlm.run/dashboard",
-                )
-
-        # Handle base URL
-        if self.base_url is None:
-            self.base_url = os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)
+        """Initialize the client after dataclass initialization."""
+        self.api_key = _resolve_api_key(self.api_key)
+        self.base_url = _resolve_base_url(self.base_url)
 
         # Initialize requestor for API key validation
         requestor = APIRequestor(

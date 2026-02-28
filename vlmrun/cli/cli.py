@@ -41,14 +41,28 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def check_credentials(
-    ctx: typer.Context, api_key: Optional[str], base_url: str
-) -> None:
-    """Check if API key is present and show helpful message if missing."""
-    config = get_config()
-    api_key = api_key or config.api_key
-    base_url = base_url or config.base_url
+def resolve_base_url(base_url: Optional[str]) -> str:
+    """Resolve base_url with priority: arg > env > config > default."""
+    if base_url:
+        return base_url
+    if env_url := os.getenv("VLMRUN_BASE_URL"):
+        return env_url
+    if config_url := get_config().base_url:
+        return config_url
+    return DEFAULT_BASE_URL
 
+
+def resolve_api_key(api_key: Optional[str]) -> Optional[str]:
+    """Resolve api_key with priority: arg > env > config."""
+    if api_key:
+        return api_key
+    if env_key := os.getenv("VLMRUN_API_KEY"):
+        return env_key
+    return get_config().api_key
+
+
+def check_credentials(ctx: typer.Context, api_key: str, base_url: str) -> None:
+    """Check if API key is present and show helpful message if missing."""
     if not api_key:
         console.print("\n[red bold]Error:[/] API key not found! 🔑\n")
         console.print(
@@ -69,7 +83,7 @@ def check_credentials(
         )
         raise typer.Exit(1)
 
-    is_default_url = base_url == DEFAULT_BASE_URL and not os.getenv("VLMRUN_BASE_URL")
+    is_default_url = base_url == DEFAULT_BASE_URL
     if is_default_url and not ctx.meta.get("has_shown_base_url_notice"):
         console.print(
             f"[yellow]Note:[/] Using default API endpoint: [blue]{base_url}[/]\n"
@@ -89,14 +103,12 @@ def main(
     api_key: Optional[str] = typer.Option(
         None,
         "--api-key",
-        envvar="VLMRUN_API_KEY",
-        help="VLM Run API key. Can also be set via VLMRUN_API_KEY environment variable.",
+        help="VLM Run API key. Can also be set via VLMRUN_API_KEY env var or config.",
     ),
     base_url: Optional[str] = typer.Option(
         None,
         "--base-url",
-        envvar="VLMRUN_BASE_URL",
-        help="VLM Run API base URL. Can also be set via VLMRUN_BASE_URL environment variable.",
+        help="VLM Run API base URL. Can also be set via VLMRUN_BASE_URL env var or config.",
     ),
     version: Optional[bool] = typer.Option(
         None,
@@ -119,8 +131,11 @@ def main(
 
     # Skip credential check for config commands (needed to set API key)
     if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "config":
-        check_credentials(ctx, api_key, base_url)
-        ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
+        # Resolve with priority: arg > env > config > default
+        resolved_api_key = resolve_api_key(api_key)
+        resolved_base_url = resolve_base_url(base_url)
+        check_credentials(ctx, resolved_api_key, resolved_base_url)
+        ctx.obj = VLMRun(api_key=resolved_api_key, base_url=resolved_base_url)
 
 
 # Add subcommands
