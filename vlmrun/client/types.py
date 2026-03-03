@@ -230,6 +230,10 @@ class AgentExecutionOrCreationConfig(BaseModel):
     json_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="The JSON schema response model of the agent"
     )
+    skills: Optional[List["AgentSkill"]] = Field(
+        default=None,
+        description="List of agent skills to enable for this execution. Skills provide domain-specific expertise and capabilities.",
+    )
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -521,7 +525,7 @@ class MarkdownFigure(BaseModel):
 
     def render(self) -> str:
         """Replace all <Figure> blocks with their rendered markdown content."""
-        return f"""<Figure id="fg-{self.id}"/>\n\n{self.content or ''}"""
+        return f"""<Figure id="fg-{self.id}"/>\n\n{self.content or ""}"""
 
 
 class MarkdownPage(BaseModel):
