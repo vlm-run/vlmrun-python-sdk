@@ -31,7 +31,7 @@ class Agent:
             client: VLM Run API instance
         """
         self._client = client
-        self._requestor = APIRequestor(client)
+        self._requestor = APIRequestor(client, timeout=client.timeout)
 
     def _process_inputs(
         self, inputs: Union[dict[str, Any], BaseModel, None]
