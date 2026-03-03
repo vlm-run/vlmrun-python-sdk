@@ -254,9 +254,9 @@ class AgentExecutionOrCreationConfig(BaseModel):
             )
 
         if self.response_model is not None:
-            assert self.json_schema is None, (
-                "`response_model` and `json_schema` cannot be used together"
-            )
+            assert (
+                self.json_schema is None
+            ), "`response_model` and `json_schema` cannot be used together"
             json_schema = self.response_model.model_json_schema()
             data["json_schema"] = json_schema
             data.pop("response_model", None)
@@ -369,9 +369,9 @@ class GenerationConfig(BaseModel):
             )
 
         if self.response_model is not None:
-            assert self.json_schema is None, (
-                "`response_model` and `json_schema` cannot be used together"
-            )
+            assert (
+                self.json_schema is None
+            ), "`response_model` and `json_schema` cannot be used together"
             json_schema = self.response_model.model_json_schema()
             data["json_schema"] = json_schema
             data.pop("response_model", None)
