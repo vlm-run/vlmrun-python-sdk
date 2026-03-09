@@ -33,6 +33,17 @@ class Agent:
         self._client = client
         self._requestor = APIRequestor(client)
 
+    @staticmethod
+    def _serialize_value(value: Any) -> Any:
+        """Recursively serialize a value, converting BaseModel instances to dicts."""
+        if isinstance(value, BaseModel):
+            return value.model_dump(exclude_none=True)
+        elif isinstance(value, dict):
+            return {k: Agent._serialize_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [Agent._serialize_value(item) for item in value]
+        return value
+
     def _process_inputs(
         self, inputs: Union[dict[str, Any], BaseModel, None]
     ) -> Optional[dict[str, Any]]:
@@ -53,6 +64,7 @@ class Agent:
                 DeprecationWarning,
                 stacklevel=3,
             )
+            return {k: self._serialize_value(v) for k, v in inputs.items()}
         return inputs
 
     def get(

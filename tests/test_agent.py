@@ -1,5 +1,6 @@
 """Tests for the Agent resource."""
 
+import json
 import pytest
 from datetime import datetime
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from vlmrun.client.types import (
     CreditUsage,
 )
 from vlmrun.client.agent import Agent
+from vlmrun.types import MessageContent
 
 
 class SampleInputModel(BaseModel):
@@ -296,3 +298,88 @@ class TestAgentProcessInputs:
         agent = Agent(MockClient())
         result = agent._process_inputs(None)
         assert result is None
+
+    def test_process_inputs_dict_with_nested_basemodel(self):
+        """Test that dict inputs with nested BaseModel values are JSON-serializable."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        inputs = {
+            "file": MessageContent(
+                type="input_file", file_id="d9f74779-5e5f-4bec-a901-97c55598c56e"
+            ),
+        }
+        result = agent._process_inputs(inputs)
+
+        assert isinstance(result, dict)
+        assert isinstance(result["file"], dict)
+        assert result["file"]["type"] == "input_file"
+        assert result["file"]["file_id"] == "d9f74779-5e5f-4bec-a901-97c55598c56e"
+        json.dumps(result)
+
+    def test_process_inputs_dict_with_list_of_basemodels(self):
+        """Test that dict inputs with lists of BaseModel values are serialized."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        inputs = {
+            "files": [
+                MessageContent(type="input_file", file_id="aaa"),
+                MessageContent(type="input_file", file_id="bbb"),
+            ],
+        }
+        result = agent._process_inputs(inputs)
+
+        assert isinstance(result["files"], list)
+        assert all(isinstance(item, dict) for item in result["files"])
+        assert result["files"][0]["file_id"] == "aaa"
+        assert result["files"][1]["file_id"] == "bbb"
+        json.dumps(result)
+
+    def test_process_inputs_dict_plain_values_unchanged(self):
+        """Test that dict inputs with plain string/int values pass through unchanged."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        inputs = {"url": "https://example.com/image.jpg", "count": 3, "flag": True}
+        result = agent._process_inputs(inputs)
+
+        assert result == {"url": "https://example.com/image.jpg", "count": 3, "flag": True}
+        json.dumps(result)
+
+    def test_process_inputs_dict_with_nested_dict_containing_basemodel(self):
+        """Test that deeply nested BaseModel values inside dicts are serialized."""
+
+        class MockClient:
+            api_key = "test-key"
+            base_url = "https://api.vlm.run/v1"
+            timeout = 120.0
+            max_retries = 1
+
+        agent = Agent(MockClient())
+        inputs = {
+            "metadata": {
+                "content": MessageContent(type="text", text="hello world"),
+            },
+        }
+        result = agent._process_inputs(inputs)
+
+        assert isinstance(result["metadata"]["content"], dict)
+        assert result["metadata"]["content"]["type"] == "text"
+        assert result["metadata"]["content"]["text"] == "hello world"
+        json.dumps(result)
