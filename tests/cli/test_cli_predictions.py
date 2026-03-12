@@ -71,3 +71,48 @@ def test_list_predictions_table_format(runner, mock_client, config_file):
     assert "ID" in out
     assert "CREATED" in out
     assert "STATUS" in out
+
+
+def test_list_predictions_since_filter(runner, mock_client, config_file):
+    """predictions list --since filters out older predictions."""
+    result = runner.invoke(app, ["predictions", "list", "--since", "2025-01-01"])
+    assert result.exit_code == 0
+    out = strip_ansi(result.stdout)
+    assert "No predictions found" in out
+
+
+def test_list_predictions_until_filter(runner, mock_client, config_file):
+    """predictions list --until keeps older predictions."""
+    result = runner.invoke(app, ["predictions", "list", "--until", "2025-01-01"])
+    assert result.exit_code == 0
+    out = strip_ansi(result.stdout)
+    assert "prediction1" in out
+
+
+def test_list_predictions_invalid_since(runner, mock_client, config_file):
+    """predictions list --since with bad date format exits with error."""
+    result = runner.invoke(app, ["predictions", "list", "--since", "01/01/2024"])
+    assert result.exit_code == 1
+    assert "Invalid date format" in result.stdout
+
+
+def test_list_predictions_invalid_until(runner, mock_client, config_file):
+    """predictions list --until with bad date format exits with error."""
+    result = runner.invoke(app, ["predictions", "list", "--until", "not-a-date"])
+    assert result.exit_code == 1
+    assert "Invalid date format" in result.stdout
+
+
+def test_list_predictions_limit(runner, mock_client, config_file):
+    """predictions list --limit is accepted without error."""
+    result = runner.invoke(app, ["predictions", "list", "--limit", "5"])
+    assert result.exit_code == 0
+
+
+def test_get_prediction_help(runner, mock_client, config_file):
+    """predictions get --help shows documentation."""
+    result = runner.invoke(app, ["predictions", "get", "--help"])
+    assert result.exit_code == 0
+    out = strip_ansi(result.stdout)
+    assert "--wait" in out
+    assert "--timeout" in out

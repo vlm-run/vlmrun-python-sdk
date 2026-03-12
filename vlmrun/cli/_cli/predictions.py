@@ -44,7 +44,8 @@ def list(
 
     if since:
         try:
-            since_date = datetime.strptime(since, "%Y-%m-%d")
+            from datetime import timezone
+            since_date = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             predictions = [p for p in predictions if p.created_at >= since_date]
         except ValueError:
             console.print("[red]Error:[/] Invalid date format for --since. Use YYYY-MM-DD")
@@ -52,7 +53,8 @@ def list(
 
     if until:
         try:
-            until_date = datetime.strptime(until, "%Y-%m-%d")
+            from datetime import timezone
+            until_date = datetime.strptime(until, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             predictions = [p for p in predictions if p.created_at <= until_date]
         except ValueError:
             console.print("[red]Error:[/] Invalid date format for --until. Use YYYY-MM-DD")
@@ -140,6 +142,7 @@ def get(
         console.print("\nResponse:", style="white")
         console.print(prediction.response, style="white")
 
-    if prediction.status == "failed" and prediction.error:
+    error = getattr(prediction, "error", None)
+    if prediction.status == "failed" and error:
         console.print("\nError:", style="white")
-        console.print(prediction.error, style="white")
+        console.print(error, style="white")

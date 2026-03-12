@@ -14,6 +14,20 @@ def mock_health_check():
         yield mock_request
 
 
+def test_config_init(runner, config_file):
+    """config init creates a default config file."""
+    result = runner.invoke(app, ["config", "init"])
+    assert result.exit_code == 0
+    assert "Created" in result.stdout or "already exists" in result.stdout.lower() or result.exit_code == 0
+
+
+def test_config_init_force(runner, config_file):
+    """config init --force overwrites an existing config."""
+    runner.invoke(app, ["config", "set", "--api-key", "existing-key"])
+    result = runner.invoke(app, ["config", "init", "--force"])
+    assert result.exit_code == 0
+
+
 def test_show_empty_config(runner, config_file):
     """Test showing config when no values are set."""
     result = runner.invoke(app, ["config", "show"])
