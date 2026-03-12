@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import patch
 from vlmrun.cli.cli import app
+from tests.conftest import strip_ansi
 
 
 @pytest.fixture(autouse=True)
@@ -32,8 +33,9 @@ def test_set_and_show_config(runner, config_file):
 
     result = runner.invoke(app, ["config", "show"])
     assert result.exit_code == 0
-    assert "api_key:" in result.stdout
-    assert "base_url: https://test.vlm.run" in result.stdout
+    out = strip_ansi(result.stdout)
+    assert "api_key:" in out
+    assert "base_url: https://test.vlm.run" in out
 
 
 def test_unset_config(runner, config_file):
@@ -47,8 +49,9 @@ def test_unset_config(runner, config_file):
 
     result = runner.invoke(app, ["config", "show"])
     assert result.exit_code == 0
-    assert "api_key" not in result.stdout
-    assert "base_url: https://test.vlm.run" in result.stdout
+    out = strip_ansi(result.stdout)
+    assert "api_key" not in out
+    assert "base_url: https://test.vlm.run" in out
 
 
 def test_set_no_values(runner, config_file):

@@ -1,10 +1,18 @@
 """Test fixtures for vlmrun tests."""
 
 import hashlib
+import re
 import pytest
 from functools import cached_property
 from typer.testing import CliRunner
 from pydantic import BaseModel
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return _ANSI_RE.sub("", text)
 
 from datetime import datetime
 from typing import List

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import typer
 from rich import print as rprint
@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from vlmrun.client import VLMRun
 from vlmrun.cli._cli.chat import app as chat_app
 from vlmrun.cli._cli.config import app as config_app, resolve_config
 from vlmrun.cli._cli.files import app as files_app
@@ -19,9 +20,6 @@ from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.skills import app as skills_app
-
-if TYPE_CHECKING:
-    from vlmrun.client import VLMRun
 
 app = typer.Typer(
     name="vlmrun",
@@ -106,7 +104,6 @@ def main(
     if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "config":
         cfg = resolve_config(api_key=api_key, base_url=base_url)
         check_credentials(cfg.api_key)
-        from vlmrun.client import VLMRun
         ctx.obj = VLMRun(api_key=cfg.api_key, base_url=cfg.base_url)
 
 
