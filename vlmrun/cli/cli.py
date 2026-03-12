@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from vlmrun.client import VLMRun
-from vlmrun.cli._cli.chat import app as chat_app
+from vlmrun.cli._cli.chat import CHAT_HELP, chat
 from vlmrun.cli._cli.config import app as config_app, resolve_config
 from vlmrun.cli._cli.files import app as files_app
 from vlmrun.cli._cli.generate import app as generate_app
@@ -108,7 +108,7 @@ def main(
 
 
 # Add subcommands
-app.add_typer(chat_app, name="chat")
+app.command("chat", help=CHAT_HELP, context_settings={"max_content_width": 120})(chat)
 app.add_typer(generate_app, name="generate")
 app.add_typer(predictions_app, name="predictions")
 app.add_typer(files_app, name="files")

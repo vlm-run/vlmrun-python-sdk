@@ -219,8 +219,8 @@ class TestChatCommand:
         assert "--json" in plain_output
 
     def test_chat_no_prompt_error(self, runner, config_file, mock_client):
-        """Test error when no prompt provided."""
-        result = runner.invoke(app, ["chat"])
+        """Test error when empty prompt provided."""
+        result = runner.invoke(app, ["chat", ""])
         assert result.exit_code == 1
         assert "No prompt provided" in result.stdout
 

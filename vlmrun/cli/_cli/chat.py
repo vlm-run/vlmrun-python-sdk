@@ -126,6 +126,7 @@ FILES: .jpg .png .gif .mp4 .mov .pdf .doc .mp3 .wav (and more)
 
 app = typer.Typer(
     help=CHAT_HELP,
+    add_completion=False,
     no_args_is_help=True,
     invoke_without_command=True,
 )
@@ -461,7 +462,6 @@ def print_rich_output(
         console.print(f"  [dim]Artifacts:[/dim] {artifact_dir}")
 
 
-@app.callback()
 def chat(
     ctx: typer.Context,
     prompt: Optional[str] = typer.Argument(
@@ -529,14 +529,14 @@ def chat(
     client: VLMRun = ctx.obj
     if client is None:
         console.print("[red]Error:[/] Client not initialized. Check your API key.")
-        raise typer.Exit(1)
+        sys.exit(1)
 
     # Resolve prompt from various sources
     try:
         final_prompt = resolve_prompt(prompt, prompt_file)
     except (FileNotFoundError, ValueError) as e:
         console.print(f"[red]Error:[/] {e}")
-        raise typer.Exit(1)
+        sys.exit(1)
 
     if not final_prompt:
         console.print("[red]Error:[/] No prompt provided.")
@@ -545,7 +545,7 @@ def chat(
         console.print("  vlmrun chat -p prompt.txt -i file.jpg")
         console.print('  echo "Your prompt" | vlmrun chat - -i file.jpg')
         console.print("\nRun [green]vlmrun chat --help[/] for more options.")
-        raise typer.Exit(1)
+        sys.exit(1)
 
     # Validate model
     if model not in AVAILABLE_MODELS:
@@ -554,7 +554,7 @@ def chat(
         for m in AVAILABLE_MODELS:
             default_marker = " (default)" if m == DEFAULT_MODEL else ""
             console.print(f"  - {m}{default_marker}")
-        raise typer.Exit(1)
+        sys.exit(1)
 
     # Validate input files if provided
     if input_files:
@@ -565,7 +565,7 @@ def chat(
                 console.print(
                     f"\nSupported types: {', '.join(SUPPORTED_INPUT_FILETYPES)}"
                 )
-                raise typer.Exit(1)
+                sys.exit(1)
 
     try:
         # Upload input files concurrently if provided
