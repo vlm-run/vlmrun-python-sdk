@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from vlmrun.client.types import FileResponse
 
 app = typer.Typer(
-    help="File operations",
+    help="Upload, list, retrieve, and delete files.",
     add_completion=False,
     no_args_is_help=True,
 )

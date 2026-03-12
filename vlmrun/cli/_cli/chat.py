@@ -95,7 +95,7 @@ class handle_api_errors:
         return False
 
 
-CHAT_HELP = """Process images, videos, and documents with natural language.
+CHAT_HELP = """Chat with Orion to process images, videos, and documents via natural language.
 
 \b
 PROMPT SOURCES (precedence order):
@@ -127,6 +127,7 @@ FILES: .jpg .png .gif .mp4 .mov .pdf .doc .mp3 .wav (and more)
 app = typer.Typer(
     help=CHAT_HELP,
     no_args_is_help=True,
+    invoke_without_command=True,
 )
 
 # Available models
@@ -460,7 +461,7 @@ def print_rich_output(
         console.print(f"  [dim]Artifacts:[/dim] {artifact_dir}")
 
 
-@app.command()
+@app.callback()
 def chat(
     ctx: typer.Context,
     prompt: Optional[str] = typer.Argument(

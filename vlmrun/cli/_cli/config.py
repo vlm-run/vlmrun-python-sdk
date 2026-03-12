@@ -93,7 +93,7 @@ def save_config(config: Config) -> None:
 
 
 app = typer.Typer(
-    help="Configuration operations",
+    help="Manage CLI configuration (API key, base URL, environment).",
     add_completion=False,
     no_args_is_help=True,
 )

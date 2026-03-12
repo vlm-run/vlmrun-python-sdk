@@ -20,7 +20,7 @@ You must load the following variables in your environment so that the CLI can us
 | Variable | Type | Description |
 |----------|------|-------------|
 | `VLMRUN_API_KEY` | Required | Your VLM Run API key (required) |
-| `VLMRUN_BASE_URL` | Optional | Base URL (default: `https://agent.vlm.run/v1`) |
+| `VLMRUN_BASE_URL` | Optional | Base URL (default: `https://api.vlm.run/v1`) |
 | `VLMRUN_CACHE_DIR` | Optional | Cache directory (default: `~/.vlmrun/cache/artifacts/`) |
 
 ## Command

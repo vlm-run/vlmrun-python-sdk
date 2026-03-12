@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from vlmrun.client.types import ModelInfo
 
 app = typer.Typer(
-    help="Model operations",
+    help="List supported models and domains.",
     add_completion=False,
     no_args_is_help=True,
 )

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from vlmrun.client import VLMRun
 
 app = typer.Typer(
-    help="Prediction operations",
+    help="List and retrieve prediction results.",
     add_completion=False,
     no_args_is_help=True,
 )

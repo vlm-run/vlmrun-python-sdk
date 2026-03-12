@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from vlmrun.client.types import HubDomainInfo, HubSchemaResponse
 
 app = typer.Typer(
-    help="Hub operations",
+    help="Browse available domains and JSON schemas.",
     add_completion=False,
     no_args_is_help=True,
 )
