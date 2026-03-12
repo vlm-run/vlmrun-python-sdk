@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Optional
+import sys
+from typing import TYPE_CHECKING, Optional
 
 import typer
 from rich import print as rprint
@@ -10,13 +11,17 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from vlmrun.client import VLMRun
+from vlmrun.cli._cli.chat import app as chat_app
+from vlmrun.cli._cli.config import app as config_app, resolve_config
 from vlmrun.cli._cli.files import app as files_app
-from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
+from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.predictions import app as predictions_app
-from vlmrun.cli._cli.config import app as config_app, resolve_config
+from vlmrun.cli._cli.skills import app as skills_app
+
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
 
 app = typer.Typer(
     name="vlmrun",
@@ -60,6 +65,11 @@ def check_credentials(api_key: Optional[str]) -> None:
         raise typer.Exit(1)
 
 
+def is_help_requested() -> bool:
+    """Check if --help or -h is in the command line arguments."""
+    return "--help" in sys.argv or "-h" in sys.argv
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -90,19 +100,25 @@ def main(
     ),
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
+    if ctx.resilient_parsing or is_help_requested():
+        return
+
     if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "config":
         cfg = resolve_config(api_key=api_key, base_url=base_url)
         check_credentials(cfg.api_key)
+        from vlmrun.client import VLMRun
         ctx.obj = VLMRun(api_key=cfg.api_key, base_url=cfg.base_url)
 
 
 # Add subcommands
-app.add_typer(config_app, name="config")
-app.add_typer(models_app, name="models")
-app.add_typer(files_app, name="files")
+app.add_typer(chat_app, name="chat")
 app.add_typer(generate_app, name="generate")
 app.add_typer(predictions_app, name="predictions")
+app.add_typer(files_app, name="files")
 app.add_typer(hub_app, name="hub")
+app.add_typer(models_app, name="models")
+app.add_typer(skills_app, name="skills")
+app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
     app()

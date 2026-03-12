@@ -12,6 +12,18 @@ import pandas as pd
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
+# AgentToolset type - tool categories available for agent execution
+AgentToolset = Literal[
+    "core",
+    "image",
+    "image-gen",
+    "world_gen",
+    "viz",
+    "document",
+    "video",
+    "web",
+]
+
 
 @dataclass
 class APIError(Exception):
@@ -36,6 +48,11 @@ class FileResponse(BaseModel):
     created_at: datetime
     object: str = "file"
     public_url: Optional[str] = None
+
+
+class PresignedUrlRequest(BaseModel):
+    filename: str
+    purpose: Optional[str] = None
 
 
 class PresignedUrlResponse(BaseModel):
@@ -213,6 +230,10 @@ class AgentExecutionOrCreationConfig(BaseModel):
     json_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="The JSON schema response model of the agent"
     )
+    skills: Optional[List["AgentSkill"]] = Field(
+        default=None,
+        description="List of agent skills to enable for this execution. Skills provide domain-specific expertise and capabilities.",
+    )
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -289,6 +310,40 @@ class AgentCreationResponse(BaseModel):
         ..., description="Date and time when the agent was updated (in UTC timezone)"
     )
     status: JobStatus = Field(..., description="The status of the agent")
+
+
+class SkillInfo(BaseModel):
+    """Skill information response."""
+
+    id: str = Field(..., description="ID of the skill")
+    name: str = Field(..., description="Name of the skill")
+    description: Optional[str] = Field(None, description="Description of the skill")
+    version: Optional[str] = Field(None, description="Version of the skill")
+    created_at: Optional[datetime] = Field(
+        None, description="Date and time when the skill was created (in UTC timezone)"
+    )
+    updated_at: Optional[datetime] = Field(
+        None, description="Date and time when the skill was updated (in UTC timezone)"
+    )
+    status: Optional[JobStatus] = Field(None, description="The status of the skill")
+
+
+class SkillDownloadResponse(BaseModel):
+    """Response for skill download URL."""
+
+    download_url: str = Field(
+        ..., description="Presigned download URL for the skill zip"
+    )
+    expires_in: Optional[int] = Field(None, description="Seconds until the URL expires")
+
+
+class AgentSkill(BaseModel):
+    """Skill reference for use in agent requests."""
+
+    skill_name: Optional[str] = Field(None, description="Human-readable skill name")
+    skill_id: Optional[str] = Field(None, description="Unique skill identifier")
+    version: Optional[str] = Field(default="latest", description="Skill version")
+    type: Optional[str] = Field(default="vlm-run", description="Skill type")
 
 
 class GenerationConfig(BaseModel):
@@ -470,7 +525,7 @@ class MarkdownFigure(BaseModel):
 
     def render(self) -> str:
         """Replace all <Figure> blocks with their rendered markdown content."""
-        return f"""<Figure id="fg-{self.id}"/>\n\n{self.content or ''}"""
+        return f"""<Figure id="fg-{self.id}"/>\n\n{self.content or ""}"""
 
 
 class MarkdownPage(BaseModel):
@@ -556,19 +611,3 @@ class MarkdownDocument(BaseModel):
             if page.figures:
                 figures.extend(page.figures)
         return figures
-
-
-class ImageUrl(BaseModel):
-    url: str = Field(..., description="The URL of the image")
-
-
-class DocumentUrl(BaseModel):
-    url: str = Field(..., description="The URL of the document")
-
-
-class VideoUrl(BaseModel):
-    url: str = Field(..., description="The URL of the video")
-
-
-class AudioUrl(BaseModel):
-    url: str = Field(..., description="The URL of the audio")

@@ -26,6 +26,7 @@ class VLMRunProtocol(Protocol):
     feedback: Any
     agent: Any
     requestor: Any
+    artifacts: Any
 
     def __post_init__(self) -> None:
         """Initialize after dataclass initialization."""

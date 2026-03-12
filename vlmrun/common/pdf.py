@@ -4,7 +4,7 @@ from typing import Iterable, Literal, Tuple, Optional, Union
 
 from PIL import Image
 
-from loguru import logger
+from vlmrun.common.logging import logger
 
 
 @dataclass

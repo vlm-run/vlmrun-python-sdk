@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from loguru import logger
+from vlmrun.common.logging import logger
 from pathlib import Path
 from typing import List, Literal, Optional
 from vlmrun.client.base_requestor import APIRequestor

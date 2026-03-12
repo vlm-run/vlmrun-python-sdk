@@ -2,6 +2,7 @@
 
 import hashlib
 import pytest
+from functools import cached_property
 from typer.testing import CliRunner
 from pydantic import BaseModel
 
@@ -16,6 +17,7 @@ from vlmrun.client.types import (
     FileResponse,
     PredictionResponse,
     CreditUsage,
+    PresignedUrlResponse,
 )
 
 
@@ -88,6 +90,8 @@ def mock_client(monkeypatch):
         def __init__(self, api_key=None, base_url=None):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
+            self.timeout = 120.0
+            self.max_retries = 1
             self.dataset = self.Dataset(self)
             self.fine_tuning = self.FineTuning(self)
             self.predictions = self.Prediction(self)
@@ -100,6 +104,7 @@ def mock_client(monkeypatch):
             self.audio = self.AudioPredictions(self)
             self.feedback = self.Feedback(self)
             self.agent = self.Agent(self)
+            self.artifacts = self.Artifacts(self)
 
         class FineTuning:
             def __init__(self, client):
@@ -212,6 +217,17 @@ def mock_client(monkeypatch):
                     filename="test.txt",
                     bytes=10,
                     purpose="assistants",
+                    created_at="2024-01-01T00:00:00+00:00",
+                )
+
+            def generate_presigned_url(self, params):
+                return PresignedUrlResponse(
+                    id="presigned1",
+                    url="https://storage.example.com/upload/presigned1",
+                    filename=params.filename,
+                    content_type="application/octet-stream",
+                    upload_method="PUT",
+                    public_url="https://storage.example.com/files/presigned1",
                     created_at="2024-01-01T00:00:00+00:00",
                 )
 
@@ -475,6 +491,32 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
+            @cached_property
+            def completions(self):
+                from openai import OpenAI
+
+                base_url = f"{self._client.base_url}/openai"
+                openai_client = OpenAI(
+                    api_key=self._client.api_key,
+                    base_url=base_url,
+                    timeout=self._client.timeout,
+                    max_retries=self._client.max_retries,
+                )
+                return openai_client.chat.completions
+
+            @cached_property
+            def async_completions(self):
+                from openai import AsyncOpenAI
+
+                base_url = f"{self._client.base_url}/openai"
+                async_openai_client = AsyncOpenAI(
+                    api_key=self._client.api_key,
+                    base_url=base_url,
+                    timeout=self._client.timeout,
+                    max_retries=self._client.max_retries,
+                )
+                return async_openai_client.chat.completions
+
             def get(self, name=None, id=None, prompt=None):
                 from vlmrun.client.types import AgentInfo
                 from datetime import datetime
@@ -603,6 +645,30 @@ def mock_client(monkeypatch):
                     response={"result": "execution result"},
                     usage=CreditUsage(credits_used=50),
                 )
+
+        class Artifacts:
+            def __init__(self, client):
+                self._client = client
+
+            def get(
+                self,
+                object_id: str,
+                session_id: str = None,
+                execution_id: str = None,
+                raw_response: bool = False,
+            ) -> bytes:
+                if session_id is None and execution_id is None:
+                    raise ValueError(
+                        "Either `session_id` or `execution_id` is required"
+                    )
+                if session_id is not None and execution_id is not None:
+                    raise ValueError(
+                        "Only one of `session_id` or `execution_id` is allowed, not both"
+                    )
+                return b"mock artifact content"
+
+            def list(self, session_id: str):
+                raise NotImplementedError("Artifacts.list() is not yet implemented")
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()

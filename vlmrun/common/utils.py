@@ -4,7 +4,7 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Union, Literal, Dict, Any
-from loguru import logger
+from vlmrun.common.logging import logger
 
 import tarfile
 import requests
@@ -139,6 +139,8 @@ def download_artifact(
         return requests.get(url, headers=_HEADERS).json()
     elif format == "file":
         path = VLMRUN_CACHE_DIR / "downloads" / Path(url).name
+        # strip any query parameters from the name
+        path = path.with_name(path.name.split("?")[0])
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             with requests.get(url, headers=_HEADERS, stream=True) as r:

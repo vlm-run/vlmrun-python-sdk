@@ -22,11 +22,12 @@ from vlmrun.client.predictions import (
 )
 from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
+from vlmrun.client.skills import Skills
 from vlmrun.client.executions import Executions
+from vlmrun.client.artifacts import Artifacts
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
 from vlmrun.client.exceptions import (
-    DependencyError,
     ConfigurationError,
     AuthenticationError,
 )
@@ -118,7 +119,9 @@ class VLMRun:
         self.video._requestor._timeout = 120.0
         self.feedback = Feedback(self)
         self.agent = Agent(self)
+        self.skills = Skills(self)
         self.executions = Executions(self)
+        self.artifacts = Artifacts(self)
 
     def __repr__(self):
         return f"VLMRun(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
@@ -131,20 +134,6 @@ class VLMRun:
     def requestor(self):
         """Requestor for the API."""
         return APIRequestor(self, timeout=self.timeout, max_retries=self.max_retries)
-
-    @cached_property
-    def openai(self):
-        """OpenAI client."""
-        try:
-            from openai import OpenAI as _OpenAI
-        except ImportError:
-            raise DependencyError(
-                message="OpenAI client is not installed",
-                suggestion="Install it with `pip install openai`",
-                error_type="missing_dependency",
-            )
-
-        return _OpenAI(api_key=self.api_key, base_url=f"{self.base_url}/openai")
 
     def healthcheck(self) -> bool:
         """Check the health of the API."""
