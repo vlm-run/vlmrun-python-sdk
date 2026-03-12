@@ -1,14 +1,19 @@
 """Hub API commands."""
 
+from __future__ import annotations
+
 import typer
 import json
+from typing import TYPE_CHECKING, List
+from rich import box
 from rich.table import Table
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.panel import Panel
-from vlmrun.client import VLMRun
-from vlmrun.client.types import HubDomainInfo, HubSchemaResponse
-from typing import List
+
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
+    from vlmrun.client.types import HubDomainInfo, HubSchemaResponse
 
 app = typer.Typer(
     help="Hub operations",
@@ -16,13 +21,14 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+console = Console()
+
 
 @app.command()
 def version(ctx: typer.Context) -> None:
     """Get hub version."""
     client: VLMRun = ctx.obj
     info = client.hub.info()
-    console = Console()
     console.print(f"Hub version: {info.version}", style="white")
     console.print(
         "\nVisit https://github.com/vlm-run/vlmrun-hub for more information",
@@ -44,18 +50,16 @@ def list_domains(
     if domain:
         domains = [d for d in domains if domain in d.domain]
 
-    console = Console()
     table = Table(
         show_header=True,
-        header_style="white",
-        title="Available Domains",
-        title_style="white",
-        border_style="white",
+        box=box.SIMPLE_HEAVY,
+        header_style="bold white",
+        padding=(0, 1),
         expand=True,
     )
 
-    table.add_column("Category")
-    table.add_column("Domain")
+    table.add_column("CATEGORY")
+    table.add_column("DOMAIN", style="bold cyan")
 
     domain_groups = {}
     for domain in domains:
@@ -68,14 +72,24 @@ def list_domains(
         first_in_category = True
         for domain in sorted(domain_groups[category], key=lambda x: x.domain):
             if first_in_category:
-                table.add_row(category, domain.domain, style="white")
+                table.add_row(category, domain.domain)
                 first_in_category = False
             else:
-                table.add_row("", domain.domain, style="white")
+                table.add_row("", domain.domain)
         if category != sorted(domain_groups.keys())[-1]:
-            table.add_row("", "", style="white")
+            table.add_row("", "")
 
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="[bold]Domains[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{len(domains)} domain(s)[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(0, 1),
+        )
+    )
 
 
 @app.command()
@@ -88,8 +102,6 @@ def schema(
     """Get JSON schema for a domain."""
     client: VLMRun = ctx.obj
     response: HubSchemaResponse = client.hub.get_schema(domain)
-
-    console = Console()
 
     console.print("\nSchema Information:", style="white")
     meta_table = Table(show_header=False, box=None)

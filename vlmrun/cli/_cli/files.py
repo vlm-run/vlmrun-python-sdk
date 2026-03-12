@@ -1,20 +1,27 @@
 """Files API commands."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional, List
 
 import typer
+from rich import box
 from rich.table import Table
 from rich.console import Console
-from rich import print as rprint
-from vlmrun.client import VLMRun
-from vlmrun.client.types import FileResponse
+from rich.panel import Panel
+
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
+    from vlmrun.client.types import FileResponse
 
 app = typer.Typer(
     help="File operations",
     add_completion=False,
     no_args_is_help=True,
 )
+
+console = Console()
 
 
 @app.command()
@@ -23,13 +30,18 @@ def list(ctx: typer.Context) -> None:
     client: VLMRun = ctx.obj
 
     files: List[FileResponse] = client.files.list()
-    console = Console()
-    table = Table(show_header=True)
-    table.add_column("id", min_width=40)
-    table.add_column("filename")
-    table.add_column("bytes")
-    table.add_column("created_at")
-    table.add_column("purpose")
+    table = Table(
+        show_header=True,
+        box=box.SIMPLE_HEAVY,
+        header_style="bold white",
+        padding=(0, 1),
+        expand=True,
+    )
+    table.add_column("ID", style="bold cyan", min_width=40)
+    table.add_column("FILENAME")
+    table.add_column("SIZE", style="dim")
+    table.add_column("CREATED", style="dim")
+    table.add_column("PURPOSE", style="dim")
     for file in files:
         table.add_row(
             file.id,
@@ -39,7 +51,17 @@ def list(ctx: typer.Context) -> None:
             str(file.purpose),
         )
 
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="[bold]Files[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{len(files)} file(s)[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(0, 1),
+        )
+    )
 
 
 @app.command()
@@ -54,7 +76,7 @@ def upload(
     """Upload a file."""
     client: VLMRun = ctx.obj
     result = client.files.upload(str(file), purpose=purpose)
-    rprint(f"Uploaded file {result.filename} with ID: {result.id}")
+    console.print(f"Uploaded file {result.filename} with ID: {result.id}")
 
 
 @app.command()
@@ -65,7 +87,7 @@ def delete(
     """Delete a file."""
     client: VLMRun = ctx.obj
     client.files.delete(file_id)
-    rprint(f"Deleted file {file_id}")
+    console.print(f"Deleted file {file_id}")
 
 
 @app.command()
@@ -79,6 +101,6 @@ def get(
     content = client.files.get_content(file_id)
     if output:
         output.write_bytes(content)
-        rprint(f"File content written to {output}")
+        console.print(f"File content written to {output}")
     else:
-        rprint(content.decode())
+        console.print(content.decode())

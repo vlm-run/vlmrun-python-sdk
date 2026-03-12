@@ -1,18 +1,26 @@
 """Predictions API commands."""
 
+from __future__ import annotations
+
 import typer
+from typing import TYPE_CHECKING
+
+from rich import box
 from rich.table import Table
 from rich.console import Console
-from rich import print as rprint
+from rich.panel import Panel
 from datetime import datetime
 
-from vlmrun.client import VLMRun
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
 
 app = typer.Typer(
     help="Prediction operations",
     add_completion=False,
     no_args_is_help=True,
 )
+
+console = Console()
 
 
 @app.command()
@@ -39,7 +47,7 @@ def list(
             since_date = datetime.strptime(since, "%Y-%m-%d")
             predictions = [p for p in predictions if p.created_at >= since_date]
         except ValueError:
-            rprint("[red]Error:[/] Invalid date format for --since. Use YYYY-MM-DD")
+            console.print("[red]Error:[/] Invalid date format for --since. Use YYYY-MM-DD")
             raise typer.Exit(1)
 
     if until:
@@ -47,21 +55,26 @@ def list(
             until_date = datetime.strptime(until, "%Y-%m-%d")
             predictions = [p for p in predictions if p.created_at <= until_date]
         except ValueError:
-            rprint("[red]Error:[/] Invalid date format for --until. Use YYYY-MM-DD")
+            console.print("[red]Error:[/] Invalid date format for --until. Use YYYY-MM-DD")
             raise typer.Exit(1)
 
     if not predictions:
-        rprint("[yellow]No predictions found[/]")
+        console.print("[yellow]No predictions found[/]")
         return
 
-    console = Console()
-    table = Table(show_header=True, header_style="white", border_style="white")
-    table.add_column("id", min_width=40)
-    table.add_column("created_at")
-    table.add_column("status")
-    table.add_column("usage.elements_processed")
-    table.add_column("usage.element_type")
-    table.add_column("usage.credits_used")
+    table = Table(
+        show_header=True,
+        box=box.SIMPLE_HEAVY,
+        header_style="bold white",
+        padding=(0, 1),
+        expand=True,
+    )
+    table.add_column("ID", style="bold cyan", min_width=40)
+    table.add_column("CREATED", style="dim")
+    table.add_column("STATUS")
+    table.add_column("ELEMENTS", style="dim")
+    table.add_column("TYPE", style="dim")
+    table.add_column("CREDITS", style="dim")
     for prediction in predictions:
         table.add_row(
             prediction.id,
@@ -70,10 +83,19 @@ def list(
             str(prediction.usage.elements_processed),
             str(prediction.usage.element_type),
             str(prediction.usage.credits_used),
-            style="white",
         )
 
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="[bold]Predictions[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{len(predictions)} prediction(s)[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(0, 1),
+        )
+    )
 
 
 @app.command()
@@ -90,8 +112,6 @@ def get(
         prediction = client.predictions.wait(prediction_id, timeout=timeout)
     else:
         prediction = client.predictions.get(prediction_id)
-
-    console = Console()
 
     console.print("\nPrediction Details:\n", style="white")
 

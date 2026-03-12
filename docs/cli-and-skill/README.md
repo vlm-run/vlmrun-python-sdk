@@ -37,8 +37,9 @@ Artifacts are automatically downloaded to `~/.vlmrun/cache/artifacts/<session_id
 
 **Prompt Sources (in order of precedence):**
 1. Command line argument
-2. -p option (text, file path, or 'stdin')
-3. Auto-detected piped stdin
+2. Piped input from stdin
+3. From a file -p <prompt_file>
+
 
 ```bash
 # Basic usage
@@ -52,7 +53,7 @@ vlmrun chat -p long_prompt.txt -i photo.jpg
 echo "Describe this image" | vlmrun chat - -i photo.jpg
 echo "Describe this image" | vlmrun chat -p stdin -i photo.jpg
 
-# Compare multiple images
+# Compare multiple images  
 vlmrun chat "Compare these two images" -i img1.jpg -i img2.jpg
 
 # Save to custom directory (by default, artifacts are saved to ~/.vlmrun/cache/artifacts/)
@@ -66,14 +67,13 @@ vlmrun chat "Quick description" -i photo.jpg -nd
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--prompt` | `-p` | Prompt text, file path, or 'stdin' for piped input |
+| `--prompt` | `-p` | Text input, prompt file or stdin (default: stdin) |
 | `--input` | `-i` | Input file(s): images, videos, or documents (repeatable) |
-| `--output` | `-o` | Directory for artifacts (default: ~/.vlmrun/cache/artifacts/) |
+| `--output` | `-o` | Directory for artifacts (default: ~/.vlm/cache/artifacts/) |
 | `--model` | `-m` | Model (default: `vlmrun-orion-1:auto`) |
 | `--json` | `-j` | Output raw JSON response (default: text) |
 | `--no-stream` | `-ns` | Do not stream the response in real-time (default: stream) |
 | `--no-download` | `-nd` | Skip artifact download (default: download artifacts) |
-| `--session-id` | `-s` | Session UUID for stateful conversations (persists chat history) |
 
 **Models:**
 
@@ -125,7 +125,7 @@ vlmrun chat "Remove the background from this image" -i product.jpg
 vlmrun chat "Summarize this video in 3 bullet points" -i meeting.mp4
 
 # Extract highlights
-# This should generate 3 artifacts (.mp4 clips) in the output directory (default: ~/.vlmrun/cache/artifacts/)
+# This should generate 3 artifacts (.mp4 clips) in the output directory (default: ~/.vlm/cache/artifacts/)
 vlmrun chat "Find the top 3 most interesting moments and create clips" -i sports.mp4
 
 # Transcription
@@ -151,22 +151,6 @@ vlmrun chat "Summarize the key terms and obligations" -i contract.pdf
 vlmrun chat "Analyze this document and classify each page type" -i multi_page.pdf
 ```
 
-### Stateful Conversations
-
-Use the `--session-id` flag to continue a previous conversation with persistent context. This enables multi-turn interactions where the AI remembers previous messages.
-
-```bash
-# Start a conversation - the response will display a session ID
-# Response (id=abc123-def456-...)
-vlmrun chat "What objects do you see in this image?" -i photo.jpg
-
-# Continue the conversation using the session ID from the first response
-vlmrun chat "Can you describe the largest object in more detail?" --session-id <session-uuid>
-
-# Ask follow-up questions without re-uploading the image
-vlmrun chat "What colors are present?" --session-id <session-uuid>
-```
-
 ## Environment Variables
 
 | Variable | Description |
@@ -183,113 +167,6 @@ The CLI uses the official [VLM Run Python SDK](https://pypi.org/project/vlmrun/)
 - **Act**: Execute multi-step visual workflows with specialized tools
 
 Unlike basic vision-language models, Orion orchestrates specialized computer vision tools (OCR, detection, segmentation, generation, etc.) to deliver precise, production-ready results.
-
-## Additional Commands
-
-VLM Run CLI also provides additional commands for advanced operations:
-
-### Configuration
-
-```bash
-# Set your API key
-vlmrun config set --api-key YOUR_API_KEY
-
-# View current configuration
-vlmrun config show
-```
-
-### Dataset Management
-
-```bash
-# Create a dataset from a directory of files
-vlmrun datasets create --directory ./images --domain document.invoice --dataset-name "Invoice Dataset" --dataset-type images
-
-# List your datasets
-vlmrun datasets list
-```
-
-### Model Operations
-
-```bash
-# List available models
-vlmrun models list
-
-# Fine-tune a model
-vlmrun fine-tuning create --model base_model --training-file training_file_id
-```
-
-### Predictions
-
-```bash
-# Generate predictions from a document
-vlmrun generate document path/to/document.pdf --domain document.invoice
-
-# List predictions
-vlmrun predictions list
-
-# Get prediction details
-vlmrun predictions get PREDICTION_ID
-```
-
-### Hub Operations
-
-```bash
-# List available domains
-vlmrun hub list
-
-# View schema for a domain
-vlmrun hub schema document.invoice
-```
-
-### Skills Management
-
-Manage reusable skills (SKILL.md bundles) for specialized agent behavior.
-
-```bash
-# List skills
-vlmrun skills list
-vlmrun skills list --grouped    # latest version per name
-
-# Get a skill by name or ID
-vlmrun skills get my-skill
-vlmrun skills get my-skill -V 20260312-abc
-vlmrun skills get <uuid>
-
-# Upload a skill folder (name/description parsed from SKILL.md frontmatter)
-vlmrun skills upload ./my-skill
-vlmrun skills upload ./my-skill --name custom-name
-
-# Download a skill
-vlmrun skills download my-skill                 # → ~/.vlmrun/skills/my-skill/
-vlmrun skills download my-skill -V 0.2.0        # specific version
-vlmrun skills download <uuid> -o ./local-dir    # custom output
-
-# Create a skill from prompt or session
-vlmrun skills create --prompt "Extract invoice fields"
-vlmrun skills create --session-id <session-uuid>
-```
-
-### Full Command Reference
-
-Here are the main command groups available:
-
-- `vlmrun chat` - Chat with Orion visual AI agent
-- `vlmrun config` - Manage configuration settings
-- `vlmrun datasets` - Dataset operations
-- `vlmrun files` - File management
-- `vlmrun fine-tuning` - Model fine-tuning operations
-- `vlmrun generate` - Generate predictions
-- `vlmrun hub` - Access domain schemas and information
-- `vlmrun models` - Model operations
-- `vlmrun predictions` - Manage and monitor predictions
-- `vlmrun skills` - Create, list, upload, download, and manage skills
-
-For detailed help on any command, use the `--help` flag:
-
-```bash
-vlmrun --help
-vlmrun <command> --help
-```
 
 ## Support
 
