@@ -164,9 +164,6 @@ def create_skill(
     file_id: Optional[str] = typer.Option(
         None, "--file-id", help="Pre-uploaded skill zip file ID."
     ),
-    session_id: Optional[str] = typer.Option(
-        None, "--session-id", help="Chat session ID to derive the skill from."
-    ),
     name: Optional[str] = typer.Option(
         None, "--name", "-n", help="Skill name (required for --file-id, optional otherwise)."
     ),
@@ -175,13 +172,12 @@ def create_skill(
     ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
 ) -> None:
-    """Create a new skill from a prompt, file, or chat session.
+    """Create a new skill from a prompt or file.
 
     \b
-    Three creation modes (provide exactly one source):
+    Two creation modes (provide exactly one source):
       --prompt / --prompt-file   Auto-generate SKILL.md (+ optional --schema)
       --file-id                  Use a pre-uploaded skill zip
-      --session-id               Derive from a chat session
     """
     client: VLMRun = ctx.obj
 
@@ -194,10 +190,10 @@ def create_skill(
         resolved_prompt = prompt_file.read_text().strip()
 
     # Validate that exactly one source is given
-    sources = [resolved_prompt is not None, file_id is not None, session_id is not None]
+    sources = [resolved_prompt is not None, file_id is not None]
     if sum(sources) != 1:
         console.print(
-            "[red]Error:[/] Provide exactly one of --prompt/--prompt-file, --file-id, or --session-id."
+            "[red]Error:[/] Provide exactly one of --prompt/--prompt-file or --file-id."
         )
         raise typer.Exit(1)
 
@@ -213,7 +209,6 @@ def create_skill(
     skill = client.skills.create(
         prompt=resolved_prompt,
         json_schema=json_schema,
-        session_id=session_id,
         file_id=file_id,
         name=name,
         description=description,
