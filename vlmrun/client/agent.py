@@ -255,7 +255,7 @@ class Agent:
             ```python
             from vlmrun import VLMRun
 
-            client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
+            client = VLMRun(api_key="your-key", base_url="https://api.vlm.run/v1")
 
             response = client.agent.completions.create(
                 model="vlmrun-orion-1",
@@ -303,7 +303,7 @@ class Agent:
             from vlmrun import VLMRun
             import asyncio
 
-            client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
+            client = VLMRun(api_key="your-key", base_url="https://api.vlm.run/v1")
 
             async def main():
                 response = await client.agent.async_completions.create(

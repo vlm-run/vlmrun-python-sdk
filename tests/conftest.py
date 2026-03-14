@@ -1,10 +1,18 @@
 """Test fixtures for vlmrun tests."""
 
 import hashlib
+import re
 import pytest
 from functools import cached_property
 from typer.testing import CliRunner
 from pydantic import BaseModel
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return _ANSI_RE.sub("", text)
 
 from datetime import datetime
 from typing import List
@@ -18,6 +26,8 @@ from vlmrun.client.types import (
     PredictionResponse,
     CreditUsage,
     PresignedUrlResponse,
+    SkillInfo,
+    SkillDownloadResponse,
 )
 
 
@@ -105,6 +115,76 @@ def mock_client(monkeypatch):
             self.feedback = self.Feedback(self)
             self.agent = self.Agent(self)
             self.artifacts = self.Artifacts(self)
+            self.skills = self.Skills(self)
+
+        class Skills:
+            def __init__(self, client):
+                self._client = client
+
+            def list(self, limit=25, offset=0, order_by="created_at", descending=True, grouped=False):
+                return [
+                    SkillInfo(
+                        id="fe5f8791-ec9e-4c3b-a904-4ec14a9d172c",
+                        name="invoice-parsing",
+                        description="Extracts data from invoice documents.",
+                        version="20260101-abcd1234",
+                        created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        status="completed",
+                        is_public=False,
+                    ),
+                    SkillInfo(
+                        id="a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                        name="receipt-parsing",
+                        description="Extracts data from receipt images.",
+                        version="20260102-deadbeef",
+                        created_at=datetime.fromisoformat("2024-01-02T00:00:00+00:00"),
+                        updated_at=datetime.fromisoformat("2024-01-02T00:00:00+00:00"),
+                        status="completed",
+                        is_public=True,
+                    ),
+                ]
+
+            def get(self, id=None, name=None, version=None):
+                if id:
+                    return SkillInfo(
+                        id=id,
+                        name="invoice-parsing",
+                        description="Extracts data from invoice documents.",
+                        version="20260101-abcd1234",
+                        created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                        status="completed",
+                        is_public=False,
+                    )
+                return SkillInfo(
+                    id="fe5f8791-ec9e-4c3b-a904-4ec14a9d172c",
+                    name=name or "invoice-parsing",
+                    description="Extracts data from invoice documents.",
+                    version=version or "20260101-abcd1234",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    status="completed",
+                    is_public=False,
+                )
+
+            def create(self, file_id=None, name=None, description=None, prompt=None, json_schema=None, session_id=None):
+                return SkillInfo(
+                    id="fe5f8791-ec9e-4c3b-a904-4ec14a9d172c",
+                    name=name or "generated-skill",
+                    description=description or "Auto-generated skill.",
+                    version="20260101-abcd1234",
+                    created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+                    status="completed",
+                    is_public=False,
+                )
+
+            def download(self, skill_id):
+                return SkillDownloadResponse(
+                    download_url="https://example.com/skill.zip",
+                    expires_in=3600,
+                )
 
         class FineTuning:
             def __init__(self, client):
@@ -190,10 +270,11 @@ def mock_client(monkeypatch):
                     )
                 ]
 
-            def upload(self, file_path, purpose="fine-tune"):
+            def upload(self, file=None, file_path=None, purpose="fine-tune"):
+                path = file or file_path
                 return FileResponse(
                     id="file1",
-                    filename=str(file_path),
+                    filename=str(path) if path else "unknown",
                     bytes=10,
                     purpose=purpose,
                     created_at="2024-01-01T00:00:00+00:00",

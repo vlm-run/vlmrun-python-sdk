@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from typing import Optional
 
@@ -13,14 +12,14 @@ from rich.panel import Panel
 from rich.text import Text
 
 from vlmrun.client import VLMRun
+from vlmrun.cli._cli.chat import CHAT_HELP, chat
+from vlmrun.cli._cli.config import app as config_app, resolve_config
 from vlmrun.cli._cli.files import app as files_app
 from vlmrun.cli._cli.generate import app as generate_app
 from vlmrun.cli._cli.hub import app as hub_app
-from vlmrun.cli._cli.predictions import app as predictions_app
-from vlmrun.cli._cli.config import app as config_app, get_config
-from vlmrun.cli._cli.chat import chat as chat_command
 from vlmrun.cli._cli.models import app as models_app
-from vlmrun.constants import DEFAULT_BASE_URL
+from vlmrun.cli._cli.predictions import app as predictions_app
+from vlmrun.cli._cli.skills import app as skills_app
 
 app = typer.Typer(
     name="vlmrun",
@@ -41,14 +40,8 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def check_credentials(
-    ctx: typer.Context, api_key: Optional[str], base_url: str
-) -> None:
-    """Check if API key is present and show helpful message if missing."""
-    config = get_config()
-    api_key = api_key or config.api_key
-    base_url = base_url or config.base_url
-
+def check_credentials(api_key: Optional[str]) -> None:
+    """Check if resolved API key is present and show helpful message if missing."""
     if not api_key:
         console.print("\n[red bold]Error:[/] API key not found! 🔑\n")
         console.print(
@@ -68,14 +61,6 @@ def check_credentials(
             )
         )
         raise typer.Exit(1)
-
-    is_default_url = base_url == DEFAULT_BASE_URL and not os.getenv("VLMRUN_BASE_URL")
-    if is_default_url and not ctx.meta.get("has_shown_base_url_notice"):
-        console.print(
-            f"[yellow]Note:[/] Using default API endpoint: [blue]{base_url}[/]\n"
-            "To use a different endpoint, set [green]VLMRUN_BASE_URL[/] or use [green]--base-url[/]"
-        )
-        ctx.meta["has_shown_base_url_notice"] = True
 
 
 def is_help_requested() -> bool:
@@ -113,26 +98,24 @@ def main(
     ),
 ) -> None:
     """VLM Run CLI tool for interacting with the VLM Run API platform."""
-    # Skip credential check if just showing help or during tab completion
     if ctx.resilient_parsing or is_help_requested():
         return
 
-    # Skip credential check for config commands (needed to set API key)
     if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "config":
-        check_credentials(ctx, api_key, base_url)
-        ctx.obj = VLMRun(api_key=api_key, base_url=base_url)
+        cfg = resolve_config(api_key=api_key, base_url=base_url)
+        check_credentials(cfg.api_key)
+        ctx.obj = VLMRun(api_key=cfg.api_key, base_url=cfg.base_url)
 
 
 # Add subcommands
-app.add_typer(files_app, name="files")
-app.command(name="chat", help=chat_command.__doc__)(chat_command)
+app.command("chat", help=CHAT_HELP, context_settings={"max_content_width": 120})(chat)
 app.add_typer(generate_app, name="generate")
 app.add_typer(predictions_app, name="predictions")
+app.add_typer(files_app, name="files")
 app.add_typer(hub_app, name="hub")
-app.add_typer(config_app, name="config")
 app.add_typer(models_app, name="models")
-# app.add_typer(fine_tuning_app, name="fine-tuning")
-# app.add_typer(dataset_app, name="datasets")
+app.add_typer(skills_app, name="skills")
+app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
     app()

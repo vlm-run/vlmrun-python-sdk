@@ -24,15 +24,37 @@ class Skills:
         self._client = client
         self._requestor = APIRequestor(client)
 
-    def list(self) -> List[SkillInfo]:
-        """List all available skills.
+    def list(
+        self,
+        limit: int = 25,
+        offset: int = 0,
+        order_by: str = "created_at",
+        descending: bool = True,
+        grouped: bool = False,
+    ) -> List[SkillInfo]:
+        """List available skills.
+
+        Args:
+            limit: Max items to return (1-1000).
+            offset: Number of items to skip.
+            order_by: Sort field (created_at, updated_at, name).
+            descending: Sort direction.
+            grouped: If True, return only the latest version per skill name.
 
         Returns:
             List of SkillInfo objects
         """
+        params: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+            "order_by": order_by,
+            "descending": descending,
+            "grouped": grouped,
+        }
         response, status_code, headers = self._requestor.request(
             method="GET",
             url="skills",
+            params=params,
         )
 
         if not isinstance(response, list):

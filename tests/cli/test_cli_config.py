@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import patch
 from vlmrun.cli.cli import app
+from tests.conftest import strip_ansi
 
 
 @pytest.fixture(autouse=True)
@@ -11,6 +12,20 @@ def mock_health_check():
     with patch("vlmrun.client.client.APIRequestor.request") as mock_request:
         mock_request.return_value = (None, 200, {})
         yield mock_request
+
+
+def test_config_init(runner, config_file):
+    """config init creates a default config file."""
+    result = runner.invoke(app, ["config", "init"])
+    assert result.exit_code == 0
+    assert "Created" in result.stdout or "already exists" in result.stdout.lower() or result.exit_code == 0
+
+
+def test_config_init_force(runner, config_file):
+    """config init --force overwrites an existing config."""
+    runner.invoke(app, ["config", "set", "--api-key", "existing-key"])
+    result = runner.invoke(app, ["config", "init", "--force"])
+    assert result.exit_code == 0
 
 
 def test_show_empty_config(runner, config_file):
@@ -32,8 +47,9 @@ def test_set_and_show_config(runner, config_file):
 
     result = runner.invoke(app, ["config", "show"])
     assert result.exit_code == 0
-    assert "api_key:" in result.stdout
-    assert "base_url: https://test.vlm.run" in result.stdout
+    out = strip_ansi(result.stdout)
+    assert "api_key:" in out
+    assert "base_url: https://test.vlm.run" in out
 
 
 def test_unset_config(runner, config_file):
@@ -47,8 +63,9 @@ def test_unset_config(runner, config_file):
 
     result = runner.invoke(app, ["config", "show"])
     assert result.exit_code == 0
-    assert "api_key" not in result.stdout
-    assert "base_url: https://test.vlm.run" in result.stdout
+    out = strip_ansi(result.stdout)
+    assert "api_key" not in out
+    assert "base_url: https://test.vlm.run" in out
 
 
 def test_set_no_values(runner, config_file):

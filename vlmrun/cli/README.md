@@ -241,6 +241,34 @@ vlmrun hub list
 vlmrun hub schema document.invoice
 ```
 
+### Skills Management
+
+Manage reusable skills (SKILL.md bundles) for specialized agent behavior.
+
+```bash
+# List skills
+vlmrun skills list
+vlmrun skills list --grouped    # latest version per name
+
+# Get a skill by name or ID
+vlmrun skills get my-skill
+vlmrun skills get my-skill -V 20260312-abc
+vlmrun skills get <uuid>
+
+# Upload a skill folder (name/description parsed from SKILL.md frontmatter)
+vlmrun skills upload ./my-skill
+vlmrun skills upload ./my-skill --name custom-name
+
+# Download a skill
+vlmrun skills download my-skill                 # → ~/.vlmrun/skills/my-skill/
+vlmrun skills download my-skill -V 0.2.0        # specific version
+vlmrun skills download <uuid> -o ./local-dir    # custom output
+
+# Create a skill from prompt or session
+vlmrun skills create --prompt "Extract invoice fields"
+vlmrun skills create --session-id <session-uuid>
+```
+
 ### Full Command Reference
 
 Here are the main command groups available:
@@ -254,6 +282,7 @@ Here are the main command groups available:
 - `vlmrun hub` - Access domain schemas and information
 - `vlmrun models` - Model operations
 - `vlmrun predictions` - Manage and monitor predictions
+- `vlmrun skills` - Create, list, upload, download, and manage skills
 
 For detailed help on any command, use the `--help` flag:
 

@@ -90,7 +90,7 @@ from vlmrun.client import VLMRun
 
 client = VLMRun(
     api_key="your-key",
-    base_url="https://agent.vlm.run/v1"
+    base_url="https://api.vlm.run/v1"
 )
 
 response = client.agent.completions.create(
@@ -108,7 +108,7 @@ For async support:
 import asyncio
 from vlmrun.client import VLMRun
 
-client = VLMRun(api_key="your-key", base_url="https://agent.vlm.run/v1")
+client = VLMRun(api_key="your-key", base_url="https://api.vlm.run/v1")
 
 async def main():
     response = await client.agent.async_completions.create(

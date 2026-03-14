@@ -1,19 +1,26 @@
 """Models API commands."""
 
-from typing import List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List
 
 import typer
-from rich.table import Table
+from rich import box
 from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
-from vlmrun.client import VLMRun
-from vlmrun.client.types import ModelInfo
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
+    from vlmrun.client.types import ModelInfo
 
 app = typer.Typer(
-    help="Model operations",
+    help="List supported models and domains.",
     add_completion=False,
     no_args_is_help=True,
 )
+
+console = Console()
 
 
 @app.command()
@@ -30,19 +37,17 @@ def list(
     if domain:
         models = [m for m in models if domain in m.domain]
 
-    console = Console()
     table = Table(
         show_header=True,
-        header_style="white",
-        border_style="white",
-        title="Available Models",
-        title_style="white",
+        header_style="bold white",
+        box=box.SIMPLE_HEAVY,
+        padding=(0, 1),
         expand=True,
     )
 
-    table.add_column("Category")
-    table.add_column("Model")
-    table.add_column("Domain")
+    table.add_column("CATEGORY")
+    table.add_column("MODEL", style="bold cyan")
+    table.add_column("DOMAIN", style="dim")
 
     domain_groups = {}
     for model in models:
@@ -55,11 +60,21 @@ def list(
         first_in_category = True
         for model in sorted(domain_groups[category], key=lambda x: x.domain):
             if first_in_category:
-                table.add_row(category, model.model, model.domain, style="white")
+                table.add_row(category, model.model, model.domain)
                 first_in_category = False
             else:
-                table.add_row("", model.model, model.domain, style="white")
+                table.add_row("", model.model, model.domain)
         if category != sorted(domain_groups.keys())[-1]:
-            table.add_row("", "", "", style="dim white")
+            table.add_row("", "", "")
 
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="[bold]Models[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{len(models)} model(s)[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(0, 1),
+        )
+    )

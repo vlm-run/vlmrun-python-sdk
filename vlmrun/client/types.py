@@ -326,6 +326,7 @@ class SkillInfo(BaseModel):
         None, description="Date and time when the skill was updated (in UTC timezone)"
     )
     status: Optional[JobStatus] = Field(None, description="The status of the skill")
+    is_public: Optional[bool] = Field(None, description="Whether the skill is public")
 
 
 class SkillDownloadResponse(BaseModel):

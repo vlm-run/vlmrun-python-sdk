@@ -1,19 +1,25 @@
 """Fine-tuning API commands."""
 
-import typer
-from typing import List
-from rich.table import Table
-from rich.console import Console
-from rich import print as rprint
+from __future__ import annotations
 
-from vlmrun.client import VLMRun
-from vlmrun.client.types import FinetuningResponse, FinetuningProvisionResponse
+import typer
+from typing import TYPE_CHECKING, List
+
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
+    from vlmrun.client.types import FinetuningResponse, FinetuningProvisionResponse
 
 app = typer.Typer(
     help="Fine-tuning operations",
     add_completion=False,
     no_args_is_help=True,
 )
+console = Console()
 
 
 @app.command()
@@ -44,7 +50,7 @@ def create(
         wandb_api_key=wandb_api_key,
         wandb_base_url=wandb_base_url,
     )
-    rprint(f"Created fine-tuning job with ID: {result.id}")
+    console.print(f"Created fine-tuning job with ID: {result.id}")
 
 
 @app.command()
@@ -52,14 +58,19 @@ def list(ctx: typer.Context) -> None:
     """List all fine-tuning jobs."""
     client: VLMRun = ctx.obj
     jobs: List[FinetuningResponse] = client.fine_tuning.list()
-    console = Console()
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("id", min_width=40)
-    table.add_column("model")
-    table.add_column("status")
-    table.add_column("created_at")
-    table.add_column("completed_at")
-    table.add_column("wandb_url")
+    table = Table(
+        show_header=True,
+        box=box.SIMPLE_HEAVY,
+        header_style="bold white",
+        padding=(0, 1),
+        expand=True,
+    )
+    table.add_column("ID", style="bold cyan", min_width=40)
+    table.add_column("MODEL")
+    table.add_column("STATUS", style="dim")
+    table.add_column("CREATED", style="dim")
+    table.add_column("COMPLETED", style="dim")
+    table.add_column("WANDB URL", style="dim")
     for job in jobs:
         table.add_row(
             job.id,
@@ -70,7 +81,17 @@ def list(ctx: typer.Context) -> None:
             job.wandb_url,
         )
 
-    console.print(table)
+    console.print(
+        Panel(
+            table,
+            title="[bold]Fine-tuning Jobs[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{len(jobs)} job(s)[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(0, 1),
+        )
+    )
 
 
 @app.command()
@@ -85,7 +106,7 @@ def provision(
     result: FinetuningProvisionResponse = client.fine_tuning.provision(
         model=model, duration=duration, concurrency=concurrency
     )
-    rprint(f"Provisioned fine-tuning model\n{result}")
+    console.print(f"Provisioned fine-tuning model\n{result}")
 
 
 @app.command()
@@ -96,7 +117,7 @@ def get(
     """Get fine-tuning job details."""
     client: VLMRun = ctx.obj
     job: FinetuningResponse = client.fine_tuning.get(job_id)
-    rprint(job)
+    console.print(job)
 
 
 @app.command()
@@ -107,4 +128,4 @@ def cancel(
     """Cancel a fine-tuning job."""
     client: VLMRun = ctx.obj
     client.fine_tuning.cancel(job_id)
-    rprint(f"Cancelled fine-tuning job {job_id}")
+    console.print(f"Cancelled fine-tuning job {job_id}")
