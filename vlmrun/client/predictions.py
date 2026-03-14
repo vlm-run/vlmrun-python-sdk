@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import json
+import warnings
 from pathlib import Path
 from typing import List, Optional, Union
 from PIL import Image
@@ -497,6 +498,12 @@ def FilePredictions(route: str):
         ) -> PredictionResponse:
             """Generate a document prediction using a named model.
 
+            .. deprecated::
+                The /document/execute endpoint has been removed in v0.19.0.
+                Redaction domains are now served via /document/generate.
+                Use ``generate(domain="healthcare.phi-redaction", ...)``
+                instead of ``execute(name="healthcare/phi-redaction", ...)``.
+
             Args:
                 name: Name of the model to execute
                 version: Version of the model to execute
@@ -511,32 +518,23 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
-            is_url, file_or_url = self._handle_file_or_url(file, url)
-
-            additional_kwargs = {}
-            if config:
-                additional_kwargs["config"] = config.model_dump()
-            if metadata:
-                additional_kwargs["metadata"] = metadata.model_dump()
-            response, status_code, headers = self._requestor.request(
-                method="POST",
-                url=f"{route}/execute",
-                data={
-                    "name": name,
-                    "version": version,
-                    "url" if is_url else "file_id": file_or_url,
-                    "batch": batch,
-                    "callback_url": callback_url,
-                    **additional_kwargs,
-                },
+            warnings.warn(
+                f"{route}.execute() is deprecated and will be removed in a future release. "
+                f"Use {route}.generate(domain='{name.replace('/', '.')}', ...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
             )
-            if not isinstance(response, dict):
-                raise TypeError("Expected dict response")
-            prediction = PredictionResponse(**response)
-
-            if autocast:
-                self._cast_response_to_schema(prediction, name, config)
-            return prediction
+            domain = name.replace("/", ".")
+            return self.generate(
+                file=file,
+                url=url,
+                domain=domain,
+                batch=batch,
+                config=config,
+                metadata=metadata,
+                callback_url=callback_url,
+                autocast=autocast,
+            )
 
         def schema(
             self,
