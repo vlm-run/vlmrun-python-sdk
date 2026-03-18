@@ -152,11 +152,13 @@ Install the VLM Run CLI skill directly in [Claude Code](https://docs.anthropic.c
 /plugin install vlmrun-cli-skill@vlm-run/vlmrun-python-sdk
 ```
 
-3. Set up your environment variables by creating an `.env` file with your API key from [app.vlm.run](https://app.vlm.run):
+3. Configure your API key and base URL using the CLI (get your key from [app.vlm.run](https://app.vlm.run)):
 
 ```bash
-VLMRUN_API_KEY=<your-api-key>
-VLMRUN_BASE_URL=https://api.vlm.run/v1
+vlmrun config init
+vlmrun config set VLMRUN_API_KEY <your-api-key>
+vlmrun config set VLMRUN_BASE_URL https://api.vlm.run/v1
+vlmrun config show
 ```
 
 4. Verify the skill is loaded by asking Claude Code (requires restart):
