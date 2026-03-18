@@ -156,8 +156,7 @@ Install the VLM Run CLI skill directly in [Claude Code](https://docs.anthropic.c
 
 ```bash
 vlmrun config init
-vlmrun config set VLMRUN_API_KEY <your-api-key>
-vlmrun config set VLMRUN_BASE_URL https://api.vlm.run/v1
+vlmrun config set --api-key <your-api-key>
 vlmrun config show
 ```
 
