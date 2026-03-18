@@ -1,9 +1,12 @@
 """Tests for inline skills support in types and CLI."""
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import io
 import zipfile
+from typing import Optional
 
 import pytest
 
@@ -16,7 +19,7 @@ from vlmrun.client.types import AgentSkill, InlineSkillSource
 
 
 def _make_skill_zip(
-    skill_md_content: str = "# Test Skill\n", extra_files: dict | None = None
+    skill_md_content: str = "# Test Skill\n", extra_files: Optional[dict] = None
 ) -> str:
     """Create a base64-encoded zip bundle with a SKILL.md and optional extra files."""
     buf = io.BytesIO()
