@@ -15,7 +15,9 @@ from vlmrun.client.types import AgentSkill, InlineSkillSource
 # ---------------------------------------------------------------------------
 
 
-def _make_skill_zip(skill_md_content: str = "# Test Skill\n", extra_files: dict | None = None) -> str:
+def _make_skill_zip(
+    skill_md_content: str = "# Test Skill\n", extra_files: dict | None = None
+) -> str:
     """Create a base64-encoded zip bundle with a SKILL.md and optional extra files."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -182,7 +184,9 @@ class TestAgentSkillInline:
         assert dumped["source"]["data"] == bundle
 
     def test_inline_skill_serialization_roundtrip(self):
-        bundle = _make_skill_zip("# Round-trip\n", {"schema.json": '{"type": "object"}'})
+        bundle = _make_skill_zip(
+            "# Round-trip\n", {"schema.json": '{"type": "object"}'}
+        )
         skill = AgentSkill(
             type="inline",
             name="rt-skill",
