@@ -1,13 +1,9 @@
 {
-  "name": "vlmrun-cli-skill",
-  "description": "Agent Skills for visual AI tasks including image understanding, video processing, document extraction, and multi-modal generation using VLM Run's Orion agent",
-  "version": "1.0.0",
   "author": {
     "name": "VLM Run"
   },
+  "description": "Agent Skills for visual AI tasks including image understanding, video processing, document extraction, and multi-modal generation using VLM Run's Orion agent",
   "homepage": "https://vlm.run",
-  "repository": "https://github.com/vlm-run/vlmrun-python-sdk",
-  "license": "Apache-2.0",
   "keywords": [
     "vlmrun",
     "visual-ai",
@@ -18,5 +14,9 @@
     "image-generation",
     "video-generation",
     "multi-modal"
-  ]
+  ],
+  "license": "Apache-2.0",
+  "name": "vlmrun-cli-skill",
+  "repository": "https://github.com/vlm-run/vlmrun-python-sdk",
+  "version": "1.0.0"
 }

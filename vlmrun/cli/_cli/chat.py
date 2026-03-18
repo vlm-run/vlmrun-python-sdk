@@ -499,7 +499,8 @@ def chat(
     ),
     skill_dirs: Optional[List[Path]] = typer.Option(
         None,
-        "--skill", "-k",
+        "--skill",
+        "-k",
         help=(
             "Path to a skill directory (must contain SKILL.md). Repeatable. "
             "The skill is sent inline with the request (no server-side upload). "
