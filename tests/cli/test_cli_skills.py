@@ -1,8 +1,6 @@
 """Tests for the skills CLI subcommand."""
 
 import json
-import pytest
-from typer.testing import CliRunner
 
 from vlmrun.cli.cli import app
 from vlmrun.cli._cli.skills import (
@@ -137,7 +135,9 @@ def test_create_skill_multiple_sources(runner, mock_client, config_file):
     assert "Provide exactly one" in result.stdout
 
 
-def test_create_skill_prompt_and_prompt_file(runner, mock_client, config_file, tmp_path):
+def test_create_skill_prompt_and_prompt_file(
+    runner, mock_client, config_file, tmp_path
+):
     """skills create rejects --prompt and --prompt-file together."""
     pf = tmp_path / "prompt.txt"
     pf.write_text("Extract invoice data")
@@ -224,7 +224,9 @@ def test_upload_skill_missing_skillmd(runner, mock_client, config_file, tmp_path
     assert "SKILL.md not found" in result.stdout
 
 
-def test_upload_skill_no_name_in_frontmatter(runner, mock_client, config_file, tmp_path):
+def test_upload_skill_no_name_in_frontmatter(
+    runner, mock_client, config_file, tmp_path
+):
     """skills upload fails when SKILL.md has no name and --name is not given."""
     skill_dir = tmp_path / "unnamed-skill"
     skill_dir.mkdir()
@@ -264,7 +266,7 @@ class TestParseFrontmatter:
 
     def test_quoted_values(self, tmp_path):
         f = tmp_path / "SKILL.md"
-        f.write_text('---\nname: "my-skill"\ndescription: \'Quoted desc\'\n---\n')
+        f.write_text("---\nname: \"my-skill\"\ndescription: 'Quoted desc'\n---\n")
         name, desc = _parse_skill_frontmatter(f)
         assert name == "my-skill"
         assert desc == "Quoted desc"

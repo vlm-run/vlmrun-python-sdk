@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -37,7 +36,9 @@ console = Console()
 @app.command("list")
 def list_skills(
     ctx: typer.Context,
-    limit: int = typer.Option(25, "--limit", "-n", help="Max items to return (1-1000)."),
+    limit: int = typer.Option(
+        25, "--limit", "-n", help="Max items to return (1-1000)."
+    ),
     offset: int = typer.Option(0, "--offset", help="Number of items to skip."),
     order_by: str = typer.Option(
         "created_at",
@@ -85,7 +86,9 @@ def list_skills(
     table.add_column("CREATED", style="dim", max_width=16)
 
     for skill in skills:
-        created = skill.created_at.strftime("%Y-%m-%d %H:%M") if skill.created_at else ""
+        created = (
+            skill.created_at.strftime("%Y-%m-%d %H:%M") if skill.created_at else ""
+        )
         public_marker = "[green]y[/]" if skill.is_public else "n"
         table.add_row(
             skill.name,
@@ -116,9 +119,7 @@ def list_skills(
 @app.command("get")
 def get_skill(
     ctx: typer.Context,
-    name_or_id: str = typer.Argument(
-        ..., help="Skill name or UUID."
-    ),
+    name_or_id: str = typer.Argument(..., help="Skill name or UUID."),
     version: Optional[str] = typer.Option(
         None, "--version", "-V", help="Pin a specific version (used with name)."
     ),
@@ -165,7 +166,10 @@ def create_skill(
         None, "--file-id", help="Pre-uploaded skill zip file ID."
     ),
     name: Optional[str] = typer.Option(
-        None, "--name", "-n", help="Skill name (required for --file-id, optional otherwise)."
+        None,
+        "--name",
+        "-n",
+        help="Skill name (required for --file-id, optional otherwise).",
     ),
     description: Optional[str] = typer.Option(
         None, "--description", "-d", help="Skill description."
@@ -235,7 +239,10 @@ def upload_skill(
         None, "--name", "-n", help="Skill name (overrides SKILL.md frontmatter)."
     ),
     description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Skill description (overrides SKILL.md frontmatter)."
+        None,
+        "--description",
+        "-d",
+        help="Skill description (overrides SKILL.md frontmatter).",
     ),
 ) -> None:
     """Zip and upload a local skill folder, then create the skill.
@@ -262,7 +269,9 @@ def upload_skill(
 
     name = name or fm_name
     if not name:
-        console.print("[red]Error:[/] Could not determine skill name from SKILL.md frontmatter. Use --name.")
+        console.print(
+            "[red]Error:[/] Could not determine skill name from SKILL.md frontmatter. Use --name."
+        )
         raise typer.Exit(1)
     description = description or fm_desc
 
@@ -273,6 +282,8 @@ def upload_skill(
     short_hash = content_hash[:8]
     zip_filename = f"{name}_{short_hash}.zip"
     zip_path = archive_dir / zip_filename
+    if zip_path.exists():
+        console.print(f"[yellow]Warning:[/] Skill zip file already exists: {zip_path}")
 
     # -- Step 1: zip --------------------------------------------------------
     with console.status("[bold blue]Zipping skill folder…"):
@@ -284,13 +295,17 @@ def upload_skill(
                     file_count += 1
         zip_size = zip_path.stat().st_size
 
-    console.print(f"  [green]\u2713[/green] [white]Zipped {file_count} file(s) ({_fmt_size(zip_size)} \u2192 {zip_path})[/white]")
+    console.print(
+        f"  [green]\u2713[/green] [white]Zipped {file_count} file(s) ({_fmt_size(zip_size)} \u2192 {zip_path})[/white]"
+    )
 
     # -- Step 2: upload -----------------------------------------------------
     with console.status("[bold blue]Uploading zip…"):
         file_response = client.files.upload(file=zip_path, purpose="assistants")
 
-    console.print(f"  [green]\u2713[/green] [white]Uploaded (file_id={file_response.id})[/white]")
+    console.print(
+        f"  [green]\u2713[/green] [white]Uploaded (file_id={file_response.id})[/white]"
+    )
 
     # -- Step 3: create skill -----------------------------------------------
     with console.status("[bold blue]Creating skill…"):
@@ -300,7 +315,7 @@ def upload_skill(
             description=description,
         )
 
-    console.print(f"  [green]\u2713[/green] [white]Created skill[/white]")
+    console.print("  [green]\u2713[/green] [white]Created skill[/white]")
 
     _print_skill_with_tree(skill, directory, subtitle_path=zip_path)
 
@@ -357,27 +372,11 @@ def download_skill(
 def _parse_skill_frontmatter(skill_md: Path) -> tuple[Optional[str], Optional[str]]:
     """Extract name and description from SKILL.md YAML frontmatter.
 
-    Expects a file starting with ``---`` delimiters:
-        ---
-        name: my-skill
-        description: What this skill does
-        ---
+    Delegates to :func:`vlmrun.client.skills.parse_skill_frontmatter`.
     """
-    import re
+    from vlmrun.client.skills import parse_skill_frontmatter
 
-    text = skill_md.read_text(encoding="utf-8")
-    match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
-    if not match:
-        return None, None
-
-    fm_block = match.group(1)
-    name = desc = None
-    for line in fm_block.splitlines():
-        if line.startswith("name:"):
-            name = line.split(":", 1)[1].strip().strip("\"'")
-        elif line.startswith("description:"):
-            desc = line.split(":", 1)[1].strip().strip("\"'")
-    return name, desc
+    return parse_skill_frontmatter(skill_md)
 
 
 def _print_skill_with_tree(skill: SkillInfo, folder: Path, subtitle_path: Path) -> None:
@@ -407,39 +406,45 @@ def _print_skill_with_tree(skill: SkillInfo, folder: Path, subtitle_path: Path) 
     body = Group(tree, Text(), meta)
 
     subtitle = f"{len(files)} file(s), {_fmt_size(total_size)} \u2022 {subtitle_path}"
-    console.print(Panel(
-        body,
-        title="Skill",
-        title_align="left",
-        subtitle=f"[dim]{subtitle}[/dim]",
-        subtitle_align="right",
-        border_style="blue",
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            body,
+            title="Skill",
+            title_align="left",
+            subtitle=f"[dim]{subtitle}[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(1, 2),
+        )
+    )
 
 
 def _hash_directory(directory: Path) -> str:
-    """Compute a stable SHA-256 hash over all file contents in a directory."""
-    h = hashlib.sha256()
-    for file in sorted(directory.rglob("*")):
-        if file.is_file():
-            rel = file.relative_to(directory).as_posix()
-            h.update(rel.encode())
-            h.update(file.read_bytes())
-    return h.hexdigest()
+    """Compute a stable SHA-256 hash over all file contents in a directory.
 
+    Delegates to :func:`vlmrun.client.skills.hash_directory`.
+    """
+    from vlmrun.client.skills import hash_directory
+
+    return hash_directory(directory)
 
 
 def _fmt_size(size_bytes: int) -> str:
     """Format byte count as human-readable string."""
     for unit in ("B", "KB", "MB", "GB"):
         if size_bytes < 1024:
-            return f"{size_bytes:.1f}{unit}" if size_bytes != int(size_bytes) else f"{int(size_bytes)}{unit}"
+            return (
+                f"{size_bytes:.1f}{unit}"
+                if size_bytes != int(size_bytes)
+                else f"{int(size_bytes)}{unit}"
+            )
         size_bytes /= 1024
     return f"{size_bytes:.1f}TB"
 
 
-def _resolve_skill(client: VLMRun, name_or_id: str, version: Optional[str] = None) -> SkillInfo:
+def _resolve_skill(
+    client: VLMRun, name_or_id: str, version: Optional[str] = None
+) -> SkillInfo:
     """Resolve a skill by name-or-UUID, with optional version."""
     if _looks_like_uuid(name_or_id):
         return client.skills.get(id=name_or_id)
@@ -449,7 +454,9 @@ def _resolve_skill(client: VLMRun, name_or_id: str, version: Optional[str] = Non
 def _looks_like_uuid(value: str) -> bool:
     """Heuristic: UUIDs are 32+ hex chars (with optional dashes)."""
     stripped = value.replace("-", "")
-    return len(stripped) >= 32 and all(c in "0123456789abcdef" for c in stripped.lower())
+    return len(stripped) >= 32 and all(
+        c in "0123456789abcdef" for c in stripped.lower()
+    )
 
 
 def _print_skill_detail(skill: SkillInfo) -> None:
@@ -471,5 +478,7 @@ def _print_skill_detail(skill: SkillInfo) -> None:
         meta.add_row("Updated", skill.updated_at.strftime("%Y-%m-%d %H:%M:%S UTC"))
 
     console.print(
-        Panel(meta, title="Skill", title_align="left", border_style="blue", padding=(1, 2))
+        Panel(
+            meta, title="Skill", title_align="left", border_style="blue", padding=(1, 2)
+        )
     )

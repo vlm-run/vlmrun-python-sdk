@@ -122,6 +122,20 @@ asyncio.run(main())
 
 **Installation**: Install with OpenAI support using `pip install vlmrun[openai]`
 
+### CLI Chat with Skills
+
+The `vlmrun chat` command supports **skills** — local directories containing a `SKILL.md` and optional assets that give the agent domain-specific expertise. Skills are sent inline with each request (no server-side upload required).
+
+```bash
+# Chat with an inline skill
+vlmrun chat "Generate a youtube thumbnail for a video using the VLM Run brand colors" -k ./path/to/vlmrun-branding/
+
+# Attach multiple skills (coming soon)
+vlmrun chat "Analyze this invoice" -i invoice.pdf -k ./accounting-skills/ -k ./invoice-extraction/
+```
+
+To create a persistent server-side skill, use `vlmrun skills upload ./my-skill/`.
+
 ## 🔗 Quick Links
 
 * 💬 Need help? Email us at [support@vlm.run](mailto:support@vlm.run) or join our [Discord](https://discord.gg/AMApC2UzVY)

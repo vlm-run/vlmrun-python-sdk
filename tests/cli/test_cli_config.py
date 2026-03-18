@@ -18,7 +18,11 @@ def test_config_init(runner, config_file):
     """config init creates a default config file."""
     result = runner.invoke(app, ["config", "init"])
     assert result.exit_code == 0
-    assert "Created" in result.stdout or "already exists" in result.stdout.lower() or result.exit_code == 0
+    assert (
+        "Created" in result.stdout
+        or "already exists" in result.stdout.lower()
+        or result.exit_code == 0
+    )
 
 
 def test_config_init_force(runner, config_file):

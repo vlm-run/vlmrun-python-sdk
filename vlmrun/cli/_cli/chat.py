@@ -21,7 +21,7 @@ from rich.status import Status
 from rich.tree import Tree
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import FileResponse
+from vlmrun.client.types import AgentSkill, FileResponse
 from vlmrun.constants import (
     DEFAULT_BASE_URL,
     SUPPORTED_INPUT_FILETYPES,
@@ -462,6 +462,21 @@ def print_rich_output(
         console.print(f"  [dim]Artifacts:[/dim] {artifact_dir}")
 
 
+def _build_inline_skill_from_directory(directory: Path) -> AgentSkill:
+    """Build an inline AgentSkill from a local skill directory.
+
+    Thin CLI wrapper around :func:`vlmrun.client.skills.inline_skill_from_directory`
+    that converts ``FileNotFoundError`` into a ``typer.Exit``.
+    """
+    from vlmrun.client.skills import inline_skill_from_directory
+
+    try:
+        return inline_skill_from_directory(directory)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+
 def chat(
     ctx: typer.Context,
     prompt: Optional[str] = typer.Argument(
@@ -480,6 +495,18 @@ def chat(
         "-i",
         help="Input file (image/video/document). Repeatable.",
         exists=True,
+        readable=True,
+    ),
+    skill_dirs: Optional[List[Path]] = typer.Option(
+        None,
+        "--skill", "-k",
+        help=(
+            "Path to a skill directory (must contain SKILL.md). Repeatable. "
+            "The skill is sent inline with the request (no server-side upload). "
+            "To create a persistent server-side skill, use `vlmrun skills upload`."
+        ),
+        exists=True,
+        file_okay=False,
         readable=True,
     ),
     output_dir: Optional[Path] = typer.Option(
@@ -599,9 +626,26 @@ def chat(
         response_content = ""
         usage_data: Optional[Dict[str, Any]] = None
         response_id: Optional[str] = None
-        extra_body: Optional[Dict[str, Any]] = (
-            {"session_id": session_id} if session_id else None
-        )
+        # Build skills list from --skill directories
+        agent_skills: Optional[List[Dict[str, Any]]] = None
+        if skill_dirs:
+            agent_skills = []
+            for skill_dir in skill_dirs:
+                skill = _build_inline_skill_from_directory(skill_dir)
+                agent_skills.append(skill.model_dump(exclude_none=True))
+
+            if not output_json:
+                console.print(
+                    f"  [green]\u2713[/green] Loaded {len(agent_skills)} skill(s) (inline)"
+                )
+
+        extra_body: Optional[Dict[str, Any]] = {}
+        if session_id:
+            extra_body["session_id"] = session_id
+        if agent_skills:
+            extra_body["skills"] = agent_skills
+        if not extra_body:
+            extra_body = None
 
         start_time = time.time()
 

@@ -338,13 +338,152 @@ class SkillDownloadResponse(BaseModel):
     expires_in: Optional[int] = Field(None, description="Seconds until the URL expires")
 
 
-class AgentSkill(BaseModel):
-    """Skill reference for use in agent requests."""
+class InlineSkillSource(BaseModel):
+    """Source payload for an inline skill bundle.
 
-    skill_name: Optional[str] = Field(None, description="Human-readable skill name")
-    skill_id: Optional[str] = Field(None, description="Unique skill identifier")
-    version: Optional[str] = Field(default="latest", description="Skill version")
-    type: Optional[str] = Field(default="vlm-run", description="Skill type")
+    Follows the format::
+
+        {
+            "type": "base64",
+            "media_type": "application/zip",
+            "data": "<base64-encoded-zip>"
+        }
+    """
+
+    type: str = Field(
+        default="base64",
+        description="Encoding type for the inline skill data. Currently only 'base64' is supported.",
+    )
+    media_type: str = Field(
+        default="application/zip",
+        description="MIME type of the skill bundle. Must be 'application/zip'.",
+    )
+    data: str = Field(
+        ...,
+        description="Base64-encoded zip bundle containing the skill files.",
+    )
+
+
+class AgentSkill(BaseModel):
+    """A modular capability that extends the agent's functionality.
+
+    Two modes are supported:
+
+    1. **Referenced skills** (``type="skill_reference"``) -- Provide ``skill_id``
+       (UUID or name) and optionally ``version``.
+
+       .. code-block:: python
+
+           AgentSkill(type="skill_reference", skill_id="pillow")
+
+    2. **Inline skills** (``type="inline"``) -- Supply ``name``, ``description``,
+       and a ``source`` object containing the base64-encoded zip bundle.
+
+       .. code-block:: python
+
+           AgentSkill(
+               type="inline",
+               name="csv-insights",
+               description="Summarize CSV files.",
+               source=InlineSkillSource(data="<base64-zip>"),
+           )
+    """
+
+    type: str = Field(
+        default="skill_reference",
+        description=(
+            "The type of the skill. "
+            "Use 'skill_reference' for DB-stored skills referenced by id/name. "
+            "Use 'inline' to provide the skill as a base64-encoded zip bundle."
+        ),
+    )
+
+    # -- Referenced skill fields -------------------------------------------
+    skill_id: Optional[str] = Field(
+        default=None,
+        description="The unique identifier of the skill -- a UUID or a name string.",
+    )
+    skill_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Human-readable skill name for lookup. "
+            "Alternative to skill_id. Deprecated in favour of skill_id."
+        ),
+    )
+    version: Optional[str] = Field(
+        default="latest",
+        description="The version of the skill -- an integer or 'latest'.",
+    )
+
+    # -- Inline skill fields -----------------------------------------------
+    name: Optional[str] = Field(
+        default=None,
+        description="Human-readable name for the inline skill.",
+    )
+    description: Optional[str] = Field(
+        default=None,
+        description="Short description of what the inline skill does.",
+    )
+    source: Optional[InlineSkillSource] = Field(
+        default=None,
+        description=(
+            "Source payload for inline skills. Contains the base64-encoded zip "
+            "bundle with type, media_type, and data fields."
+        ),
+    )
+
+    # -- Legacy / backward-compat ------------------------------------------
+    bundle: Optional[str] = Field(
+        default=None,
+        description=(
+            "DEPRECATED: Use 'source.data' instead. "
+            "Base64-encoded zip bundle containing the skill files (inline skills only)."
+        ),
+    )
+
+    @property
+    def is_inline(self) -> bool:
+        """Return True if this is an inline skill (base64 bundle)."""
+        return self.type == "inline" and (
+            self.source is not None or self.bundle is not None
+        )
+
+    @property
+    def inline_data(self) -> Optional[str]:
+        """Return the base64-encoded zip data for inline skills.
+
+        Prefers ``source.data`` over the legacy ``bundle`` field.
+        Returns ``None`` for referenced skills.
+        """
+        if self.source is not None:
+            return self.source.data
+        return self.bundle
+
+    @property
+    def effective_skill_id(self) -> Optional[str]:
+        """Return the identifier to use for resolution.
+
+        For referenced skills, ``skill_id`` takes precedence over ``skill_name``.
+        For inline skills, a deterministic hash of the bundle is returned.
+        """
+        if self.is_inline:
+            import hashlib
+
+            data = self.inline_data or ""
+            return f"inline_{hashlib.sha256(data.encode()).hexdigest()[:16]}"
+        return self.skill_id or self.skill_name
+
+    @property
+    def effective_name(self) -> Optional[str]:
+        """Return the best available name for this skill."""
+        if self.is_inline:
+            return self.name or "inline"
+        return self.skill_name or self.skill_id
+
+    @property
+    def effective_description(self) -> Optional[str]:
+        """Return the description for this skill."""
+        return self.description or ""
 
 
 class GenerationConfig(BaseModel):

@@ -10,7 +10,10 @@ from vlmrun.client import VLMRun
 from vlmrun.client.types import PredictionResponse
 from vlmrun.common.image import _open_image_with_exif
 
-app = typer.Typer(help="Generate structured predictions for images, documents, videos, and audio.", no_args_is_help=True)
+app = typer.Typer(
+    help="Generate structured predictions for images, documents, videos, and audio.",
+    no_args_is_help=True,
+)
 
 
 @app.command()
