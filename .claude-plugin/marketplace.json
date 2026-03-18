@@ -1,0 +1,18 @@
+{
+  "metadata": {
+    "description": "Agent Skills for visual AI tasks including image understanding, video processing, document extraction, and multi-modal generation using VLM Run's Orion agent",
+    "version": "1.0.0"
+  },
+  "name": "vlmrun-cli-skill",
+  "owner": {
+    "name": "VLM Run"
+  },
+  "plugins": [
+    {
+      "description": "Use the VLM Run CLI to interact with Orion visual AI agent. Process images, videos, and documents with natural language. Supports image understanding/generation, object detection, OCR, video summarization, document extraction, and visual AI chat.",
+      "name": "vlmrun-cli-skill",
+      "skills": "./",
+      "source": "../.claude/skills/vlmrun-cli-skill"
+    }
+  ]
+}

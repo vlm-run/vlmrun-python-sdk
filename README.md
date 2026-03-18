@@ -136,6 +136,36 @@ vlmrun chat "Analyze this invoice" -i invoice.pdf -k ./accounting-skills/ -k ./i
 
 To create a persistent server-side skill, use `vlmrun skills upload ./my-skill/`.
 
+### Claude Code
+
+Install the VLM Run CLI skill directly in [Claude Code](https://docs.anthropic.com/en/docs/claude-code) via the plugin marketplace:
+
+1. Register the repository as a plugin marketplace:
+
+```
+/plugin marketplace add vlm-run/vlmrun-python-sdk
+```
+
+2. Install the skill:
+
+```
+/plugin install vlmrun-cli-skill@vlm-run/vlmrun-python-sdk
+```
+
+3. Configure your API key and base URL using the CLI (get your key from [app.vlm.run](https://app.vlm.run)):
+
+```bash
+vlmrun config init
+vlmrun config set --api-key <your-api-key>
+vlmrun config show
+```
+
+4. Verify the skill is loaded by asking Claude Code (requires restart):
+
+```
+What skills are available in the /vlmrun-cli-skill?
+```
+
 ## 🔗 Quick Links
 
 * 💬 Need help? Email us at [support@vlm.run](mailto:support@vlm.run) or join our [Discord](https://discord.gg/AMApC2UzVY)
