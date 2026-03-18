@@ -14,6 +14,7 @@ def strip_ansi(text: str) -> str:
     """Remove ANSI escape codes from text."""
     return _ANSI_RE.sub("", text)
 
+
 from datetime import datetime
 from typing import List
 from vlmrun.client.types import (
@@ -121,7 +122,14 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def list(self, limit=25, offset=0, order_by="created_at", descending=True, grouped=False):
+            def list(
+                self,
+                limit=25,
+                offset=0,
+                order_by="created_at",
+                descending=True,
+                grouped=False,
+            ):
                 return [
                     SkillInfo(
                         id="fe5f8791-ec9e-4c3b-a904-4ec14a9d172c",
@@ -168,7 +176,15 @@ def mock_client(monkeypatch):
                     is_public=False,
                 )
 
-            def create(self, file_id=None, name=None, description=None, prompt=None, json_schema=None, session_id=None):
+            def create(
+                self,
+                file_id=None,
+                name=None,
+                description=None,
+                prompt=None,
+                json_schema=None,
+                session_id=None,
+            ):
                 return SkillInfo(
                     id="fe5f8791-ec9e-4c3b-a904-4ec14a9d172c",
                     name=name or "generated-skill",

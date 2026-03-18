@@ -45,19 +45,29 @@ def list(
     if since:
         try:
             from datetime import timezone
-            since_date = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+            since_date = datetime.strptime(since, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
             predictions = [p for p in predictions if p.created_at >= since_date]
         except ValueError:
-            console.print("[red]Error:[/] Invalid date format for --since. Use YYYY-MM-DD")
+            console.print(
+                "[red]Error:[/] Invalid date format for --since. Use YYYY-MM-DD"
+            )
             raise typer.Exit(1)
 
     if until:
         try:
             from datetime import timezone
-            until_date = datetime.strptime(until, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+            until_date = datetime.strptime(until, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
             predictions = [p for p in predictions if p.created_at <= until_date]
         except ValueError:
-            console.print("[red]Error:[/] Invalid date format for --until. Use YYYY-MM-DD")
+            console.print(
+                "[red]Error:[/] Invalid date format for --until. Use YYYY-MM-DD"
+            )
             raise typer.Exit(1)
 
     if not predictions:
