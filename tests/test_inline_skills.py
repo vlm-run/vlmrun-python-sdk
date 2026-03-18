@@ -1,4 +1,4 @@
-"""Tests for inline skills support in types and CLI."""
+"""Tests for inline skills support in types, CLI, and library utilities."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import base64
 import hashlib
 import io
 import zipfile
+from pathlib import Path
 from typing import Optional
 
 import pytest
@@ -224,3 +225,173 @@ class TestAgentSkillEdgeCases:
     def test_version_default(self):
         skill = AgentSkill(skill_id="x")
         assert skill.version == "latest"
+
+
+# ---------------------------------------------------------------------------
+# Library utilities — parse_skill_frontmatter
+# ---------------------------------------------------------------------------
+
+_FRONTMATTER_SKILL_MD = """\
+---
+name: my-skill
+description: Does cool things
+---
+# My Skill
+
+Body content.
+"""
+
+
+class TestParseSkillFrontmatter:
+    """Tests for parse_skill_frontmatter."""
+
+    def test_parses_name_and_description(self, tmp_path: Path):
+        from vlmrun.client.skills import parse_skill_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(_FRONTMATTER_SKILL_MD)
+        name, desc = parse_skill_frontmatter(skill_md)
+        assert name == "my-skill"
+        assert desc == "Does cool things"
+
+    def test_missing_frontmatter_returns_none(self, tmp_path: Path):
+        from vlmrun.client.skills import parse_skill_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("# No Frontmatter\n\nJust body.\n")
+        name, desc = parse_skill_frontmatter(skill_md)
+        assert name is None
+        assert desc is None
+
+    def test_partial_frontmatter(self, tmp_path: Path):
+        from vlmrun.client.skills import parse_skill_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: only-name\n---\n# Body\n")
+        name, desc = parse_skill_frontmatter(skill_md)
+        assert name == "only-name"
+        assert desc is None
+
+
+# ---------------------------------------------------------------------------
+# Library utilities — bundle_from_directory
+# ---------------------------------------------------------------------------
+
+
+class TestBundleFromDirectory:
+    """Tests for bundle_from_directory."""
+
+    def test_produces_valid_base64_zip(self, tmp_path: Path):
+        from vlmrun.client.skills import bundle_from_directory
+
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        bundle = bundle_from_directory(tmp_path)
+
+        zip_bytes = base64.b64decode(bundle)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            assert "SKILL.md" in zf.namelist()
+
+    def test_includes_nested_files(self, tmp_path: Path):
+        from vlmrun.client.skills import bundle_from_directory
+
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "logo.png").write_bytes(b"\x89PNG")
+
+        bundle = bundle_from_directory(tmp_path)
+        zip_bytes = base64.b64decode(bundle)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            names = zf.namelist()
+            assert "SKILL.md" in names
+            assert "assets/logo.png" in names
+
+    def test_deterministic(self, tmp_path: Path):
+        from vlmrun.client.skills import bundle_from_directory
+
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        assert bundle_from_directory(tmp_path) == bundle_from_directory(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Library utilities — hash_directory
+# ---------------------------------------------------------------------------
+
+
+class TestHashDirectory:
+    """Tests for hash_directory."""
+
+    def test_deterministic(self, tmp_path: Path):
+        from vlmrun.client.skills import hash_directory
+
+        (tmp_path / "SKILL.md").write_text("content")
+        assert hash_directory(tmp_path) == hash_directory(tmp_path)
+
+    def test_different_content_different_hash(self, tmp_path: Path):
+        from vlmrun.client.skills import hash_directory
+
+        d1 = tmp_path / "a"
+        d1.mkdir()
+        (d1 / "SKILL.md").write_text("aaa")
+
+        d2 = tmp_path / "b"
+        d2.mkdir()
+        (d2 / "SKILL.md").write_text("bbb")
+
+        assert hash_directory(d1) != hash_directory(d2)
+
+    def test_returns_hex_string(self, tmp_path: Path):
+        from vlmrun.client.skills import hash_directory
+
+        (tmp_path / "f.txt").write_text("x")
+        h = hash_directory(tmp_path)
+        assert len(h) == 64
+        assert all(c in "0123456789abcdef" for c in h)
+
+
+# ---------------------------------------------------------------------------
+# Library utilities — inline_skill_from_directory
+# ---------------------------------------------------------------------------
+
+
+class TestInlineSkillFromDirectory:
+    """Tests for inline_skill_from_directory."""
+
+    def test_returns_inline_agent_skill(self, tmp_path: Path):
+        from vlmrun.client.skills import inline_skill_from_directory
+
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        skill = inline_skill_from_directory(tmp_path)
+        assert isinstance(skill, AgentSkill)
+        assert skill.type == "inline"
+        assert skill.is_inline is True
+        assert skill.name == "my-skill"
+        assert skill.description == "Does cool things"
+        assert skill.source is not None
+        assert skill.source.data  # non-empty bundle
+
+    def test_uses_directory_name_as_fallback(self, tmp_path: Path):
+        from vlmrun.client.skills import inline_skill_from_directory
+
+        (tmp_path / "SKILL.md").write_text("---\ndescription: no name\n---\n# Body\n")
+        skill = inline_skill_from_directory(tmp_path)
+        assert skill.name == tmp_path.name
+
+    def test_missing_skill_md_raises(self, tmp_path: Path):
+        from vlmrun.client.skills import inline_skill_from_directory
+
+        with pytest.raises(FileNotFoundError, match="SKILL.md"):
+            inline_skill_from_directory(tmp_path)
+
+    def test_bundle_is_valid_zip(self, tmp_path: Path):
+        from vlmrun.client.skills import inline_skill_from_directory
+
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        (tmp_path / "helper.py").write_text("print('hi')")
+
+        skill = inline_skill_from_directory(tmp_path)
+        zip_bytes = base64.b64decode(skill.source.data)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            names = zf.namelist()
+            assert "SKILL.md" in names
+            assert "helper.py" in names

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -283,6 +282,8 @@ def upload_skill(
     short_hash = content_hash[:8]
     zip_filename = f"{name}_{short_hash}.zip"
     zip_path = archive_dir / zip_filename
+    if zip_path.exists():
+        console.print(f"[yellow]Warning:[/] Skill zip file already exists: {zip_path}")
 
     # -- Step 1: zip --------------------------------------------------------
     with console.status("[bold blue]Zipping skill folder…"):
@@ -371,27 +372,11 @@ def download_skill(
 def _parse_skill_frontmatter(skill_md: Path) -> tuple[Optional[str], Optional[str]]:
     """Extract name and description from SKILL.md YAML frontmatter.
 
-    Expects a file starting with ``---`` delimiters:
-        ---
-        name: my-skill
-        description: What this skill does
-        ---
+    Delegates to :func:`vlmrun.client.skills.parse_skill_frontmatter`.
     """
-    import re
+    from vlmrun.client.skills import parse_skill_frontmatter
 
-    text = skill_md.read_text(encoding="utf-8")
-    match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
-    if not match:
-        return None, None
-
-    fm_block = match.group(1)
-    name = desc = None
-    for line in fm_block.splitlines():
-        if line.startswith("name:"):
-            name = line.split(":", 1)[1].strip().strip("\"'")
-        elif line.startswith("description:"):
-            desc = line.split(":", 1)[1].strip().strip("\"'")
-    return name, desc
+    return parse_skill_frontmatter(skill_md)
 
 
 def _print_skill_with_tree(skill: SkillInfo, folder: Path, subtitle_path: Path) -> None:
@@ -435,14 +420,13 @@ def _print_skill_with_tree(skill: SkillInfo, folder: Path, subtitle_path: Path) 
 
 
 def _hash_directory(directory: Path) -> str:
-    """Compute a stable SHA-256 hash over all file contents in a directory."""
-    h = hashlib.sha256()
-    for file in sorted(directory.rglob("*")):
-        if file.is_file():
-            rel = file.relative_to(directory).as_posix()
-            h.update(rel.encode())
-            h.update(file.read_bytes())
-    return h.hexdigest()
+    """Compute a stable SHA-256 hash over all file contents in a directory.
+
+    Delegates to :func:`vlmrun.client.skills.hash_directory`.
+    """
+    from vlmrun.client.skills import hash_directory
+
+    return hash_directory(directory)
 
 
 def _fmt_size(size_bytes: int) -> str:

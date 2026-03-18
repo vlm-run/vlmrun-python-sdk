@@ -21,7 +21,7 @@ from rich.status import Status
 from rich.tree import Tree
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import AgentSkill, FileResponse, InlineSkillSource
+from vlmrun.client.types import AgentSkill, FileResponse
 from vlmrun.constants import (
     DEFAULT_BASE_URL,
     SUPPORTED_INPUT_FILETYPES,
@@ -465,142 +465,16 @@ def print_rich_output(
 def _build_inline_skill_from_directory(directory: Path) -> AgentSkill:
     """Build an inline AgentSkill from a local skill directory.
 
-    Zips the directory contents into memory and base64-encodes the result
-    so that it can be sent inline with the chat completion request.
-    No server-side skill creation is required.
-
-    Args:
-        directory: Path to a skill folder containing at least a SKILL.md.
-
-    Returns:
-        AgentSkill with type="inline" and the base64-encoded zip bundle.
-
-    Raises:
-        typer.Exit: If SKILL.md is missing or the directory is invalid.
+    Thin CLI wrapper around :func:`vlmrun.client.skills.inline_skill_from_directory`
+    that converts ``FileNotFoundError`` into a ``typer.Exit``.
     """
-    import base64
-    import io
-    import re
-    import zipfile
+    from vlmrun.client.skills import inline_skill_from_directory
 
-    skill_md = directory / "SKILL.md"
-    if not skill_md.exists():
-        console.print(f"[red]Error:[/] SKILL.md not found in {directory}")
-        raise typer.Exit(1)
-
-    # Parse name/description from SKILL.md frontmatter
-    text = skill_md.read_text(encoding="utf-8")
-    match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
-    skill_name: Optional[str] = None
-    skill_description: Optional[str] = None
-    if match:
-        fm_block = match.group(1)
-        for line in fm_block.splitlines():
-            if line.startswith("name:"):
-                skill_name = line.split(":", 1)[1].strip().strip("\"'")
-            elif line.startswith("description:"):
-                skill_description = line.split(":", 1)[1].strip().strip("\"'")
-
-    # Zip the directory in memory
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file in sorted(directory.rglob("*")):
-            if file.is_file():
-                zf.write(file, file.relative_to(directory))
-    zip_bytes = zip_buffer.getvalue()
-
-    # Base64 encode
-    bundle_b64 = base64.b64encode(zip_bytes).decode("ascii")
-
-    return AgentSkill(
-        type="inline",
-        name=skill_name or directory.name,
-        description=skill_description or "",
-        source=InlineSkillSource(data=bundle_b64),
-    )
-
-
-def _build_created_skill_from_directory(client: VLMRun, directory: Path) -> AgentSkill:
-    """Upload a local skill directory and create a server-side skill.
-
-    This is the ``--create`` variant: zip, upload, create, and return a
-    referenced AgentSkill that points to the newly-created skill.
-
-    Args:
-        client: Authenticated VLMRun client.
-        directory: Path to a skill folder containing at least a SKILL.md.
-
-    Returns:
-        AgentSkill with type="skill_reference" pointing to the created skill.
-
-    Raises:
-        typer.Exit: If SKILL.md is missing or skill creation fails.
-    """
-    import re
-    import zipfile
-
-    skill_md = directory / "SKILL.md"
-    if not skill_md.exists():
-        console.print(f"[red]Error:[/] SKILL.md not found in {directory}")
-        raise typer.Exit(1)
-
-    # Parse name/description from SKILL.md frontmatter
-    text = skill_md.read_text(encoding="utf-8")
-    match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
-    skill_name: Optional[str] = None
-    skill_description: Optional[str] = None
-    if match:
-        fm_block = match.group(1)
-        for line in fm_block.splitlines():
-            if line.startswith("name:"):
-                skill_name = line.split(":", 1)[1].strip().strip("\"'")
-            elif line.startswith("description:"):
-                skill_description = line.split(":", 1)[1].strip().strip("\"'")
-
-    if not skill_name:
-        skill_name = directory.name
-
-    # Zip, upload, and create
-    archive_dir = Path.home() / ".vlmrun" / "skill_archives"
-    archive_dir.mkdir(parents=True, exist_ok=True)
-
-    import hashlib
-
-    h = hashlib.sha256()
-    for file in sorted(directory.rglob("*")):
-        if file.is_file():
-            rel = file.relative_to(directory).as_posix()
-            h.update(rel.encode())
-            h.update(file.read_bytes())
-    short_hash = h.hexdigest()[:8]
-    zip_path = archive_dir / f"{skill_name}_{short_hash}.zip"
-
-    with console.status("[bold blue]Zipping skill folder..."):
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for file in sorted(directory.rglob("*")):
-                if file.is_file():
-                    zf.write(file, file.relative_to(directory))
-
-    with console.status("[bold blue]Uploading skill zip..."):
-        file_response = client.files.upload(file=zip_path, purpose="assistants")
-
-    with console.status("[bold blue]Creating skill..."):
-        skill_info = client.skills.create(
-            file_id=file_response.id,
-            name=skill_name,
-            description=skill_description,
-        )
-
-    console.print(
-        f"  [green]\u2713[/green] Created skill [cyan]{skill_info.name}[/cyan] "
-        f"[dim](id={skill_info.id})[/dim]"
-    )
-
-    return AgentSkill(
-        type="skill_reference",
-        skill_id=skill_info.id,
-        skill_name=skill_info.name,
-    )
+    try:
+        return inline_skill_from_directory(directory)
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1) from e
 
 
 def chat(
@@ -625,20 +499,15 @@ def chat(
     ),
     skill_dirs: Optional[List[Path]] = typer.Option(
         None,
-        "--skill",
+        "--skill", "-k",
         help=(
             "Path to a skill directory (must contain SKILL.md). Repeatable. "
-            "By default the skill is sent inline (no server-side creation). "
-            "Use --create to upload and create the skill on the server instead."
+            "The skill is sent inline with the request (no server-side upload). "
+            "To create a persistent server-side skill, use `vlmrun skills upload`."
         ),
         exists=True,
         file_okay=False,
         readable=True,
-    ),
-    create_skills: bool = typer.Option(
-        False,
-        "--create",
-        help="Upload and create skills on the server instead of sending them inline.",
     ),
     output_dir: Optional[Path] = typer.Option(
         None,
@@ -762,16 +631,12 @@ def chat(
         if skill_dirs:
             agent_skills = []
             for skill_dir in skill_dirs:
-                if create_skills:
-                    skill = _build_created_skill_from_directory(client, skill_dir)
-                else:
-                    skill = _build_inline_skill_from_directory(skill_dir)
+                skill = _build_inline_skill_from_directory(skill_dir)
                 agent_skills.append(skill.model_dump(exclude_none=True))
 
             if not output_json:
-                mode_label = "created" if create_skills else "inline"
                 console.print(
-                    f"  [green]\u2713[/green] Loaded {len(agent_skills)} skill(s) ({mode_label})"
+                    f"  [green]\u2713[/green] Loaded {len(agent_skills)} skill(s) (inline)"
                 )
 
         extra_body: Optional[Dict[str, Any]] = {}

@@ -2,11 +2,110 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import base64
+import hashlib
+import io
+import re
+import zipfile
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from vlmrun.client.base_requestor import APIRequestor
+from vlmrun.client.types import (
+    AgentSkill,
+    InlineSkillSource,
+    SkillDownloadResponse,
+    SkillInfo,
+)
 from vlmrun.types.abstract import VLMRunProtocol
-from vlmrun.client.types import SkillInfo, SkillDownloadResponse
+
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+
+
+def parse_skill_frontmatter(skill_md: Path) -> Tuple[Optional[str], Optional[str]]:
+    """Extract name and description from a SKILL.md YAML frontmatter.
+
+    Args:
+        skill_md: Path to SKILL.md file.
+
+    Returns:
+        Tuple of (name, description), either of which may be ``None``
+        if the frontmatter is missing or does not contain the field.
+    """
+    text = skill_md.read_text(encoding="utf-8")
+    match = _FRONTMATTER_RE.match(text)
+    name: Optional[str] = None
+    description: Optional[str] = None
+    if match:
+        for line in match.group(1).splitlines():
+            if line.startswith("name:"):
+                name = line.split(":", 1)[1].strip().strip("\"'")
+            elif line.startswith("description:"):
+                description = line.split(":", 1)[1].strip().strip("\"'")
+    return name, description
+
+
+def bundle_from_directory(directory: Path) -> str:
+    """Zip a skill directory into a base64-encoded bundle string.
+
+    Walks *directory* recursively, adding every file with paths relative
+    to *directory*.  The result is ready to be passed as
+    ``InlineSkillSource.data``.
+
+    Args:
+        directory: Path to a skill folder.
+
+    Returns:
+        Base64-encoded zip bundle string.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in sorted(directory.rglob("*")):
+            if file_path.is_file():
+                zf.write(file_path, file_path.relative_to(directory))
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def hash_directory(directory: Path) -> str:
+    """Compute a stable SHA-256 hex digest over all file contents in a directory."""
+    h = hashlib.sha256()
+    for file_path in sorted(directory.rglob("*")):
+        if file_path.is_file():
+            rel = file_path.relative_to(directory).as_posix()
+            h.update(rel.encode())
+            h.update(file_path.read_bytes())
+    return h.hexdigest()
+
+
+def inline_skill_from_directory(directory: Path) -> AgentSkill:
+    """Build an inline :class:`AgentSkill` from a local skill directory.
+
+    Zips the directory contents into memory, base64-encodes the result,
+    and returns an ``AgentSkill`` with ``type="inline"`` that can be sent
+    directly in a chat completion request.
+
+    Args:
+        directory: Path to a skill folder containing at least a ``SKILL.md``.
+
+    Returns:
+        AgentSkill with type="inline" and the base64-encoded zip bundle.
+
+    Raises:
+        FileNotFoundError: If ``SKILL.md`` is missing from *directory*.
+    """
+    skill_md = directory / "SKILL.md"
+    if not skill_md.exists():
+        raise FileNotFoundError(f"SKILL.md not found in {directory}")
+
+    name, description = parse_skill_frontmatter(skill_md)
+    bundle = bundle_from_directory(directory)
+
+    return AgentSkill(
+        type="inline",
+        name=name or directory.name,
+        description=description or "",
+        source=InlineSkillSource(data=bundle),
+    )
 
 
 class Skills:
@@ -209,3 +308,58 @@ class Skills:
             raise TypeError("Expected dict response")
 
         return SkillDownloadResponse(**response)
+
+    def create_from_directory(
+        self,
+        directory: Path,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> AgentSkill:
+        """Upload a local skill directory and create a server-side skill.
+
+        Zips the directory, uploads the archive via the files API, and
+        creates a new skill pointing to it.  Returns a referenced
+        :class:`AgentSkill` that can be sent in a chat completion request.
+
+        Args:
+            directory: Path to a skill folder containing at least a ``SKILL.md``.
+            name: Override skill name (defaults to SKILL.md frontmatter or directory name).
+            description: Override skill description (defaults to SKILL.md frontmatter).
+
+        Returns:
+            AgentSkill with ``type="skill_reference"`` pointing to the created skill.
+
+        Raises:
+            FileNotFoundError: If ``SKILL.md`` is missing from *directory*.
+        """
+        skill_md = directory / "SKILL.md"
+        if not skill_md.exists():
+            raise FileNotFoundError(f"SKILL.md not found in {directory}")
+
+        fm_name, fm_description = parse_skill_frontmatter(skill_md)
+        skill_name = name or fm_name or directory.name
+        skill_description = description or fm_description
+
+        archive_dir = Path.home() / ".vlmrun" / "skill_archives"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        short_hash = hash_directory(directory)[:8]
+        zip_path = archive_dir / f"{skill_name}_{short_hash}.zip"
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file_path in sorted(directory.rglob("*")):
+                if file_path.is_file():
+                    zf.write(file_path, file_path.relative_to(directory))
+
+        file_response = self._client.files.upload(file=zip_path, purpose="assistants")
+        skill_info = self.create(
+            file_id=file_response.id,
+            name=skill_name,
+            description=skill_description,
+        )
+
+        return AgentSkill(
+            type="skill_reference",
+            skill_id=skill_info.id,
+            skill_name=skill_info.name,
+        )
