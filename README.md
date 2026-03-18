@@ -138,18 +138,18 @@ To create a persistent server-side skill, use `vlmrun skills upload ./my-skill/`
 
 ### Claude Code
 
-Install the VLM Run CLI skill directly in [Claude Code](https://docs.anthropic.com/en/docs/claude-code) via the plugin marketplace:
+Install the VLM Run CLI skill directly in [Claude Code](https://docs.anthropic.com/en/docs/claude-code) via the plugin marketplace in the [vlm-run/skills](https://github.com/vlm-run/skills) repository:
 
 1. Register the repository as a plugin marketplace:
 
 ```
-/plugin marketplace add vlm-run/vlmrun-python-sdk
+/plugin marketplace add vlm-run/skills
 ```
 
 2. Install the skill:
 
 ```
-/plugin install vlmrun-cli-skill@vlm-run/vlmrun-python-sdk
+/plugin install vlmrun-cli-skill@vlm-run/skills
 ```
 
 3. Configure your API key and base URL using the CLI (get your key from [app.vlm.run](https://app.vlm.run)):
