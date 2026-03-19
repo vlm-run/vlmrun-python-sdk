@@ -21,7 +21,7 @@ from rich.status import Status
 from rich.tree import Tree
 
 from vlmrun.client import VLMRun
-from vlmrun.client.types import AgentSkill, FileResponse
+from vlmrun.client.types import AgentSkill, AgentToolset, FileResponse
 from vlmrun.constants import (
     DEFAULT_BASE_URL,
     SUPPORTED_INPUT_FILETYPES,
@@ -137,6 +137,9 @@ AVAILABLE_MODELS = [
     "vlmrun-orion-1:auto",
     "vlmrun-orion-1:pro",
 ]
+
+# Available toolsets (must match AgentToolset literal values)
+AVAILABLE_TOOLSETS: List[str] = list(AgentToolset.__args__)
 
 DEFAULT_MODEL = "vlmrun-orion-1:auto"
 
@@ -545,6 +548,16 @@ def chat(
         "-nd",
         help="Skip artifact download.",
     ),
+    toolsets: Optional[List[str]] = typer.Option(
+        None,
+        "--toolset",
+        "-t",
+        help=(
+            "Tool category to enable (repeatable). "
+            "Available: core, image, image-gen, world-gen, viz, document, video, web. "
+            "When specified, only tools from these categories will be available."
+        ),
+    ),
     session_id: Optional[str] = typer.Option(
         None,
         "--session-id",
@@ -574,6 +587,14 @@ def chat(
         console.print('  echo "Your prompt" | vlmrun chat - -i file.jpg')
         console.print("\nRun [green]vlmrun chat --help[/] for more options.")
         sys.exit(1)
+
+    # Validate toolsets if provided
+    if toolsets:
+        for ts in toolsets:
+            if ts not in AVAILABLE_TOOLSETS:
+                console.print(f"[red]Error:[/] Invalid toolset '{ts}'")
+                console.print(f"\nAvailable toolsets: {', '.join(AVAILABLE_TOOLSETS)}")
+                sys.exit(1)
 
     # Validate model
     if model not in AVAILABLE_MODELS:
@@ -645,6 +666,8 @@ def chat(
             extra_body["session_id"] = session_id
         if agent_skills:
             extra_body["skills"] = agent_skills
+        if toolsets:
+            extra_body["toolsets"] = toolsets
         if not extra_body:
             extra_body = None
 
