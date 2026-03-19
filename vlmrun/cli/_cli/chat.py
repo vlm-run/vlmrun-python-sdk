@@ -554,7 +554,7 @@ def chat(
         "-t",
         help=(
             "Tool category to enable (repeatable). "
-            "Available: core, image, image-gen, world_gen, viz, document, video, web. "
+            "Available: core, image, image-gen, world-gen, viz, document, video, web. "
             "When specified, only tools from these categories will be available."
         ),
     ),
