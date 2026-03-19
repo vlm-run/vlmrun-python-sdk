@@ -389,24 +389,21 @@ def FilePredictions(route: str):
             if file and url:
                 raise ValueError("Only one of `file` or `url` can be provided")
             if file:
-                if isinstance(file, Path) or (
-                    isinstance(file, str) and Path(file).suffix
-                ):
-                    file = Path(file)
+                file = Path(file) if isinstance(file, str) else file
+                if isinstance(file, Path) and file.exists():
                     logger.debug(
                         f"Uploading file [path={file}, size={file.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
                     )
                     response: FileResponse = self._client.files.upload(
-                        file=Path(file), purpose="assistants"
+                        file=file, purpose="assistants"
                     )
                     logger.debug(
                         f"Uploaded file [file_id={response.id}, name={response.filename}]"
                     )
                     file_or_url = response.id
-                elif isinstance(file, str):
+                elif isinstance(file, Path):
                     logger.debug(f"Using file_id [file_id={file}]")
-                    assert not Path(file).suffix, "File must not have an extension"
-                    file_or_url = file
+                    file_or_url = str(file)
                 else:
                     raise ValueError("File must be a pathlib.Path or a string")
             elif url:
