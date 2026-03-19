@@ -392,6 +392,7 @@ def FilePredictions(route: str):
                 if isinstance(file, Path) or (
                     isinstance(file, str) and Path(file).suffix
                 ):
+                    file = Path(file)
                     logger.debug(
                         f"Uploading file [path={file}, size={file.stat().st_size / 1024 / 1024:.2f} MB] to VLM Run"
                     )
