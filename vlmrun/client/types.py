@@ -498,6 +498,10 @@ class GenerationConfig(BaseModel):
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
+    skills: Optional[List["AgentSkill"]] = Field(
+        default=None,
+        description="List of agent skills to enable for this request. Skills provide domain-specific expertise and capabilities.",
+    )
 
     def model_dump(self, **kwargs) -> dict:
         """Dump the config as a dictionary, converting response_model to json_schema if present."""
