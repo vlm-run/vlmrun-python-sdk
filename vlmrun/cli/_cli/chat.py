@@ -107,7 +107,8 @@ PROMPT SOURCES (precedence order):
 EXAMPLES:
   vlmrun chat "Describe this" -i photo.jpg
   vlmrun chat "Compare" -i a.jpg -i b.jpg
-  vlmrun chat -p prompt.txt -i doc.pdf --json
+  vlmrun chat -p prompt.txt -i doc.pdf --format json
+  vlmrun chat "Analyze" -i img.jpg --skill-id my-skill:latest
   echo "Summarize" | vlmrun chat -p stdin -i video.mp4
 
 \b
@@ -117,8 +118,14 @@ MODELS:
   vlmrun-orion-1:pro   Most capable
 
 \b
+SKILLS:
+  --skill      Path to a local skill directory (inline)
+  --skill-id   Server-side skill as <name>:<version> (e.g. my-skill:latest)
+  Only one of --skill or --skill-id may be provided.
+
+\b
 OUTPUT:
-  --json      JSON output for programmatic use
+  --format json   JSON output for programmatic use
 
 \b
 FILES: .jpg .png .gif .mp4 .mov .pdf .doc .mp3 .wav (and more)
@@ -507,11 +514,21 @@ def chat(
         help=(
             "Path to a skill directory (must contain SKILL.md). Repeatable. "
             "The skill is sent inline with the request (no server-side upload). "
-            "To create a persistent server-side skill, use `vlmrun skills upload`."
+            "To create a persistent server-side skill, use `vlmrun skills upload`. "
+            "Cannot be used together with --skill-id."
         ),
         exists=True,
         file_okay=False,
         readable=True,
+    ),
+    skill_ids: Optional[List[str]] = typer.Option(
+        None,
+        "--skill-id",
+        help=(
+            "Server-side skill reference as <skill-name>:<version> "
+            "(e.g. my-skill:latest, my-skill:3). Repeatable. "
+            "Cannot be used together with --skill."
+        ),
     ),
     output_dir: Optional[Path] = typer.Option(
         None,
@@ -530,11 +547,11 @@ def chat(
         "-m",
         help="Model: vlmrun-orion-1:fast|auto|pro",
     ),
-    output_json: bool = typer.Option(
-        False,
-        "--json",
-        "-j",
-        help="Output JSON instead of formatted text.",
+    output_format: Optional[str] = typer.Option(
+        None,
+        "--format",
+        "-f",
+        help="Output format. Use 'json' for JSON output instead of formatted text.",
     ),
     no_stream: bool = typer.Option(
         False,
@@ -570,6 +587,24 @@ def chat(
     client: VLMRun = ctx.obj
     if client is None:
         console.print("[red]Error:[/] Client not initialized. Check your API key.")
+        sys.exit(1)
+
+    # Resolve output_json from --format
+    output_json = False
+    if output_format is not None:
+        if output_format.lower() == "json":
+            output_json = True
+        else:
+            console.print(f"[red]Error:[/] Unsupported output format '{output_format}'")
+            console.print("\nSupported formats: json")
+            sys.exit(1)
+
+    # Validate --skill and --skill-id are mutually exclusive
+    if skill_dirs and skill_ids:
+        console.print(
+            "[red]Error:[/] --skill and --skill-id are mutually exclusive. "
+            "Provide one or the other, not both."
+        )
         sys.exit(1)
 
     # Resolve prompt from various sources
@@ -648,7 +683,7 @@ def chat(
         response_content = ""
         usage_data: Optional[Dict[str, Any]] = None
         response_id: Optional[str] = None
-        # Build skills list from --skill directories
+        # Build skills list from --skill directories or --skill-id references
         agent_skills: Optional[List[Dict[str, Any]]] = None
         if skill_dirs:
             agent_skills = []
@@ -659,6 +694,26 @@ def chat(
             if not output_json:
                 console.print(
                     f"  [green]\u2713[/green] Loaded {len(agent_skills)} skill(s) (inline)"
+                )
+        elif skill_ids:
+            agent_skills = []
+            for sid in skill_ids:
+                # Parse <skill-name>:<version> format
+                if ":" in sid:
+                    skill_name, skill_version = sid.rsplit(":", 1)
+                else:
+                    skill_name = sid
+                    skill_version = "latest"
+                skill = AgentSkill(
+                    type="skill_reference",
+                    skill_id=skill_name,
+                    version=skill_version,
+                )
+                agent_skills.append(skill.model_dump(exclude_none=True))
+
+            if not output_json:
+                console.print(
+                    f"  [green]\u2713[/green] Using {len(agent_skills)} skill(s) (referenced)"
                 )
 
         extra_body: Optional[Dict[str, Any]] = {}
