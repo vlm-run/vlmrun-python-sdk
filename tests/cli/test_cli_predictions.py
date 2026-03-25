@@ -4,8 +4,9 @@ from vlmrun.cli.cli import app
 from tests.conftest import strip_ansi
 
 
-def test_list_predictions(runner, mock_client, config_file):
+def test_list_predictions(runner, mock_client, config_file, monkeypatch):
     """Test list predictions command."""
+    monkeypatch.setenv("COLUMNS", "200")
     result = runner.invoke(app, ["predictions", "list"])
     assert result.exit_code == 0
     out = strip_ansi(result.stdout)
@@ -63,8 +64,9 @@ def test_get_prediction_usage_display(runner, mock_client, config_file):
     assert "100" in out
 
 
-def test_list_predictions_table_format(runner, mock_client, config_file):
+def test_list_predictions_table_format(runner, mock_client, config_file, monkeypatch):
     """Test that list output is formatted correctly."""
+    monkeypatch.setenv("COLUMNS", "200")
     result = runner.invoke(app, ["predictions", "list"])
     assert result.exit_code == 0
     out = strip_ansi(result.stdout)
