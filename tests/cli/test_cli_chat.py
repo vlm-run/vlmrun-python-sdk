@@ -216,7 +216,8 @@ class TestChatCommand:
         assert "--prompt" in plain_output
         assert "--input" in plain_output
         assert "--model" in plain_output
-        assert "--json" in plain_output
+        assert "--format" in plain_output
+        assert "--skill-id" in plain_output
 
     def test_chat_no_prompt_error(self, runner, config_file, mock_client):
         """Test error when empty prompt provided."""
@@ -282,7 +283,8 @@ class TestChatCommand:
                     "Describe this image",
                     "-i",
                     str(test_file),
-                    "--json",
+                    "--format",
+                    "json",
                     "--no-stream",
                 ],
             )
@@ -290,11 +292,11 @@ class TestChatCommand:
         # The mock might not be properly connected to the CLI, so we test the basic flow
         # In real tests, you'd ensure the client is properly mocked throughout
 
-    def test_chat_json_output_flag(self, runner, config_file, mock_client):
-        """Test that --json flag is documented."""
+    def test_chat_format_json_flag(self, runner, config_file, mock_client):
+        """Test that --format flag is documented."""
         result = runner.invoke(app, ["chat", "--help"])
         assert result.exit_code == 0
-        assert "--json" in result.stdout or "-j" in result.stdout
+        assert "--format" in result.stdout or "-f" in result.stdout
 
 
 class TestModels:
@@ -334,7 +336,9 @@ class TestChatIntegration:
 
     def test_chat_json_output(self, real_runner):
         """Test chat with JSON output."""
-        result = real_runner.invoke(app, ["chat", "Say hello", "--json", "--no-stream"])
+        result = real_runner.invoke(
+            app, ["chat", "Say hello", "--format", "json", "--no-stream"]
+        )
         assert result.exit_code == 0, f"Command failed with: {result.stdout}"
 
         # Parse JSON output - should be pure JSON with no extra output
@@ -412,7 +416,9 @@ class TestChatIntegration:
         assert "Response" in result.stdout
 
         # Test JSON output
-        result = real_runner.invoke(app, ["chat", prompt, "--json", "--no-stream"])
+        result = real_runner.invoke(
+            app, ["chat", prompt, "--format", "json", "--no-stream"]
+        )
         assert result.exit_code == 0
         output = json.loads(result.stdout)
         assert "content" in output
