@@ -360,18 +360,16 @@ class TestHashDirectory:
 
 
 # ---------------------------------------------------------------------------
-# Library utilities — inline_skill_from_directory
+# AgentSkill.from_directory classmethod
 # ---------------------------------------------------------------------------
 
 
-class TestInlineSkillFromDirectory:
-    """Tests for inline_skill_from_directory."""
+class TestAgentSkillFromDirectory:
+    """Tests for AgentSkill.from_directory() classmethod."""
 
     def test_returns_inline_agent_skill(self, tmp_path: Path):
-        from vlmrun.client.skills import inline_skill_from_directory
-
         (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
-        skill = inline_skill_from_directory(tmp_path)
+        skill = AgentSkill.from_directory(tmp_path)
         assert isinstance(skill, AgentSkill)
         assert skill.type == "inline"
         assert skill.is_inline is True
@@ -381,27 +379,43 @@ class TestInlineSkillFromDirectory:
         assert skill.source.data  # non-empty bundle
 
     def test_uses_directory_name_as_fallback(self, tmp_path: Path):
-        from vlmrun.client.skills import inline_skill_from_directory
-
         (tmp_path / "SKILL.md").write_text("---\ndescription: no name\n---\n# Body\n")
-        skill = inline_skill_from_directory(tmp_path)
+        skill = AgentSkill.from_directory(tmp_path)
         assert skill.name == tmp_path.name
 
     def test_missing_skill_md_raises(self, tmp_path: Path):
-        from vlmrun.client.skills import inline_skill_from_directory
-
         with pytest.raises(FileNotFoundError, match="SKILL.md"):
-            inline_skill_from_directory(tmp_path)
+            AgentSkill.from_directory(tmp_path)
 
     def test_bundle_is_valid_zip(self, tmp_path: Path):
-        from vlmrun.client.skills import inline_skill_from_directory
-
         (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
         (tmp_path / "helper.py").write_text("print('hi')")
 
-        skill = inline_skill_from_directory(tmp_path)
+        skill = AgentSkill.from_directory(tmp_path)
         zip_bytes = base64.b64decode(skill.source.data)
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             names = zf.namelist()
             assert "SKILL.md" in names
             assert "helper.py" in names
+
+    def test_name_override(self, tmp_path: Path):
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        skill = AgentSkill.from_directory(tmp_path, name="custom-name")
+        assert skill.name == "custom-name"
+
+    def test_description_override(self, tmp_path: Path):
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        skill = AgentSkill.from_directory(tmp_path, description="Custom desc")
+        assert skill.description == "Custom desc"
+
+    def test_accepts_string_path(self, tmp_path: Path):
+        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
+        skill = AgentSkill.from_directory(str(tmp_path))
+        assert isinstance(skill, AgentSkill)
+        assert skill.type == "inline"
+
+    def test_no_frontmatter_uses_directory_name(self, tmp_path: Path):
+        (tmp_path / "SKILL.md").write_text("# No Frontmatter\n\nJust body.\n")
+        skill = AgentSkill.from_directory(tmp_path)
+        assert skill.name == tmp_path.name
+        assert skill.description == ""

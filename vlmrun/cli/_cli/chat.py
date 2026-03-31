@@ -475,13 +475,11 @@ def print_rich_output(
 def _build_inline_skill_from_directory(directory: Path) -> AgentSkill:
     """Build an inline AgentSkill from a local skill directory.
 
-    Thin CLI wrapper around :func:`vlmrun.client.skills.inline_skill_from_directory`
+    Thin CLI wrapper around :meth:`AgentSkill.from_directory`
     that converts ``FileNotFoundError`` into a ``typer.Exit``.
     """
-    from vlmrun.client.skills import inline_skill_from_directory
-
     try:
-        return inline_skill_from_directory(directory)
+        return AgentSkill.from_directory(directory)
     except FileNotFoundError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(1) from e
