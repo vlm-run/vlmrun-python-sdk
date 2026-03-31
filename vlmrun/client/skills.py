@@ -133,17 +133,19 @@ class Skills:
         self,
         name: Optional[str] = None,
         id: Optional[str] = None,
+        skill_version: Optional[str] = None,
         version: Optional[str] = None,
     ) -> SkillInfo:
         """Lookup a skill by name, ID, or name + version.
 
         If `id` is provided, fetches the skill directly by ID via GET /v1/skills/{skill_id}.
-        Otherwise, looks up by `name` (and optional `version`) via POST /v1/skills/lookup.
+        Otherwise, looks up by `name` (and optional `skill_version`) via POST /v1/skills/lookup.
 
         Args:
             name: Skill name for lookup
             id: Skill ID for direct retrieval
-            version: Skill version (used with name)
+            skill_version: Skill version (used with name)
+            version: DEPRECATED — use ``skill_version`` instead.
 
         Returns:
             SkillInfo: Skill information
@@ -151,6 +153,7 @@ class Skills:
         Raises:
             ValueError: If neither name nor id is provided
         """
+        effective_version = skill_version or version
         if id and not name:
             response, status_code, headers = self._requestor.request(
                 method="GET",
@@ -158,8 +161,8 @@ class Skills:
             )
         elif name:
             data: Dict[str, Any] = {"name": name}
-            if version:
-                data["version"] = version
+            if effective_version:
+                data["skill_version"] = effective_version
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url="skills/lookup",
