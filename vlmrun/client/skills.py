@@ -76,23 +76,6 @@ def hash_directory(directory: Path) -> str:
     return h.hexdigest()
 
 
-def inline_skill_from_directory(directory: Path) -> AgentSkill:
-    """Build an inline :class:`AgentSkill` from a local skill directory.
-
-    This is a convenience wrapper around :meth:`AgentSkill.from_directory`.
-
-    Args:
-        directory: Path to a skill folder containing at least a ``SKILL.md``.
-
-    Returns:
-        AgentSkill with type="inline" and the base64-encoded zip bundle.
-
-    Raises:
-        FileNotFoundError: If ``SKILL.md`` is missing from *directory*.
-    """
-    return AgentSkill.from_directory(directory)
-
-
 class Skills:
     """Skills resource for VLM Run API.
 

@@ -409,31 +409,3 @@ class TestAgentSkillFromDirectory:
         skill = AgentSkill.from_directory(tmp_path)
         assert skill.name == tmp_path.name
         assert skill.description == ""
-
-
-# ---------------------------------------------------------------------------
-# Library utilities — inline_skill_from_directory (delegates to from_directory)
-# ---------------------------------------------------------------------------
-
-
-class TestInlineSkillFromDirectory:
-    """Tests for inline_skill_from_directory (thin wrapper)."""
-
-    def test_returns_inline_agent_skill(self, tmp_path: Path):
-        from vlmrun.client.skills import inline_skill_from_directory
-
-        (tmp_path / "SKILL.md").write_text(_FRONTMATTER_SKILL_MD)
-        skill = inline_skill_from_directory(tmp_path)
-        assert isinstance(skill, AgentSkill)
-        assert skill.type == "inline"
-        assert skill.is_inline is True
-        assert skill.name == "my-skill"
-        assert skill.description == "Does cool things"
-        assert skill.source is not None
-        assert skill.source.data  # non-empty bundle
-
-    def test_missing_skill_md_raises(self, tmp_path: Path):
-        from vlmrun.client.skills import inline_skill_from_directory
-
-        with pytest.raises(FileNotFoundError, match="SKILL.md"):
-            inline_skill_from_directory(tmp_path)
