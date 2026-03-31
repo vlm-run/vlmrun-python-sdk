@@ -323,17 +323,19 @@ class ImagePredictions(SchemaCastMixin, Predictions):
             additional_kwargs["config"] = config.model_dump()
         if metadata:
             additional_kwargs["metadata"] = metadata.model_dump()
+        data: dict = {
+            "model": model,
+            "images": images_data,
+            "domain": domain,
+            "batch": batch,
+            **additional_kwargs,
+        }
+        if callback_url is not None:
+            data["callback_url"] = callback_url
         response, status_code, headers = self._requestor.request(
             method="POST",
             url="image/generate",
-            data={
-                "model": model,
-                "images": images_data,
-                "domain": domain,
-                "batch": batch,
-                "callback_url": callback_url,
-                **additional_kwargs,
-            },
+            data=data,
         )
         if not isinstance(response, dict):
             raise TypeError("Expected dict response")
@@ -453,17 +455,20 @@ def FilePredictions(route: str):
                 additional_kwargs["config"] = config.model_dump()
             if metadata:
                 additional_kwargs["metadata"] = metadata.model_dump()
+            data: dict = {
+                "model": model,
+                "url" if is_url else "file_id": file_or_url,
+                "batch": batch,
+                **additional_kwargs,
+            }
+            if domain is not None:
+                data["domain"] = domain
+            if callback_url is not None:
+                data["callback_url"] = callback_url
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url=f"{route}/generate",
-                data={
-                    "model": model,
-                    "url" if is_url else "file_id": file_or_url,
-                    "domain": domain,
-                    "batch": batch,
-                    "callback_url": callback_url,
-                    **additional_kwargs,
-                },
+                data=data,
             )
             if not isinstance(response, dict):
                 raise TypeError("Expected dict response")
@@ -519,17 +524,19 @@ def FilePredictions(route: str):
                 additional_kwargs["config"] = config.model_dump()
             if metadata:
                 additional_kwargs["metadata"] = metadata.model_dump()
+            data: dict = {
+                "name": name,
+                "version": version,
+                "url" if is_url else "file_id": file_or_url,
+                "batch": batch,
+                **additional_kwargs,
+            }
+            if callback_url is not None:
+                data["callback_url"] = callback_url
             response, status_code, headers = self._requestor.request(
                 method="POST",
                 url=f"{route}/execute",
-                data={
-                    "name": name,
-                    "version": version,
-                    "url" if is_url else "file_id": file_or_url,
-                    "batch": batch,
-                    "callback_url": callback_url,
-                    **additional_kwargs,
-                },
+                data=data,
             )
             if not isinstance(response, dict):
                 raise TypeError("Expected dict response")

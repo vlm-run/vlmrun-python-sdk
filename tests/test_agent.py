@@ -247,6 +247,211 @@ class TestAgentCompletions:
         assert async_completions1 is async_completions2
 
 
+class TestAgentCompletionsSkillsKwarg:
+    """Test that _patch_create merges VLM-specific kwargs into extra_body.
+
+    Covers both call patterns shown in docs PR #225:
+      - new:  completions.create(..., skills=[...])
+      - old:  completions.create(..., extra_body={"skills": [...]})
+    """
+
+    def _make_recorder(self):
+        """Return a (recorder_list, mock_create) pair that captures kwargs."""
+        calls = []
+
+        def mock_create(*args, **kwargs):
+            calls.append(kwargs)
+            return "ok"
+
+        return calls, mock_create
+
+    # ------------------------------------------------------------------ #
+    # _patch_create unit tests                                             #
+    # ------------------------------------------------------------------ #
+
+    def test_skills_as_direct_kwarg_raw_dict(self):
+        """skills=[{"skill_name": "..."}] is merged into extra_body."""
+        from vlmrun.client.agent import _patch_create
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Summarize."}],
+            skills=[{"skill_name": "invoice-extraction"}],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "skills" not in kw
+        assert kw["extra_body"] == {"skills": [{"skill_name": "invoice-extraction"}]}
+
+    def test_skills_as_direct_kwarg_agent_skill_object(self):
+        """skills=[AgentSkill(...)] objects are serialized and merged into extra_body."""
+        from vlmrun.client.agent import _patch_create
+        from vlmrun.client.types import AgentSkill
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        skill = AgentSkill(skill_name="invoice-extraction")
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Summarize."}],
+            skills=[skill],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "skills" not in kw
+        assert kw["extra_body"]["skills"] == [skill]
+
+    def test_skills_via_extra_body_still_works(self):
+        """extra_body={"skills": [...].model_dump()} pattern (docs PR workaround) is unchanged."""
+        from vlmrun.client.agent import _patch_create
+        from vlmrun.client.types import AgentSkill
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        skill_dict = AgentSkill(
+            skill_name="patient-referral", skill_version="20260219-abc123"
+        ).model_dump()
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Summarize."}],
+            extra_body={"skills": [skill_dict]},
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "skills" not in kw
+        assert kw["extra_body"]["skills"][0]["skill_name"] == "patient-referral"
+
+    def test_multiple_skills_as_direct_kwarg(self):
+        """Multiple skills passed as direct kwargs are all merged into extra_body."""
+        from vlmrun.client.agent import _patch_create
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Validate."}],
+            skills=[
+                {"skill_name": "invoice-extraction"},
+                {"skill_name": "line-item-validation"},
+            ],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "skills" not in kw
+        assert len(kw["extra_body"]["skills"]) == 2
+        assert kw["extra_body"]["skills"][0]["skill_name"] == "invoice-extraction"
+        assert kw["extra_body"]["skills"][1]["skill_name"] == "line-item-validation"
+
+    def test_pinned_skill_version_as_direct_kwarg(self):
+        """skills=[AgentSkill(skill_name=..., version=...)] preserves pinned version."""
+        from vlmrun.client.agent import _patch_create
+        from vlmrun.client.types import AgentSkill
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Summarize."}],
+            skills=[
+                AgentSkill(
+                    skill_name="patient-referral", version="20260219-abc123"
+                ).model_dump()
+            ],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "skills" not in kw
+        skill = kw["extra_body"]["skills"][0]
+        assert skill["skill_name"] == "patient-referral"
+
+    def test_existing_extra_body_is_preserved(self):
+        """VLM kwargs are merged into extra_body without clobbering existing keys."""
+        from vlmrun.client.agent import _patch_create
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Hello."}],
+            skills=[{"skill_name": "invoice-extraction"}],
+            extra_body={"session_id": "abc-123"},
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "skills" not in kw
+        assert kw["extra_body"]["session_id"] == "abc-123"
+        assert kw["extra_body"]["skills"] == [{"skill_name": "invoice-extraction"}]
+
+    def test_toolsets_as_direct_kwarg(self):
+        """toolsets=[...] is merged into extra_body."""
+        from vlmrun.client.agent import _patch_create
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Hello."}],
+            toolsets=["core", "document"],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "toolsets" not in kw
+        assert kw["extra_body"]["toolsets"] == ["core", "document"]
+
+    def test_models_as_direct_kwarg(self):
+        """models=[...] is merged into extra_body."""
+        from vlmrun.client.agent import _patch_create
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Hello."}],
+            models=["gemini"],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "models" not in kw
+        assert kw["extra_body"]["models"] == ["gemini"]
+
+    def test_no_vlm_kwargs_passes_through_unchanged(self):
+        """When no VLM-specific kwargs are present, create is called as-is."""
+        from vlmrun.client.agent import _patch_create
+
+        calls, mock_create = self._make_recorder()
+        wrapped = _patch_create(mock_create)
+
+        wrapped(
+            model="vlmrun-orion-1:auto",
+            messages=[{"role": "user", "content": "Hello."}],
+        )
+
+        assert len(calls) == 1
+        kw = calls[0]
+        assert "extra_body" not in kw
+        assert "skills" not in kw
+        assert "toolsets" not in kw
+        assert "models" not in kw
+
+
 class TestAgentProcessInputs:
     """Test the Agent._process_inputs helper method."""
 

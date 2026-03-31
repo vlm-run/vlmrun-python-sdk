@@ -589,20 +589,21 @@ class GenerationConfig(BaseModel):
 
     def model_dump(self, **kwargs) -> dict:
         """Dump the config as a dictionary, converting response_model to json_schema if present."""
-        data = super().model_dump(**kwargs)
-
         if self.response_model and self.json_schema:
             raise ValueError(
                 "`response_model` and `json_schema` cannot be used together"
             )
 
+        kwargs.setdefault("exclude_none", True)
+        data = super().model_dump(**kwargs)
+
         if self.response_model is not None:
             assert (
                 self.json_schema is None
             ), "`response_model` and `json_schema` cannot be used together"
-            json_schema = self.response_model.model_json_schema()
-            data["json_schema"] = json_schema
-            data.pop("response_model", None)
+            data["json_schema"] = self.response_model.model_json_schema()
+
+        data.pop("response_model", None)
 
         return data
 
