@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Dict, Any, Literal, Optional, Type, List, Tuple
+
 from pydantic import BaseModel, Field, model_validator
 from pydantic.dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, Any, Literal, Optional, Type, List, Tuple
-
-if TYPE_CHECKING:
-    from pathlib import Path
 from vlmrun.hub.utils import jsonschema_to_model
 import math
 import pandas as pd
@@ -522,14 +521,12 @@ class AgentSkill(BaseModel):
                 skills=[skill],
             )
         """
-        from pathlib import Path as _Path
-
         from vlmrun.client.skills import (
             bundle_from_directory,
             parse_skill_frontmatter,
         )
 
-        directory = _Path(directory)
+        directory = Path(directory)
         skill_md = directory / "SKILL.md"
         if not skill_md.exists():
             raise FileNotFoundError(f"SKILL.md not found in {directory}")
