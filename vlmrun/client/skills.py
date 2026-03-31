@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.types import (
     AgentSkill,
-    InlineSkillSource,
     SkillDownloadResponse,
     SkillInfo,
 )
@@ -75,37 +74,6 @@ def hash_directory(directory: Path) -> str:
             h.update(rel.encode())
             h.update(file_path.read_bytes())
     return h.hexdigest()
-
-
-def inline_skill_from_directory(directory: Path) -> AgentSkill:
-    """Build an inline :class:`AgentSkill` from a local skill directory.
-
-    Zips the directory contents into memory, base64-encodes the result,
-    and returns an ``AgentSkill`` with ``type="inline"`` that can be sent
-    directly in a chat completion request.
-
-    Args:
-        directory: Path to a skill folder containing at least a ``SKILL.md``.
-
-    Returns:
-        AgentSkill with type="inline" and the base64-encoded zip bundle.
-
-    Raises:
-        FileNotFoundError: If ``SKILL.md`` is missing from *directory*.
-    """
-    skill_md = directory / "SKILL.md"
-    if not skill_md.exists():
-        raise FileNotFoundError(f"SKILL.md not found in {directory}")
-
-    name, description = parse_skill_frontmatter(skill_md)
-    bundle = bundle_from_directory(directory)
-
-    return AgentSkill(
-        type="inline",
-        name=name or directory.name,
-        description=description or "",
-        source=InlineSkillSource(data=bundle),
-    )
 
 
 class Skills:

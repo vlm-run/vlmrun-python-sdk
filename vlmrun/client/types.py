@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Dict, Any, Literal, Optional, Type, List, Tuple
+
 from pydantic import BaseModel, Field, model_validator
 from pydantic.dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, Literal, Optional, Type, List, Tuple
 from vlmrun.hub.utils import jsonschema_to_model
 import math
 import pandas as pd
@@ -513,6 +515,59 @@ class AgentSkill(BaseModel):
     def effective_description(self) -> Optional[str]:
         """Return the description for this skill."""
         return self.description or ""
+
+    @classmethod
+    def from_directory(
+        cls,
+        directory: Path,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> "AgentSkill":
+        """Build an inline :class:`AgentSkill` from a local skill directory.
+
+        Zips the directory contents, base64-encodes the result, and returns
+        an ``AgentSkill`` with ``type="inline"`` that can be sent directly
+        in a chat completion or agent execution request.
+
+        Args:
+            directory: Path to a skill folder containing at least a ``SKILL.md``.
+            name: Override skill name (defaults to SKILL.md frontmatter or directory name).
+            description: Override skill description (defaults to SKILL.md frontmatter).
+
+        Returns:
+            AgentSkill with ``type="inline"`` and the base64-encoded zip bundle.
+
+        Raises:
+            FileNotFoundError: If ``SKILL.md`` is missing from *directory*.
+
+        Example::
+
+            skill = AgentSkill.from_directory(Path("./my-skill"))
+            response = client.agent.completions.create(
+                model="vlmrun-orion-1:auto",
+                messages=[...],
+                skills=[skill],
+            )
+        """
+        from vlmrun.client.skills import (
+            bundle_from_directory,
+            parse_skill_frontmatter,
+        )
+
+        directory = Path(directory)
+        skill_md = directory / "SKILL.md"
+        if not skill_md.exists():
+            raise FileNotFoundError(f"SKILL.md not found in {directory}")
+
+        fm_name, fm_description = parse_skill_frontmatter(skill_md)
+
+        return cls(
+            type="inline",
+            name=name or fm_name or directory.name,
+            description=description or fm_description or "",
+            source=InlineSkillSource(data=bundle_from_directory(directory)),
+        )
 
 
 class GenerationConfig(BaseModel):
