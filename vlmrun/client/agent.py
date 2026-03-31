@@ -1,6 +1,7 @@
 """VLM Run API Agent resource."""
 
 from __future__ import annotations
+import functools
 import warnings
 from functools import cached_property
 from typing import Any, List, Optional, Union
@@ -19,6 +20,41 @@ from vlmrun.client.types import (
     AgentToolset,
 )
 from vlmrun.client.exceptions import DependencyError
+
+# VLM Run-specific kwargs accepted by the agent API that are not part of the
+# standard OpenAI chat completions signature. They are forwarded to the server
+# via `extra_body`.
+_VLM_EXTRA_KEYS: frozenset[str] = frozenset({"skills", "toolsets", "models"})
+
+
+def _patch_create(create_fn: Any) -> Any:
+    """Wrap an OpenAI ``create`` callable to accept VLM Run-specific kwargs.
+
+    ``skills``, ``toolsets``, and ``models`` are popped from ``kwargs`` and
+    merged into ``extra_body`` before the underlying call is made.
+    """
+
+    @functools.wraps(create_fn)
+    def _create(*args: Any, **kwargs: Any) -> Any:
+        vlm_kwargs = {k: kwargs.pop(k) for k in _VLM_EXTRA_KEYS if k in kwargs}
+        if vlm_kwargs:
+            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **vlm_kwargs}
+        return create_fn(*args, **kwargs)
+
+    return _create
+
+
+def _patch_async_create(create_fn: Any) -> Any:
+    """Async variant of :func:`_patch_create`."""
+
+    @functools.wraps(create_fn)
+    async def _create(*args: Any, **kwargs: Any) -> Any:
+        vlm_kwargs = {k: kwargs.pop(k) for k in _VLM_EXTRA_KEYS if k in kwargs}
+        if vlm_kwargs:
+            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **vlm_kwargs}
+        return await create_fn(*args, **kwargs)
+
+    return _create
 
 
 class Agent:
@@ -288,7 +324,9 @@ class Agent:
             max_retries=self._client.max_retries,
         )
 
-        return openai_client.chat.completions
+        completions = openai_client.chat.completions
+        completions.create = _patch_create(completions.create)
+        return completions
 
     @cached_property
     def async_completions(self):
@@ -340,4 +378,6 @@ class Agent:
             max_retries=self._client.max_retries,
         )
 
-        return async_openai_client.chat.completions
+        completions = async_openai_client.chat.completions
+        completions.create = _patch_async_create(completions.create)
+        return completions
