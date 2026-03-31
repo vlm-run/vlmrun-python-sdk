@@ -315,8 +315,8 @@ class TestModels:
 
 # Integration Tests - Only run when environment is configured
 @pytest.mark.skipif(
-    not os.getenv("VLMRUN_API_KEY") or not os.getenv("VLMRUN_AGENT_BASE_URL"),
-    reason="No VLMRUN_API_KEY and VLMRUN_AGENT_BASE_URL in environment",
+    not os.getenv("VLMRUN_API_KEY"),
+    reason="No VLMRUN_API_KEY in environment",
 )
 class TestChatIntegration:
     """Integration tests for chat command that require a real API key."""
