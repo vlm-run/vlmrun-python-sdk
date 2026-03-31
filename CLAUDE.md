@@ -145,12 +145,12 @@ The following guidelines ensure high-quality, maintainable, and idiomatic Python
 - Test files should mirror the client structure: `test_predictions.py`, `test_agent.py`, `test_client.py`, etc.
 - Tests requiring a live API should be guarded with `@pytest.mark.skipif` checks for `VLMRUN_API_KEY`.
 
-### Modern Python (3.10+)
+### Modern Python Style
 
+- **Use `from __future__ import annotations`** at the top of every file. This enables modern type hint syntax while maintaining compatibility with the Python 3.9+ floor declared in `pyproject.toml`.
 - **Use `X | None` instead of `Optional[X]`** for type hints (PEP 604). Example: `api_key: str | None = None` instead of `api_key: Optional[str] = None`.
-- **Use `list[T]` instead of `List[T]`**, `dict[K, V]` instead of `Dict[K, V]`**, `tuple[T, ...]` instead of `Tuple[T, ...]` (PEP 585 built-in generics).
-- Use **`from __future__ import annotations`** at the top of files for forward reference support (already used in some files).
-- Prefer **`match` / `case`** (structural pattern matching, Python 3.10+) over long if/elif chains where appropriate.
+- **Use built-in generics** (PEP 585): `list[T]` instead of `List[T]`, `dict[K, V]` instead of `Dict[K, V]`, `tuple[T, ...]` instead of `Tuple[T, ...]`.
+- Prefer **`match` / `case`** (structural pattern matching, Python 3.10+) over long if/elif chains where appropriate, but only in code paths that don't need to run on Python 3.9.
 - Use **f-strings** for all string formatting (no `%` or `.format()`).
 - Use **`|` for union types** in all new code: `str | int` not `Union[str, int]`.
 
