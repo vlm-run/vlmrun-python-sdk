@@ -74,7 +74,7 @@ class TestAgentSkillReferenced:
         skill = AgentSkill(skill_id="pillow")
         assert skill.type == "skill_reference"
         assert skill.skill_id == "pillow"
-        assert skill.version == "latest"
+        assert skill.skill_version == "latest"
         assert skill.is_inline is False
 
     def test_referenced_with_skill_name(self):
@@ -222,9 +222,19 @@ class TestAgentSkillEdgeCases:
         skill = AgentSkill(skill_id="x")
         assert skill.type == "skill_reference"
 
-    def test_version_default(self):
+    def test_skill_version_default(self):
         skill = AgentSkill(skill_id="x")
-        assert skill.version == "latest"
+        assert skill.skill_version == "latest"
+
+    def test_version_backward_compat(self):
+        """version= kwarg should populate skill_version for backward compat."""
+        skill = AgentSkill(skill_id="x", version="20260219-abc123")
+        assert skill.skill_version == "20260219-abc123"
+
+    def test_skill_version_preferred_over_version(self):
+        """skill_version takes precedence when both are provided."""
+        skill = AgentSkill(skill_id="x", skill_version="v2", version="v1")
+        assert skill.skill_version == "v2"
 
 
 # ---------------------------------------------------------------------------

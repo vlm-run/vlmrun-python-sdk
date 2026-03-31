@@ -92,7 +92,7 @@ def list_skills(
         public_marker = "[green]y[/]" if skill.is_public else "n"
         table.add_row(
             skill.name,
-            skill.version or "",
+            skill.skill_version or "",
             skill.description or "",
             public_marker,
             created,
@@ -395,7 +395,7 @@ def _print_skill_with_tree(skill: SkillInfo, folder: Path, subtitle_path: Path) 
     meta.add_column()
     meta.add_row("ID", skill.id)
     meta.add_row("Name", skill.name)
-    meta.add_row("Version", skill.version or "\u2014")
+    meta.add_row("Version", skill.skill_version or "\u2014")
     if skill.description:
         meta.add_row("Description", skill.description)
     if skill.is_public is not None:
@@ -467,7 +467,7 @@ def _print_skill_detail(skill: SkillInfo) -> None:
 
     meta.add_row("ID", skill.id)
     meta.add_row("Name", skill.name)
-    meta.add_row("Version", skill.version or "—")
+    meta.add_row("Version", skill.skill_version or "—")
     if skill.description:
         meta.add_row("Description", skill.description)
     if skill.is_public is not None:

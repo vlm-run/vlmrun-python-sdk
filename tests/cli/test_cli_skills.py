@@ -110,7 +110,7 @@ def test_get_skill_json(runner, mock_client, config_file):
     data = json.loads(result.stdout)
     assert data["name"] == "invoice-parsing"
     assert "id" in data
-    assert "version" in data
+    assert "skill_version" in data
 
 
 # ---------------------------------------------------------------------------

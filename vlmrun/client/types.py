@@ -318,7 +318,22 @@ class SkillInfo(BaseModel):
     id: str = Field(..., description="ID of the skill")
     name: str = Field(..., description="Name of the skill")
     description: Optional[str] = Field(None, description="Description of the skill")
-    version: Optional[str] = Field(None, description="Version of the skill")
+    skill_version: Optional[str] = Field(None, description="Version of the skill")
+    version: Optional[str] = Field(
+        None,
+        description="DEPRECATED: Use 'skill_version' instead. Version of the skill.",
+        exclude=True,
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_version(cls, values: Any) -> Any:
+        """Accept 'version' as an alias for 'skill_version' for backward compatibility."""
+        if isinstance(values, dict):
+            if values.get("version") and not values.get("skill_version"):
+                values["skill_version"] = values["version"]
+        return values
+
     created_at: Optional[datetime] = Field(
         None, description="Date and time when the skill was created (in UTC timezone)"
     )
@@ -370,7 +385,7 @@ class AgentSkill(BaseModel):
     Two modes are supported:
 
     1. **Referenced skills** (``type="skill_reference"``) -- Provide ``skill_id``
-       (UUID or name) and optionally ``version``.
+       (UUID or name) and optionally ``skill_version``.
 
        .. code-block:: python
 
@@ -410,10 +425,24 @@ class AgentSkill(BaseModel):
             "Alternative to skill_id. Deprecated in favour of skill_id."
         ),
     )
-    version: Optional[str] = Field(
+    skill_version: Optional[str] = Field(
         default="latest",
         description="The version of the skill -- an integer or 'latest'.",
     )
+    version: Optional[str] = Field(
+        default=None,
+        description="DEPRECATED: Use 'skill_version' instead. The version of the skill.",
+        exclude=True,
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_version(cls, values: Any) -> Any:
+        """Accept 'version' as an alias for 'skill_version' for backward compatibility."""
+        if isinstance(values, dict):
+            if values.get("version") and not values.get("skill_version"):
+                values["skill_version"] = values["version"]
+        return values
 
     # -- Inline skill fields -----------------------------------------------
     name: Optional[str] = Field(
