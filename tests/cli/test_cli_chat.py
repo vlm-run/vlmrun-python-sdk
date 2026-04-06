@@ -84,6 +84,16 @@ class TestResolvePrompt:
         result = resolve_prompt(None, None)
         assert result is None
 
+    def test_empty_string_argument(self):
+        """Test that empty string argument is accepted as a valid prompt."""
+        result = resolve_prompt("", None)
+        assert result == ""
+
+    def test_empty_string_option(self):
+        """Test that empty string -p option is accepted as a valid prompt."""
+        result = resolve_prompt(None, "")
+        assert result == ""
+
     def test_stdin_indicator(self):
         """Test that '-' argument raises when no stdin."""
         with pytest.raises(ValueError, match="No input provided on stdin"):
@@ -220,8 +230,8 @@ class TestChatCommand:
         assert "--skill-id" in plain_output
 
     def test_chat_no_prompt_error(self, runner, config_file, mock_client):
-        """Test error when empty prompt provided."""
-        result = runner.invoke(app, ["chat", ""])
+        """Test error when no prompt provided at all."""
+        result = runner.invoke(app, ["chat"])
         assert result.exit_code == 1
         assert "No prompt provided" in result.stdout
 
