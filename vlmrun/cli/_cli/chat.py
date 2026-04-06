@@ -172,6 +172,10 @@ def read_prompt_from_file(file_path: str) -> str:
 
 
 def resolve_prompt_option(prompt_value: str) -> str:
+    # Allow empty string as a valid prompt (e.g. when skill provides the prompt)
+    if prompt_value == "":
+        return prompt_value
+
     """Resolve the -p/--prompt option value.
 
     The -p option can be:
@@ -214,11 +218,11 @@ def resolve_prompt(
         raise ValueError("No input provided on stdin")
 
     # Priority 1: Command line argument (positional)
-    if prompt_arg:
+    if prompt_arg is not None:
         return prompt_arg
 
     # Priority 2: -p option (can be text, file, or "stdin")
-    if prompt_option:
+    if prompt_option is not None:
         return resolve_prompt_option(prompt_option)
 
     # Priority 3: Auto-detect piped stdin
@@ -612,7 +616,7 @@ def chat(
         console.print(f"[red]Error:[/] {e}")
         sys.exit(1)
 
-    if not final_prompt:
+    if final_prompt is None:
         console.print("[red]Error:[/] No prompt provided.")
         console.print("\nUsage:")
         console.print('  vlmrun chat "Your prompt here" -i file.jpg')
