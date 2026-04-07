@@ -5,10 +5,9 @@ from __future__ import annotations
 import typer
 from typing import TYPE_CHECKING
 
-from rich import box
-from rich.table import Table
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
+from rich.text import Text
 from datetime import datetime
 
 if TYPE_CHECKING:
@@ -21,6 +20,46 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+def _status_style(status: str) -> str:
+    return {
+        "completed": "green",
+        "running": "yellow",
+        "failed": "red",
+        "pending": "dim",
+        "enqueued": "dim",
+        "paused": "yellow",
+    }.get(status, "white")
+
+
+def _compute_duration(created_at, completed_at, usage) -> str:
+    if usage and usage.duration_seconds:
+        return f"{usage.duration_seconds}s"
+    if completed_at and created_at:
+        delta = (completed_at - created_at).total_seconds()
+        if delta > 0:
+            return f"{int(delta)}s"
+    return "-"
+
+
+def _format_row(
+    id_val: str,
+    domain_val: str,
+    status_val: str,
+    status_style: str,
+    created_val: str,
+    dur_val: str,
+    domain_width: int,
+) -> Text:
+    domain_trunc = domain_val[:domain_width].ljust(domain_width)
+    line = Text()
+    line.append(f" {id_val}  ", style="bold cyan")
+    line.append(f"{domain_trunc}  ", style="white")
+    line.append(f"{status_val:<10s}  ", style=status_style)
+    line.append(f"{created_val}  ", style="dim")
+    line.append(f"{dur_val:>6s}", style="dim")
+    return line
 
 
 @app.command()
@@ -74,38 +113,50 @@ def list(
         console.print("[yellow]No predictions found[/]")
         return
 
-    table = Table(
-        show_header=True,
-        box=box.SIMPLE_HEAVY,
-        header_style="bold white",
-        padding=(0, 1),
-        expand=True,
-    )
-    table.add_column("ID", style="bold cyan", min_width=40)
-    table.add_column("CREATED", style="dim")
-    table.add_column("STATUS")
-    table.add_column("ELEMENTS", style="dim")
-    table.add_column("TYPE", style="dim")
-    table.add_column("CREDITS", style="dim")
+    # Layout: pad(1) + ID(36) + gap(2) + domain(flex) + gap(2) + status(10) + gap(2) + created(16) + gap(2) + dur(6)
+    # Fixed cols = 1+36+2 + 2+10+2+16+2+6 = 77
+    panel_w = min(console.width, 150)
+    inner_w = panel_w - 2
+    domain_w = max(inner_w - 85, 10)
+
+    header = Text()
+    header.append(f" {'ID':<36s}  ", style="bold")
+    header.append(f"{'DOMAIN':<{domain_w}s}  ", style="bold")
+    header.append(f"{'STATUS':<10s}  ", style="bold")
+    header.append(f"{'CREATED':<16s}  ", style="bold")
+    header.append(f"{'DURATION':>6s}", style="bold")
+
+    sep = Text(f" {'─' * (inner_w - 1)}")
+
+    rows: list[Text] = [header, sep]
     for prediction in predictions:
-        table.add_row(
-            prediction.id,
-            prediction.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            str(prediction.status),
-            str(prediction.usage.elements_processed),
-            str(prediction.usage.element_type),
-            str(prediction.usage.credits_used),
+        usage = prediction.usage
+        st = _status_style(prediction.status)
+        dur = _compute_duration(
+            prediction.created_at, prediction.completed_at, usage
+        )
+        rows.append(
+            _format_row(
+                prediction.id,
+                prediction.domain or "-",
+                prediction.status,
+                st,
+                prediction.created_at.strftime("%Y-%m-%d %H:%M"),
+                dur,
+                domain_w,
+            )
         )
 
     console.print(
         Panel(
-            table,
+            Group(*rows),
             title="[bold]Predictions[/bold]",
             title_align="left",
             subtitle=f"[dim]{len(predictions)} prediction(s)[/dim]",
             subtitle_align="right",
             border_style="blue",
-            padding=(0, 1),
+            padding=(0, 0),
+            width=panel_w,
         )
     )
 
@@ -138,12 +189,18 @@ def get(
         details["Completed"] = prediction.completed_at.strftime("%Y-%m-%d %H:%M:%S")
 
     if prediction.usage:
-        if prediction.usage.elements_processed:
+        if prediction.usage.elements_processed is not None:
             details["Elements Processed"] = prediction.usage.elements_processed
-        if prediction.usage.element_type:
+        if prediction.usage.element_type is not None:
             details["Element Type"] = prediction.usage.element_type
-        if prediction.usage.credits_used:
+        if prediction.usage.credits_used is not None:
             details["Credits Used"] = prediction.usage.credits_used
+
+    dur = _compute_duration(
+        prediction.created_at, prediction.completed_at, prediction.usage
+    )
+    if dur != "-":
+        details["Duration"] = dur
 
     for key, value in details.items():
         console.print(f"{key}: {value}", style="white")

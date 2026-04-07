@@ -14,8 +14,10 @@ from rich.text import Text
 from vlmrun.client import VLMRun
 from vlmrun.cli._cli.chat import CHAT_HELP, chat
 from vlmrun.cli._cli.config import app as config_app, resolve_config
+from vlmrun.cli._cli.execute import EXECUTE_HELP, execute
+from vlmrun.cli._cli.executions import app as executions_app
 from vlmrun.cli._cli.files import app as files_app
-from vlmrun.cli._cli.generate import app as generate_app
+from vlmrun.cli._cli.generate import GENERATE_HELP, generate
 from vlmrun.cli._cli.hub import app as hub_app
 from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.predictions import app as predictions_app
@@ -109,7 +111,13 @@ def main(
 
 # Add subcommands
 app.command("chat", help=CHAT_HELP, context_settings={"max_content_width": 120})(chat)
-app.add_typer(generate_app, name="generate")
+app.command("execute", help=EXECUTE_HELP, context_settings={"max_content_width": 120})(
+    execute
+)
+app.command("generate", help=GENERATE_HELP, context_settings={"max_content_width": 120})(
+    generate
+)
+app.add_typer(executions_app, name="executions")
 app.add_typer(predictions_app, name="predictions")
 app.add_typer(files_app, name="files")
 app.add_typer(hub_app, name="hub")

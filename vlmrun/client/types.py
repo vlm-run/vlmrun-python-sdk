@@ -73,6 +73,9 @@ class CreditUsage(BaseModel):
     elements_processed: Optional[int] = None
     element_type: Optional[Literal["image", "page", "video", "audio"]] = None
     credits_used: Optional[int] = None
+    steps: Optional[int] = None
+    message: Optional[str] = None
+    duration_seconds: int = 0
 
 
 class PredictionResponse(BaseModel):
