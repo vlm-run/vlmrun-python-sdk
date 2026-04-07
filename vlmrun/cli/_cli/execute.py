@@ -394,15 +394,12 @@ def execute(
                     )
                 )
 
-        # Build inputs dict from uploaded files
+        # Build inputs dict from uploaded file IDs
         inputs: Optional[Dict[str, Any]] = None
         if file_responses:
             inputs = {
                 "files": [
-                    {
-                        "type": "file_url",
-                        "file_url": {"url": fr.public_url},
-                    }
+                    {"type": "input_file", "file_id": fr.id}
                     for fr in file_responses
                 ]
             }
