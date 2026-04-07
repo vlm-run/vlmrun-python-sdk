@@ -111,12 +111,18 @@ def main(
 
 # Add subcommands
 app.command("chat", help=CHAT_HELP, context_settings={"max_content_width": 120})(chat)
-app.command("execute", help=EXECUTE_HELP, context_settings={"max_content_width": 120})(
-    execute
-)
-app.command("generate", help=GENERATE_HELP, context_settings={"max_content_width": 120})(
-    generate
-)
+app.command(
+    "execute",
+    help=EXECUTE_HELP,
+    no_args_is_help=True,
+    context_settings={"max_content_width": 120},
+)(execute)
+app.command(
+    "generate",
+    help=GENERATE_HELP,
+    no_args_is_help=True,
+    context_settings={"max_content_width": 120},
+)(generate)
 app.add_typer(executions_app, name="executions")
 app.add_typer(predictions_app, name="predictions")
 app.add_typer(files_app, name="files")
