@@ -586,24 +586,24 @@ class EvaluationRunResponse(BaseModel):
 
     id: str
     source_type: str
-    source_id: str | None = None
+    source_id: Optional[str] = None
     source_label: str
-    source_version: str | None = None
+    source_version: Optional[str] = None
     status: str = "pending"
-    accuracy: float | None = None
-    api_completion_rate: float | None = None
-    total_items: int | None = None
-    total_with_feedback: int | None = None
-    data_from: str | None = None
-    data_to: str | None = None
-    results: dict[str, Any] = {}
-    created_at: str | None = None
+    accuracy: Optional[float] = None
+    api_completion_rate: Optional[float] = None
+    total_items: Optional[int] = None
+    total_with_feedback: Optional[int] = None
+    data_from: Optional[str] = None
+    data_to: Optional[str] = None
+    results: Dict[str, Any] = {}
+    created_at: Optional[str] = None
 
 
 class EvaluationRunListResponse(BaseModel):
     """Paginated list of evaluation runs."""
 
-    data: list[EvaluationRunResponse]
+    data: List[EvaluationRunResponse]
     count: int
 
 
@@ -613,7 +613,7 @@ class EvaluationPreviewResponse(BaseModel):
     total_items: int
     total_with_feedback: int
     feedback_with_corrections: int
-    latest_item_at: str | None = None
+    latest_item_at: Optional[str] = None
 
 
 class AccuracyTrendPoint(BaseModel):
@@ -621,11 +621,11 @@ class AccuracyTrendPoint(BaseModel):
 
     run_id: str
     accuracy: float
-    api_completion_rate: float | None = None
-    fuzzy_match_rate: float | None = None
-    exact_match_rate: float | None = None
-    source_type: str | None = None
-    source_label: str | None = None
+    api_completion_rate: Optional[float] = None
+    fuzzy_match_rate: Optional[float] = None
+    exact_match_rate: Optional[float] = None
+    source_type: Optional[str] = None
+    source_label: Optional[str] = None
     created_at: str
 
 
@@ -643,9 +643,9 @@ class LatencyTrendPoint(BaseModel):
 
     run_id: str
     created_at: str
-    p50_ms: float | None = None
-    p90_ms: float | None = None
-    p95_ms: float | None = None
+    p50_ms: Optional[float] = None
+    p90_ms: Optional[float] = None
+    p95_ms: Optional[float] = None
 
 
 class SourceTypeCount(BaseModel):
@@ -666,30 +666,30 @@ class UniqueSource(BaseModel):
 class EvaluationMetricsResponse(BaseModel):
     """Aggregated evaluation metrics."""
 
-    accuracy_trend: list[AccuracyTrendPoint]
-    avg_accuracy: float | None = None
-    accuracy_delta: float | None = None
-    avg_api_completion_rate: float | None = None
-    avg_fuzzy_match_rate: float | None = None
-    avg_exact_match_rate: float | None = None
-    field_accuracies: list[FieldAccuracyAggregate]
-    latency_trend: list[LatencyTrendPoint]
-    p50_ms: float | None = None
-    p90_ms: float | None = None
-    p95_ms: float | None = None
+    accuracy_trend: List[AccuracyTrendPoint]
+    avg_accuracy: Optional[float] = None
+    accuracy_delta: Optional[float] = None
+    avg_api_completion_rate: Optional[float] = None
+    avg_fuzzy_match_rate: Optional[float] = None
+    avg_exact_match_rate: Optional[float] = None
+    field_accuracies: List[FieldAccuracyAggregate]
+    latency_trend: List[LatencyTrendPoint]
+    p50_ms: Optional[float] = None
+    p90_ms: Optional[float] = None
+    p95_ms: Optional[float] = None
 
 
 class EvaluationSummaryStatsResponse(BaseModel):
     """Summary statistics for evaluation runs."""
 
     total_runs: int
-    source_type_counts: list[SourceTypeCount]
+    source_type_counts: List[SourceTypeCount]
 
 
 class EvaluationUniqueSourcesResponse(BaseModel):
     """Unique evaluation sources for filtering."""
 
-    sources: list[UniqueSource]
+    sources: List[UniqueSource]
 
 
 class GenerationConfig(BaseModel):
