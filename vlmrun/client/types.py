@@ -692,26 +692,6 @@ class EvaluationUniqueSourcesResponse(BaseModel):
     sources: list[UniqueSource]
 
 
-class OptimizeSkillResponse(BaseModel):
-    """Response from skill optimization."""
-
-    skill_id: str
-    name: str
-    version: str
-    original_skill_id: str
-    total_pairs: int
-    sampled_pairs: int
-    created_at: str
-
-
-class RerunSkillResponse(BaseModel):
-    """Response from evaluation re-run."""
-
-    evaluation_id: str
-    skill_id: str
-    status: str
-
-
 class GenerationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None)
     response_model: Optional[Type[BaseModel]] = Field(default=None)

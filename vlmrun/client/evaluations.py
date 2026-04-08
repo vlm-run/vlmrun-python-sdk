@@ -12,8 +12,6 @@ from vlmrun.client.types import (
     EvaluationMetricsResponse,
     EvaluationSummaryStatsResponse,
     EvaluationUniqueSourcesResponse,
-    OptimizeSkillResponse,
-    RerunSkillResponse,
 )
 from vlmrun.types.abstract import VLMRunProtocol
 
@@ -79,61 +77,6 @@ class Evaluations:
         """
         response, status_code, headers = self._requestor.request(
             method="GET", url=f"evaluations/{run_id}"
-        )
-        return EvaluationRunResponse(**response)
-
-    def run(
-        self,
-        source_type: str,
-        source_id: str,
-        source_label: str,
-        execution_ids: list[str] | None = None,
-        request_ids: list[str] | None = None,
-        skill_ids: list[str] | None = None,
-        data_from: str | None = None,
-        data_to: str | None = None,
-        evaluators: list[str] | None = None,
-        infer_corrections: bool | None = None,
-    ) -> EvaluationRunResponse:
-        """Trigger a new evaluation run.
-
-        Args:
-            source_type: Type of evaluation source ("agent", "request_domain", or "skill")
-            source_id: ID of the source to evaluate
-            source_label: Display label for the source
-            execution_ids: Optional list of execution IDs to evaluate
-            request_ids: Optional list of request IDs to evaluate
-            skill_ids: Optional list of skill IDs to evaluate
-            data_from: Optional start datetime for data range (ISO format)
-            data_to: Optional end datetime for data range (ISO format)
-            evaluators: Optional list of evaluator types to use
-            infer_corrections: Whether to infer corrections from feedback
-
-        Returns:
-            EvaluationRunResponse: The created evaluation run
-        """
-        data: dict[str, Any] = {
-            "source_type": source_type,
-            "source_id": source_id,
-            "source_label": source_label,
-        }
-        if execution_ids is not None:
-            data["execution_ids"] = execution_ids
-        if request_ids is not None:
-            data["request_ids"] = request_ids
-        if skill_ids is not None:
-            data["skill_ids"] = skill_ids
-        if data_from is not None:
-            data["data_from"] = data_from
-        if data_to is not None:
-            data["data_to"] = data_to
-        if evaluators is not None:
-            data["evaluators"] = evaluators
-        if infer_corrections is not None:
-            data["infer_corrections"] = infer_corrections
-
-        response, status_code, headers = self._requestor.request(
-            method="POST", url="evaluations/run", data=data
         )
         return EvaluationRunResponse(**response)
 
@@ -225,75 +168,3 @@ class Evaluations:
             run_id: The evaluation run ID to delete
         """
         self._requestor.request(method="DELETE", url=f"evaluations/{run_id}")
-
-    def optimize_skill(
-        self,
-        skill_id: str,
-        skill_ids: list[str] | None = None,
-        data_from: str | None = None,
-        data_to: str | None = None,
-        infer_corrections: bool = True,
-        n_samples: int | None = None,
-    ) -> OptimizeSkillResponse:
-        """Optimize a skill based on evaluation data.
-
-        Args:
-            skill_id: The skill ID to optimize
-            skill_ids: Optional list of additional skill IDs
-            data_from: Optional start datetime for data range (ISO format)
-            data_to: Optional end datetime for data range (ISO format)
-            infer_corrections: Whether to infer corrections (default: True)
-            n_samples: Optional number of samples to use
-
-        Returns:
-            OptimizeSkillResponse: The optimization result
-        """
-        data: dict[str, Any] = {"skill_id": skill_id}
-        if skill_ids is not None:
-            data["skill_ids"] = skill_ids
-        if data_from is not None:
-            data["data_from"] = data_from
-        if data_to is not None:
-            data["data_to"] = data_to
-        data["infer_corrections"] = infer_corrections
-        if n_samples is not None:
-            data["n_samples"] = n_samples
-
-        response, status_code, headers = self._requestor.request(
-            method="POST", url="evaluations/optimize", data=data
-        )
-        return OptimizeSkillResponse(**response)
-
-    def rerun_skill(
-        self,
-        evaluation_id: str,
-        skill_id: str | None = None,
-        evaluators: list[str] | None = None,
-        infer_corrections: bool = True,
-        n_samples: int | None = None,
-    ) -> RerunSkillResponse:
-        """Re-run an evaluation with different parameters.
-
-        Args:
-            evaluation_id: The evaluation run ID to re-run
-            skill_id: Optional skill ID to use for the re-run
-            evaluators: Optional list of evaluator types to use
-            infer_corrections: Whether to infer corrections (default: True)
-            n_samples: Optional number of samples to use
-
-        Returns:
-            RerunSkillResponse: The re-run result
-        """
-        data: dict[str, Any] = {"evaluation_id": evaluation_id}
-        if skill_id is not None:
-            data["skill_id"] = skill_id
-        if evaluators is not None:
-            data["evaluators"] = evaluators
-        data["infer_corrections"] = infer_corrections
-        if n_samples is not None:
-            data["n_samples"] = n_samples
-
-        response, status_code, headers = self._requestor.request(
-            method="POST", url="evaluations/rerun", data=data
-        )
-        return RerunSkillResponse(**response)

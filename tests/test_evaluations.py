@@ -7,8 +7,6 @@ from vlmrun.client.types import (
     EvaluationRunResponse,
     EvaluationSummaryStatsResponse,
     EvaluationUniqueSourcesResponse,
-    OptimizeSkillResponse,
-    RerunSkillResponse,
 )
 
 
@@ -29,20 +27,6 @@ def test_get_evaluation(mock_client):
     assert response.id == "eval-run-1"
     assert response.status == "completed"
     assert response.accuracy == 0.95
-
-
-def test_run_evaluation(mock_client):
-    """Test triggering a new evaluation run."""
-    response = mock_client.evaluations.run(
-        source_type="skill",
-        source_id="skill-123",
-        source_label="invoice-parsing",
-    )
-    assert isinstance(response, EvaluationRunResponse)
-    assert response.id == "eval-run-new"
-    assert response.source_type == "skill"
-    assert response.source_id == "skill-123"
-    assert response.status == "pending"
 
 
 def test_preview_evaluation(mock_client):
@@ -83,19 +67,3 @@ def test_delete_evaluation(mock_client):
     """Test deleting an evaluation run."""
     result = mock_client.evaluations.delete("eval-run-1")
     assert result is None
-
-
-def test_optimize_skill(mock_client):
-    """Test skill optimization."""
-    response = mock_client.evaluations.optimize_skill(skill_id="skill-123")
-    assert isinstance(response, OptimizeSkillResponse)
-    assert response.original_skill_id == "skill-123"
-    assert response.name == "invoice-parsing-optimized"
-
-
-def test_rerun_skill(mock_client):
-    """Test evaluation re-run."""
-    response = mock_client.evaluations.rerun_skill(evaluation_id="eval-run-1")
-    assert isinstance(response, RerunSkillResponse)
-    assert response.evaluation_id == "eval-run-1"
-    assert response.status == "pending"
