@@ -13,13 +13,21 @@ from typer.testing import CliRunner
 from vlmrun.client.types import (
     CreditUsage,
     DatasetResponse,
+    EvaluationMetricsResponse,
+    EvaluationPreviewResponse,
+    EvaluationRunListResponse,
+    EvaluationRunResponse,
+    EvaluationSummaryStatsResponse,
+    EvaluationUniqueSourcesResponse,
     FileResponse,
     HubDomainInfo,
     HubInfoResponse,
     HubSchemaResponse,
     ModelInfo,
+    OptimizeSkillResponse,
     PredictionResponse,
     PresignedUrlResponse,
+    RerunSkillResponse,
     SkillDownloadResponse,
     SkillInfo,
 )
@@ -117,6 +125,7 @@ def mock_client(monkeypatch):
             self.agent = self.Agent(self)
             self.artifacts = self.Artifacts(self)
             self.skills = self.Skills(self)
+            self.evaluations = self.Evaluations(self)
 
         class Skills:
             def __init__(self, client):
@@ -741,6 +750,95 @@ def mock_client(monkeypatch):
                     completed_at=datetime.fromisoformat("2024-01-01T00:00:01+00:00"),
                     response={"result": "execution result"},
                     usage=CreditUsage(credits_used=50),
+                )
+
+        class Evaluations:
+            def __init__(self, client):
+                self._client = client
+
+            def list(self, limit=30, offset=0, order_by="created_at", descending=True, created_at_gte=None, created_at_lte=None):
+                return EvaluationRunListResponse(
+                    data=[
+                        EvaluationRunResponse(
+                            id="eval-run-1",
+                            source_type="skill",
+                            source_label="invoice-parsing",
+                            status="completed",
+                            accuracy=0.95,
+                            total_items=100,
+                            total_with_feedback=50,
+                            created_at="2024-01-01T00:00:00+00:00",
+                        )
+                    ],
+                    count=1,
+                )
+
+            def get(self, run_id):
+                return EvaluationRunResponse(
+                    id=run_id,
+                    source_type="skill",
+                    source_label="invoice-parsing",
+                    status="completed",
+                    accuracy=0.95,
+                    total_items=100,
+                    total_with_feedback=50,
+                    created_at="2024-01-01T00:00:00+00:00",
+                )
+
+            def run(self, source_type, source_id, source_label, **kwargs):
+                return EvaluationRunResponse(
+                    id="eval-run-new",
+                    source_type=source_type,
+                    source_id=source_id,
+                    source_label=source_label,
+                    status="pending",
+                    created_at="2024-01-01T00:00:00+00:00",
+                )
+
+            def preview(self, source_type, source_id, data_from=None, data_to=None):
+                return EvaluationPreviewResponse(
+                    total_items=100,
+                    total_with_feedback=50,
+                    feedback_with_corrections=30,
+                    latest_item_at="2024-01-01T00:00:00+00:00",
+                )
+
+            def metrics(self, limit=20, source_type=None, source_label=None):
+                return EvaluationMetricsResponse(
+                    accuracy_trend=[],
+                    field_accuracies=[],
+                    latency_trend=[],
+                    avg_accuracy=0.92,
+                )
+
+            def summary_stats(self):
+                return EvaluationSummaryStatsResponse(
+                    total_runs=10,
+                    source_type_counts=[],
+                )
+
+            def unique_sources(self):
+                return EvaluationUniqueSourcesResponse(sources=[])
+
+            def delete(self, run_id):
+                return None
+
+            def optimize_skill(self, skill_id, **kwargs):
+                return OptimizeSkillResponse(
+                    skill_id="new-skill-id",
+                    name="invoice-parsing-optimized",
+                    version="20240102-abcd1234",
+                    original_skill_id=skill_id,
+                    total_pairs=100,
+                    sampled_pairs=50,
+                    created_at="2024-01-02T00:00:00+00:00",
+                )
+
+            def rerun_skill(self, evaluation_id, **kwargs):
+                return RerunSkillResponse(
+                    evaluation_id=evaluation_id,
+                    skill_id="skill-123",
+                    status="pending",
                 )
 
         class Artifacts:

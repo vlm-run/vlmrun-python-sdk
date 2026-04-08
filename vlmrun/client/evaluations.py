@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from vlmrun.client.base_requestor import APIRequestor
 from vlmrun.client.types import (
@@ -36,8 +36,8 @@ class Evaluations:
         offset: int = 0,
         order_by: str = "created_at",
         descending: bool = True,
-        created_at_gte: Optional[str] = None,
-        created_at_lte: Optional[str] = None,
+        created_at_gte: str | None = None,
+        created_at_lte: str | None = None,
     ) -> EvaluationRunListResponse:
         """List evaluation runs with pagination and filtering.
 
@@ -52,7 +52,7 @@ class Evaluations:
         Returns:
             EvaluationRunListResponse: Paginated list of evaluation runs
         """
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
             "order_by": order_by,
@@ -87,13 +87,13 @@ class Evaluations:
         source_type: str,
         source_id: str,
         source_label: str,
-        execution_ids: Optional[List[str]] = None,
-        request_ids: Optional[List[str]] = None,
-        skill_ids: Optional[List[str]] = None,
-        data_from: Optional[str] = None,
-        data_to: Optional[str] = None,
-        evaluators: Optional[List[str]] = None,
-        infer_corrections: Optional[bool] = None,
+        execution_ids: list[str] | None = None,
+        request_ids: list[str] | None = None,
+        skill_ids: list[str] | None = None,
+        data_from: str | None = None,
+        data_to: str | None = None,
+        evaluators: list[str] | None = None,
+        infer_corrections: bool | None = None,
     ) -> EvaluationRunResponse:
         """Trigger a new evaluation run.
 
@@ -112,7 +112,7 @@ class Evaluations:
         Returns:
             EvaluationRunResponse: The created evaluation run
         """
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "source_type": source_type,
             "source_id": source_id,
             "source_label": source_label,
@@ -141,8 +141,8 @@ class Evaluations:
         self,
         source_type: str,
         source_id: str,
-        data_from: Optional[str] = None,
-        data_to: Optional[str] = None,
+        data_from: str | None = None,
+        data_to: str | None = None,
     ) -> EvaluationPreviewResponse:
         """Get a preview of available data for an evaluation source.
 
@@ -155,7 +155,7 @@ class Evaluations:
         Returns:
             EvaluationPreviewResponse: Preview of available evaluation data
         """
-        params: Dict[str, str] = {
+        params: dict[str, str] = {
             "source_type": source_type,
             "source_id": source_id,
         }
@@ -172,8 +172,8 @@ class Evaluations:
     def metrics(
         self,
         limit: int = 20,
-        source_type: Optional[str] = None,
-        source_label: Optional[str] = None,
+        source_type: str | None = None,
+        source_label: str | None = None,
     ) -> EvaluationMetricsResponse:
         """Get aggregated metrics across evaluation runs.
 
@@ -185,7 +185,7 @@ class Evaluations:
         Returns:
             EvaluationMetricsResponse: Aggregated evaluation metrics
         """
-        params: Dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if source_type:
             params["source_type"] = source_type
         if source_label:
@@ -229,11 +229,11 @@ class Evaluations:
     def optimize_skill(
         self,
         skill_id: str,
-        skill_ids: Optional[List[str]] = None,
-        data_from: Optional[str] = None,
-        data_to: Optional[str] = None,
+        skill_ids: list[str] | None = None,
+        data_from: str | None = None,
+        data_to: str | None = None,
         infer_corrections: bool = True,
-        n_samples: Optional[int] = None,
+        n_samples: int | None = None,
     ) -> OptimizeSkillResponse:
         """Optimize a skill based on evaluation data.
 
@@ -248,7 +248,7 @@ class Evaluations:
         Returns:
             OptimizeSkillResponse: The optimization result
         """
-        data: Dict[str, Any] = {"skill_id": skill_id}
+        data: dict[str, Any] = {"skill_id": skill_id}
         if skill_ids is not None:
             data["skill_ids"] = skill_ids
         if data_from is not None:
@@ -267,10 +267,10 @@ class Evaluations:
     def rerun_skill(
         self,
         evaluation_id: str,
-        skill_id: Optional[str] = None,
-        evaluators: Optional[List[str]] = None,
+        skill_id: str | None = None,
+        evaluators: list[str] | None = None,
         infer_corrections: bool = True,
-        n_samples: Optional[int] = None,
+        n_samples: int | None = None,
     ) -> RerunSkillResponse:
         """Re-run an evaluation with different parameters.
 
@@ -284,7 +284,7 @@ class Evaluations:
         Returns:
             RerunSkillResponse: The re-run result
         """
-        data: Dict[str, Any] = {"evaluation_id": evaluation_id}
+        data: dict[str, Any] = {"evaluation_id": evaluation_id}
         if skill_id is not None:
             data["skill_id"] = skill_id
         if evaluators is not None:
