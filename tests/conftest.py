@@ -756,7 +756,15 @@ def mock_client(monkeypatch):
             def __init__(self, client):
                 self._client = client
 
-            def list(self, limit=30, offset=0, order_by="created_at", descending=True, created_at_gte=None, created_at_lte=None):
+            def list(
+                self,
+                limit=30,
+                offset=0,
+                order_by="created_at",
+                descending=True,
+                created_at_gte=None,
+                created_at_lte=None,
+            ):
                 return EvaluationRunListResponse(
                     data=[
                         EvaluationRunResponse(
