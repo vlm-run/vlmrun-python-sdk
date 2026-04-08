@@ -573,6 +573,145 @@ class AgentSkill(BaseModel):
         )
 
 
+# --- Evaluation types ---
+
+EvaluationSourceType = Literal["agent", "request_domain", "skill"]
+EvaluatorType = Literal[
+    "field_accuracy", "fuzzy_field_match", "llm_judge", "equals_expected"
+]
+
+
+class EvaluationRunResponse(BaseModel):
+    """Response model for an evaluation run."""
+
+    id: str
+    source_type: str
+    source_id: Optional[str] = None
+    source_label: str
+    source_version: Optional[str] = None
+    status: str = "pending"
+    accuracy: Optional[float] = None
+    api_completion_rate: Optional[float] = None
+    total_items: Optional[int] = None
+    total_with_feedback: Optional[int] = None
+    data_from: Optional[str] = None
+    data_to: Optional[str] = None
+    results: Dict[str, Any] = {}
+    created_at: Optional[str] = None
+
+
+class EvaluationRunListResponse(BaseModel):
+    """Paginated list of evaluation runs."""
+
+    data: List[EvaluationRunResponse]
+    count: int
+
+
+class EvaluationPreviewResponse(BaseModel):
+    """Preview of available data for an evaluation source."""
+
+    total_items: int
+    total_with_feedback: int
+    feedback_with_corrections: int
+    latest_item_at: Optional[str] = None
+
+
+class AccuracyTrendPoint(BaseModel):
+    """A single point in the accuracy trend."""
+
+    run_id: str
+    accuracy: float
+    api_completion_rate: Optional[float] = None
+    fuzzy_match_rate: Optional[float] = None
+    exact_match_rate: Optional[float] = None
+    source_type: Optional[str] = None
+    source_label: Optional[str] = None
+    created_at: str
+
+
+class FieldAccuracyAggregate(BaseModel):
+    """Aggregated field accuracy metrics."""
+
+    field: str
+    avg_accuracy: float
+    total_correct: int
+    total_count: int
+
+
+class LatencyTrendPoint(BaseModel):
+    """A single point in the latency trend."""
+
+    run_id: str
+    created_at: str
+    p50_ms: Optional[float] = None
+    p90_ms: Optional[float] = None
+    p95_ms: Optional[float] = None
+
+
+class SourceTypeCount(BaseModel):
+    """Count of evaluation runs by source type."""
+
+    type: str
+    label: str
+    count: int
+
+
+class UniqueSource(BaseModel):
+    """A unique evaluation source."""
+
+    type: str
+    label: str
+
+
+class EvaluationMetricsResponse(BaseModel):
+    """Aggregated evaluation metrics."""
+
+    accuracy_trend: List[AccuracyTrendPoint]
+    avg_accuracy: Optional[float] = None
+    accuracy_delta: Optional[float] = None
+    avg_api_completion_rate: Optional[float] = None
+    avg_fuzzy_match_rate: Optional[float] = None
+    avg_exact_match_rate: Optional[float] = None
+    field_accuracies: List[FieldAccuracyAggregate]
+    latency_trend: List[LatencyTrendPoint]
+    p50_ms: Optional[float] = None
+    p90_ms: Optional[float] = None
+    p95_ms: Optional[float] = None
+
+
+class EvaluationSummaryStatsResponse(BaseModel):
+    """Summary statistics for evaluation runs."""
+
+    total_runs: int
+    source_type_counts: List[SourceTypeCount]
+
+
+class EvaluationUniqueSourcesResponse(BaseModel):
+    """Unique evaluation sources for filtering."""
+
+    sources: List[UniqueSource]
+
+
+class OptimizeSkillResponse(BaseModel):
+    """Response from skill optimization."""
+
+    skill_id: str
+    name: str
+    version: str
+    original_skill_id: str
+    total_pairs: int
+    sampled_pairs: int
+    created_at: str
+
+
+class RerunSkillResponse(BaseModel):
+    """Response from evaluation re-run."""
+
+    evaluation_id: str
+    skill_id: str
+    status: str
+
+
 class GenerationConfig(BaseModel):
     prompt: Optional[str] = Field(default=None)
     response_model: Optional[Type[BaseModel]] = Field(default=None)
