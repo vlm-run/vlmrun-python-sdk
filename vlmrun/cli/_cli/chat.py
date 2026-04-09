@@ -583,6 +583,11 @@ def chat(
         "-s",
         help="Session UUID for persisting chat history (stateful conversations).",
     ),
+    timeout: Optional[float] = typer.Option(
+        None,
+        "--timeout",
+        help="Timeout in seconds for the chat completion request (overrides client default).",
+    ),
 ) -> None:
     """Process images, videos, and documents with natural language."""
     # Get client from context
@@ -747,6 +752,7 @@ def chat(
                         messages=messages,
                         stream=False,
                         extra_body=extra_body,
+                        **({"timeout": timeout} if timeout is not None else {}),
                     )
             else:
                 # JSON output: no status messages, just make the API call
@@ -756,6 +762,7 @@ def chat(
                         messages=messages,
                         stream=False,
                         extra_body=extra_body,
+                        **({"timeout": timeout} if timeout is not None else {}),
                     )
 
             latency_s = time.time() - start_time
@@ -814,6 +821,7 @@ def chat(
                     messages=messages,
                     stream=True,
                     extra_body=extra_body,
+                    **({"timeout": timeout} if timeout is not None else {}),
                 )
 
                 # Collect streaming content and usage data
