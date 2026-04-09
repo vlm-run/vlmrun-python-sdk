@@ -585,15 +585,15 @@ class GenerationConfig(BaseModel):
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
-    video_segment_duration: Optional[float] = Field(
+    video_segment_duration: float | None = Field(
         default=None,
         description="Duration in seconds for each video segment when chunking a video for transcription.",
     )
-    video_frames_per_segment: Optional[int] = Field(
+    video_frames_per_segment: int | None = Field(
         default=None,
         description="Number of frames to sample per video segment for captioning.",
     )
-    page_indices: Optional[List[int]] = Field(
+    page_indices: list[int] | None = Field(
         default=None,
         description="0-indexed page indices to process for document files. If None, all pages are processed.",
     )
