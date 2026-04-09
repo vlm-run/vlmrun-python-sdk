@@ -585,6 +585,18 @@ class GenerationConfig(BaseModel):
     detail: Literal["auto", "lo", "hi"] = Field(default="auto")
     confidence: bool = Field(default=False)
     grounding: bool = Field(default=False)
+    video_segment_duration: Optional[float] = Field(
+        default=None,
+        description="Duration in seconds for each video segment when chunking a video for transcription.",
+    )
+    video_frames_per_segment: Optional[int] = Field(
+        default=None,
+        description="Number of frames to sample per video segment for captioning.",
+    )
+    page_indices: Optional[List[int]] = Field(
+        default=None,
+        description="0-indexed page indices to process for document files. If None, all pages are processed.",
+    )
     skills: Optional[List["AgentSkill"]] = Field(
         default=None,
         description="List of agent skills to enable for this request. Skills provide domain-specific expertise and capabilities.",
