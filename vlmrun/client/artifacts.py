@@ -110,9 +110,10 @@ class Artifacts:
         }
 
         if obj_type == "img":
-            assert (
-                headers["Content-Type"] == "image/jpeg"
-            ), f"Expected image/jpeg, got {headers['Content-Type']}"
+            assert headers["Content-Type"] in (
+                "image/jpeg",
+                "image/png",
+            ), f"Expected image/jpeg or image/png, got {headers['Content-Type']}"
             return Image.open(io.BytesIO(response)).convert("RGB")
         elif obj_type == "url":
             # Get the filename including extension frm the URL by stripping any query parameters
