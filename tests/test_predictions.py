@@ -573,3 +573,30 @@ def test_document_markdown_automatic_casting_in_get(mock_client, monkeypatch):
     assert isinstance(response, PredictionResponse)
     assert not isinstance(response.response, MarkdownDocument)
     assert isinstance(response.response, dict)
+
+
+@pytest.mark.parametrize(
+    "service_tier", ["auto", "default", "standard", "flex", "priority"]
+)
+def test_generation_config_service_tier(service_tier):
+    """service_tier is accepted and round-trips through model_dump()."""
+    config = GenerationConfig(service_tier=service_tier)
+    assert config.service_tier == service_tier
+    dumped = config.model_dump()
+    assert dumped["service_tier"] == service_tier
+
+
+def test_generation_config_service_tier_default_is_none():
+    """service_tier defaults to None and is excluded from model_dump()."""
+    config = GenerationConfig()
+    assert config.service_tier is None
+    dumped = config.model_dump()
+    assert "service_tier" not in dumped
+
+
+def test_generation_config_service_tier_invalid():
+    """Invalid service_tier values are rejected by pydantic."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        GenerationConfig(service_tier="ultra")

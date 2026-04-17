@@ -597,6 +597,19 @@ class GenerationConfig(BaseModel):
         default=None,
         description="0-indexed page indices to process for document files. If None, all pages are processed.",
     )
+    service_tier: Optional[
+        Literal["auto", "default", "standard", "flex", "priority"]
+    ] = Field(
+        default=None,
+        description=(
+            "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
+            "Gemini Flex/Priority offering. 'standard'/'default' uses baseline "
+            "rates, 'flex' applies a 50% discount with higher latency, "
+            "'priority' applies a 1.8x premium. When omitted (or 'auto'), the "
+            "server default applies (which itself defaults to 'standard'). The "
+            "chosen tier drives BOTH billing AND the actual request routing."
+        ),
+    )
     skills: Optional[List["AgentSkill"]] = Field(
         default=None,
         description="List of agent skills to enable for this request. Skills provide domain-specific expertise and capabilities.",
