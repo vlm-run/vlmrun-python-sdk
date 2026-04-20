@@ -25,6 +25,7 @@ from vlmrun.client.agent import Agent
 from vlmrun.client.skills import Skills
 from vlmrun.client.executions import Executions
 from vlmrun.client.artifacts import Artifacts
+from vlmrun.client.evaluations import Evaluations
 from vlmrun.constants import DEFAULT_BASE_URL
 from vlmrun.client.types import SchemaResponse, DomainInfo, GenerationConfig
 from vlmrun.client.exceptions import (
@@ -122,6 +123,7 @@ class VLMRun:
         self.skills = Skills(self)
         self.executions = Executions(self)
         self.artifacts = Artifacts(self)
+        self.evaluations = Evaluations(self)
 
     def __repr__(self):
         return f"VLMRun(base_url={self.base_url}, api_key={f'{self.api_key[:8]}...' if self.api_key else 'None'}, version={self.version})"
