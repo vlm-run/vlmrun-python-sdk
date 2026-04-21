@@ -597,9 +597,7 @@ class GenerationConfig(BaseModel):
         default=None,
         description="0-indexed page indices to process for document files. If None, all pages are processed.",
     )
-    service_tier: Optional[
-        Literal["auto", "default", "standard", "flex", "priority"]
-    ] = Field(
+    service_tier: Literal["auto", "default", "standard", "flex", "priority"] | None = Field(
         default=None,
         description=(
             "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
