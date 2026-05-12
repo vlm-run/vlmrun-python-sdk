@@ -206,43 +206,36 @@ class TestAgentConfigModels:
             )
 
     @pytest.mark.parametrize(
+        "config_class", [AgentExecutionConfig, AgentCreationConfig]
+    )
+    @pytest.mark.parametrize(
         "service_tier", ["auto", "default", "standard", "flex", "priority"]
     )
-    def test_agent_execution_config_service_tier(self, service_tier):
-        """service_tier is accepted on AgentExecutionConfig and round-trips through model_dump()."""
-        config = AgentExecutionConfig(prompt="hi", service_tier=service_tier)
+    def test_agent_config_service_tier(self, config_class, service_tier):
+        """service_tier is accepted on agent configs and round-trips through model_dump()."""
+        config = config_class(prompt="hi", service_tier=service_tier)
         assert config.service_tier == service_tier
         dumped = config.model_dump(exclude_none=True)
         assert dumped["service_tier"] == service_tier
 
     @pytest.mark.parametrize(
-        "service_tier", ["auto", "default", "standard", "flex", "priority"]
+        "config_class", [AgentExecutionConfig, AgentCreationConfig]
     )
-    def test_agent_creation_config_service_tier(self, service_tier):
-        """service_tier is accepted on AgentCreationConfig and round-trips through model_dump()."""
-        config = AgentCreationConfig(prompt="hi", service_tier=service_tier)
-        assert config.service_tier == service_tier
-        dumped = config.model_dump(exclude_none=True)
-        assert dumped["service_tier"] == service_tier
-
-    def test_agent_config_service_tier_default_is_none(self):
+    def test_agent_config_service_tier_default_is_none(self, config_class):
         """service_tier defaults to None and is excluded from model_dump(exclude_none=True)."""
-        exec_config = AgentExecutionConfig(prompt="hi")
-        assert exec_config.service_tier is None
-        assert "service_tier" not in exec_config.model_dump(exclude_none=True)
+        config = config_class(prompt="hi")
+        assert config.service_tier is None
+        assert "service_tier" not in config.model_dump(exclude_none=True)
 
-        create_config = AgentCreationConfig(prompt="hi")
-        assert create_config.service_tier is None
-        assert "service_tier" not in create_config.model_dump(exclude_none=True)
-
-    def test_agent_config_service_tier_invalid(self):
+    @pytest.mark.parametrize(
+        "config_class", [AgentExecutionConfig, AgentCreationConfig]
+    )
+    def test_agent_config_service_tier_invalid(self, config_class):
         """Invalid service_tier values are rejected by pydantic."""
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            AgentExecutionConfig(service_tier="ultra")
-        with pytest.raises(ValidationError):
-            AgentCreationConfig(service_tier="ultra")
+            config_class(service_tier="ultra")
 
 
 class TestAgentCompletions:
