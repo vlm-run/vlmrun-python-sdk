@@ -147,10 +147,10 @@ The following guidelines ensure high-quality, maintainable, and idiomatic Python
 
 ### Modern Python Style
 
-- **Use `from __future__ import annotations`** at the top of every file. This enables modern type hint syntax while maintaining compatibility with the Python 3.9+ floor declared in `pyproject.toml`.
+- **Use `from __future__ import annotations`** at the top of every file. This enables modern type hint syntax and defers annotation evaluation, which keeps imports lightweight even though the supported Python floor is now 3.10 (declared in `pyproject.toml`).
 - **Use `X | None` instead of `Optional[X]`** for type hints (PEP 604). Example: `api_key: str | None = None` instead of `api_key: Optional[str] = None`.
 - **Use built-in generics** (PEP 585): `list[T]` instead of `List[T]`, `dict[K, V]` instead of `Dict[K, V]`, `tuple[T, ...]` instead of `Tuple[T, ...]`.
-- Prefer **`match` / `case`** (structural pattern matching, Python 3.10+) over long if/elif chains where appropriate, but only in code paths that don't need to run on Python 3.9.
+- Prefer **`match` / `case`** (structural pattern matching, Python 3.10+) over long if/elif chains where appropriate.
 - Use **f-strings** for all string formatting (no `%` or `.format()`).
 - Use **`|` for union types** in all new code: `str | int` not `Union[str, int]`.
 
