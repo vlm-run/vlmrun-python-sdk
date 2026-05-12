@@ -3,7 +3,7 @@ name: Main CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [ main ]
   workflow_call:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     environment: dev
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
     defaults:
       run:
         shell: bash -el {0}
@@ -34,7 +34,10 @@ jobs:
           path: |
             ~/.cache/uv
             ~/.cache/pip
-          key: uv-${{ matrix.python-version }}-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
+          key: uv-${{ matrix.python-version }}-${{
+            hashFiles('requirements/requirements*.txt') }}-${{
+            hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{
+            env.CACHE_NUMBER }}
           restore-keys: |
             uv-${{ matrix.python-version }}-
 
