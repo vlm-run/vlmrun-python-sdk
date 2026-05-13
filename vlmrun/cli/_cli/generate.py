@@ -30,7 +30,7 @@ from vlmrun.constants import (
 console = Console()
 
 AVAILABLE_TOOLSETS: List[str] = list(AgentToolset.__args__)
-AVAILABLE_SERVICE_TIERS = ["auto", "default", "standard", "flex", "priority"]
+AVAILABLE_SERVICE_TIERS = ["default", "flex", "priority"]
 
 GENERATE_HELP = """Generate structured predictions for images, documents, videos, and audio.
 

@@ -35,7 +35,7 @@ AVAILABLE_MODELS = [
 
 AVAILABLE_TOOLSETS: List[str] = list(AgentToolset.__args__)
 
-AVAILABLE_SERVICE_TIERS = ["auto", "default", "standard", "flex", "priority"]
+AVAILABLE_SERVICE_TIERS = ["default", "flex", "priority"]
 
 DEFAULT_MODEL = "vlmrun-orion-1:auto"
 
