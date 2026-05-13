@@ -132,9 +132,7 @@ def list(
     for prediction in predictions:
         usage = prediction.usage
         st = _status_style(prediction.status)
-        dur = _compute_duration(
-            prediction.created_at, prediction.completed_at, usage
-        )
+        dur = _compute_duration(prediction.created_at, prediction.completed_at, usage)
         rows.append(
             _format_row(
                 prediction.id,
