@@ -62,8 +62,8 @@ def list_skills(
 ) -> None:
     """List available skills.
 
-    By default only non-public skills owned by your organization are shown.
-    Pass ``--public`` to include public skills as well.
+    By default, only non-public skills owned by your organization are shown.
+    Pass --public to include public skills as well.
     """
     client: VLMRun = ctx.obj
     skills = client.skills.list(
