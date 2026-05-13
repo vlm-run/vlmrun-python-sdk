@@ -246,8 +246,9 @@ vlmrun hub schema document.invoice
 Manage reusable skills (SKILL.md bundles) for specialized agent behavior.
 
 ```bash
-# List skills
+# List skills (only non-public skills owned by your organization by default)
 vlmrun skills list
+vlmrun skills list --public     # also include public skills
 vlmrun skills list --grouped    # latest version per name
 
 # Get a skill by name or ID

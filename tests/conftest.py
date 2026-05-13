@@ -129,6 +129,8 @@ def mock_client(monkeypatch):
                 order_by="created_at",
                 descending=True,
                 grouped=False,
+                include_public=True,
+                only_public=False,
             ):
                 return [
                     SkillInfo(
