@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 import typer
 from rich.console import Console, Group
@@ -13,7 +13,6 @@ from datetime import datetime
 
 if TYPE_CHECKING:
     from vlmrun.client import VLMRun
-    from vlmrun.client.types import AgentExecutionResponse
 
 app = typer.Typer(
     help="List and retrieve agent execution results.",
@@ -227,11 +226,7 @@ def get(
             execution = client.executions.get(execution_id)
 
         if output_json:
-            print(
-                json.dumps(
-                    execution.model_dump(mode="json"), indent=2, default=str
-                )
-            )
+            print(json.dumps(execution.model_dump(mode="json"), indent=2, default=str))
             return
 
         console.print("\nExecution Details:\n", style="white")

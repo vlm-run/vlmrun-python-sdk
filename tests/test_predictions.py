@@ -575,9 +575,7 @@ def test_document_markdown_automatic_casting_in_get(mock_client, monkeypatch):
     assert isinstance(response.response, dict)
 
 
-@pytest.mark.parametrize(
-    "service_tier", ["auto", "default", "standard", "flex", "priority"]
-)
+@pytest.mark.parametrize("service_tier", ["default", "flex", "priority"])
 def test_generation_config_service_tier(service_tier):
     """service_tier is accepted and round-trips through model_dump()."""
     config = GenerationConfig(service_tier=service_tier)

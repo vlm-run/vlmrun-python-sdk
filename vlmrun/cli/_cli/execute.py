@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -36,6 +35,8 @@ AVAILABLE_MODELS = [
 
 AVAILABLE_TOOLSETS: List[str] = list(AgentToolset.__args__)
 
+AVAILABLE_SERVICE_TIERS = ["default", "flex", "priority"]
+
 DEFAULT_MODEL = "vlmrun-orion-1:auto"
 
 EXECUTE_HELP = """Execute an agent via /v1/agent/execute.
@@ -46,7 +47,7 @@ EXAMPLES:
   vlmrun execute -p "Extract invoice fields" -i doc.pdf --schema schema.json
   vlmrun execute -n my-agent:v1 -i img.jpg --skill ./my-skill
   vlmrun execute -n my-agent:v1 -i img.jpg --skill-id my-skill:latest
-  vlmrun execute -p "Describe" -i photo.jpg --no-wait
+  vlmrun execute -p "Describe" -i photo.jpg --wait
   vlmrun execute -n my-agent:v1 -i a.jpg -i b.pdf -t image -t document
 
 \b
@@ -179,9 +180,7 @@ def _upload_files(
                         file_responses.append(future.result())
                         status.update(f"Uploading {file_path.name}...")
                     except Exception as e:
-                        console.print(
-                            f"[red]Error uploading {file_path.name}:[/] {e}"
-                        )
+                        console.print(f"[red]Error uploading {file_path.name}:[/] {e}")
                         raise typer.Exit(1) from e
 
     return file_responses
@@ -288,9 +287,9 @@ def execute(
         help="Model: vlmrun-orion-1[:lite|fast|auto|pro]",
     ),
     wait: bool = typer.Option(
-        True,
+        False,
         "--wait/--no-wait",
-        help="Wait for execution to complete (default: wait).",
+        help="Wait for execution to complete (default: no-wait).",
     ),
     timeout: int = typer.Option(
         300,
@@ -306,6 +305,11 @@ def execute(
         None,
         "--callback-url",
         help="URL to call when execution completes (webhook).",
+    ),
+    service_tier: Optional[str] = typer.Option(
+        None,
+        "--service-tier",
+        help="Delivery tier: standard, flex (50%% discount), or priority (1.8x premium).",
     ),
     output_format: Optional[str] = typer.Option(
         None,
@@ -333,13 +337,16 @@ def execute(
         console.print(f"\nAvailable models: {', '.join(AVAILABLE_MODELS)}")
         raise typer.Exit(1)
 
+    if service_tier and service_tier not in AVAILABLE_SERVICE_TIERS:
+        console.print(f"[red]Error:[/] Invalid service tier '{service_tier}'")
+        console.print(f"\nAvailable tiers: {', '.join(AVAILABLE_SERVICE_TIERS)}")
+        raise typer.Exit(1)
+
     if toolsets:
         for ts in toolsets:
             if ts not in AVAILABLE_TOOLSETS:
                 console.print(f"[red]Error:[/] Invalid toolset '{ts}'")
-                console.print(
-                    f"\nAvailable toolsets: {', '.join(AVAILABLE_TOOLSETS)}"
-                )
+                console.print(f"\nAvailable toolsets: {', '.join(AVAILABLE_TOOLSETS)}")
                 raise typer.Exit(1)
 
     if input_files:
@@ -399,8 +406,7 @@ def execute(
         if file_responses:
             inputs = {
                 "files": [
-                    {"type": "input_file", "file_id": fr.id}
-                    for fr in file_responses
+                    {"type": "input_file", "file_id": fr.id} for fr in file_responses
                 ]
             }
 
@@ -409,11 +415,12 @@ def execute(
             prompt=final_prompt,
             json_schema=json_schema,
             skills=skills,
+            service_tier=service_tier,
         )
 
         if not output_json:
             console.print(
-                f"\n  [bold blue]Submitting execution[/bold blue]"
+                "\n  [bold blue]Submitting execution[/bold blue]"
                 + (f" [dim]({name})[/dim]" if name else "")
                 + f" [dim]model={model}[/dim]"
             )

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import typer
-from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 from rich.status import Status
@@ -32,6 +30,7 @@ from vlmrun.constants import (
 console = Console()
 
 AVAILABLE_TOOLSETS: List[str] = list(AgentToolset.__args__)
+AVAILABLE_SERVICE_TIERS = ["default", "flex", "priority"]
 
 GENERATE_HELP = """Generate structured predictions for images, documents, videos, and audio.
 
@@ -76,9 +75,7 @@ def _resolve_skills(
 ) -> Optional[List[AgentSkill]]:
     """Build AgentSkill list from --skill dirs or --skill-id references."""
     if skill_dirs and skill_ids:
-        console.print(
-            "[red]Error:[/] --skill and --skill-id are mutually exclusive."
-        )
+        console.print("[red]Error:[/] --skill and --skill-id are mutually exclusive.")
         raise typer.Exit(1)
 
     if skill_dirs:
@@ -175,6 +172,11 @@ def generate(
         "--timeout",
         help="Timeout in seconds when waiting for prediction to complete.",
     ),
+    service_tier: Optional[str] = typer.Option(
+        None,
+        "--service-tier",
+        help="Delivery tier: standard, flex (50%% discount), or priority (1.8x premium).",
+    ),
     output_format: Optional[str] = typer.Option(
         None,
         "--format",
@@ -195,6 +197,11 @@ def generate(
         else:
             console.print(f"[red]Error:[/] Unsupported output format '{output_format}'")
             raise typer.Exit(1)
+
+    if service_tier and service_tier not in AVAILABLE_SERVICE_TIERS:
+        console.print(f"[red]Error:[/] Invalid service tier '{service_tier}'")
+        console.print(f"\nAvailable tiers: {', '.join(AVAILABLE_SERVICE_TIERS)}")
+        raise typer.Exit(1)
 
     suffix = input_file.suffix.lower()
     if suffix not in SUPPORTED_INPUT_FILETYPES:
@@ -223,11 +230,12 @@ def generate(
             raise typer.Exit(1) from e
 
     config: Optional[GenerationConfig] = None
-    if any([skills, json_schema, prompt]):
+    if any([skills, json_schema, prompt, service_tier]):
         config = GenerationConfig(
             skills=skills,
             json_schema=json_schema,
             prompt=prompt,
+            service_tier=service_tier,
         )
 
     try:
@@ -242,7 +250,11 @@ def generate(
         start_time = time.time()
 
         if media_type in ("image", "document"):
-            with Status("Processing...", console=console, spinner="dots") if not output_json else _noop_ctx():
+            with (
+                Status("Processing...", console=console, spinner="dots")
+                if not output_json
+                else _noop_ctx()
+            ):
                 response: PredictionResponse = client.document.generate(
                     file=input_file,
                     domain=domain,
@@ -250,7 +262,11 @@ def generate(
                     config=config,
                 )
         elif media_type == "video":
-            with Status("Processing...", console=console, spinner="dots") if not output_json else _noop_ctx():
+            with (
+                Status("Processing...", console=console, spinner="dots")
+                if not output_json
+                else _noop_ctx()
+            ):
                 response = client.video.generate(
                     file=input_file,
                     domain=domain,
@@ -258,7 +274,11 @@ def generate(
                     config=config,
                 )
         elif media_type == "audio":
-            with Status("Processing...", console=console, spinner="dots") if not output_json else _noop_ctx():
+            with (
+                Status("Processing...", console=console, spinner="dots")
+                if not output_json
+                else _noop_ctx()
+            ):
                 response = client.audio.generate(
                     file=input_file,
                     domain=domain,
@@ -266,7 +286,9 @@ def generate(
                     config=config,
                 )
         else:
-            console.print(f"[red]Error:[/] Could not determine media type for {input_file}")
+            console.print(
+                f"[red]Error:[/] Could not determine media type for {input_file}"
+            )
             raise typer.Exit(1)
 
         # If batch mode and wait requested, poll until complete

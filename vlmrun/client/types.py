@@ -239,6 +239,13 @@ class AgentExecutionOrCreationConfig(BaseModel):
         default=None,
         description="List of agent skills to enable for this execution. Skills provide domain-specific expertise and capabilities.",
     )
+    service_tier: Literal["default", "flex", "priority"] | None = Field(
+        default=None,
+        description=(
+            "Delivery tier: 'default' (baseline), 'flex' (50%% discount, higher latency), "
+            "or 'priority' (1.8x premium)."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -597,15 +604,11 @@ class GenerationConfig(BaseModel):
         default=None,
         description="0-indexed page indices to process for document files. If None, all pages are processed.",
     )
-    service_tier: Literal["auto", "default", "standard", "flex", "priority"] | None = Field(
+    service_tier: Literal["default", "flex", "priority"] | None = Field(
         default=None,
         description=(
-            "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
-            "Gemini Flex/Priority offering. 'standard'/'default' uses baseline "
-            "rates, 'flex' applies a 50% discount with higher latency, "
-            "'priority' applies a 1.8x premium. When omitted (or 'auto'), the "
-            "server default applies (which itself defaults to 'standard'). The "
-            "chosen tier drives BOTH billing AND the actual request routing."
+            "Delivery tier: 'default' (baseline), 'flex' (50%% discount, higher latency), "
+            "or 'priority' (1.8x premium)."
         ),
     )
     skills: Optional[List["AgentSkill"]] = Field(

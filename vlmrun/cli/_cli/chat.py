@@ -147,6 +147,7 @@ AVAILABLE_MODELS = [
 
 # Available toolsets (must match AgentToolset literal values)
 AVAILABLE_TOOLSETS: List[str] = list(AgentToolset.__args__)
+AVAILABLE_SERVICE_TIERS = ["default", "flex", "priority"]
 
 DEFAULT_MODEL = "vlmrun-orion-1:auto"
 
@@ -583,6 +584,11 @@ def chat(
         "-s",
         help="Session UUID for persisting chat history (stateful conversations).",
     ),
+    service_tier: Optional[str] = typer.Option(
+        None,
+        "--service-tier",
+        help="Delivery tier: standard, flex (50%% discount), or priority (1.8x premium).",
+    ),
     timeout: Optional[float] = typer.Option(
         None,
         "--timeout",
@@ -645,6 +651,11 @@ def chat(
         for m in AVAILABLE_MODELS:
             default_marker = " (default)" if m == DEFAULT_MODEL else ""
             console.print(f"  - {m}{default_marker}")
+        sys.exit(1)
+
+    if service_tier and service_tier not in AVAILABLE_SERVICE_TIERS:
+        console.print(f"[red]Error:[/] Invalid service tier '{service_tier}'")
+        console.print(f"\nAvailable tiers: {', '.join(AVAILABLE_SERVICE_TIERS)}")
         sys.exit(1)
 
     # Validate input files if provided
@@ -730,6 +741,8 @@ def chat(
             extra_body["skills"] = agent_skills
         if toolsets:
             extra_body["toolsets"] = toolsets
+        if service_tier:
+            extra_body["service_tier"] = service_tier
         if not extra_body:
             extra_body = None
 
