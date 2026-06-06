@@ -59,7 +59,7 @@ The package provides optional features that can be installed based on your needs
 
 ```python
 from PIL import Image
-from vlmrun.client import VLMRun
+from vlmrun import VLMRun
 from vlmrun.common.utils import remote_image
 
 # Initialize the client
@@ -86,7 +86,7 @@ print(response)
 The VLM Run SDK provides OpenAI-compatible chat completions through the agent endpoint. This allows you to use the familiar OpenAI API with VLM Run's powerful vision-language models.
 
 ```python
-from vlmrun.client import VLMRun
+from vlmrun import VLMRun
 
 client = VLMRun(
     api_key="your-key",
@@ -106,7 +106,7 @@ For async support:
 
 ```python
 import asyncio
-from vlmrun.client import VLMRun
+from vlmrun import VLMRun
 
 client = VLMRun(api_key="your-key", base_url="https://api.vlm.run/v1")
 

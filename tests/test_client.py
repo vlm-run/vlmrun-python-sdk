@@ -7,6 +7,18 @@ from vlmrun.client import VLMRun
 from vlmrun.client.exceptions import ConfigurationError, AuthenticationError
 
 
+def test_top_level_client_import():
+    """Test that the public package exposes the main client."""
+    from vlmrun import VLMRun as TopLevelVLMRun
+    from vlmrun import __version__
+    import vlmrun
+
+    assert TopLevelVLMRun is VLMRun
+    assert vlmrun.VLMRun is VLMRun
+    assert isinstance(__version__, str)
+    assert "VLMRun" in vlmrun.__all__
+
+
 def test_client_with_api_key(monkeypatch):
     """Test client initialization with API key provided in constructor."""
     monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
