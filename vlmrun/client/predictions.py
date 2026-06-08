@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import json
+import warnings
 from pathlib import Path
 from typing import List, Optional, Union
 from PIL import Image
@@ -40,6 +41,37 @@ def get_response_model(
     """
     schema_response: SchemaResponse = client.get_schema(domain, config=config)
     return schema_response.response_model
+
+
+def _warn_callback_requires_batch(
+    callback_url: Optional[str], batch: bool, is_image: bool = False
+) -> None:
+    if is_image:
+        if batch:
+            warnings.warn(
+                "`batch=True` is not supported for image predictions. "
+                "Image predictions are processed synchronously; the `batch` flag will be ignored by the server.",
+                UserWarning,
+                stacklevel=3,
+            )
+        if callback_url:
+            warnings.warn(
+                "`callback_url` is not supported for image predictions. "
+                "Image predictions are synchronous and return the result directly; "
+                "the callback URL will be ignored.",
+                UserWarning,
+                stacklevel=3,
+            )
+        return
+
+    if callback_url and not batch:
+        warnings.warn(
+            "`callback_url` will be ignored because `batch=False`. "
+            "Webhook callbacks are only delivered for batched (async) predictions. "
+            "Set `batch=True` to receive callbacks.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 class SchemaCastMixin:
@@ -230,6 +262,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         Raises:
             ValueError: If neither images nor urls are provided, or if both are provided
         """
+        _warn_callback_requires_batch(callback_url, batch, is_image=True)
         images_data = self._handle_images_or_urls(images, urls)
         additional_kwargs = {}
         if config:
@@ -287,6 +320,7 @@ class ImagePredictions(SchemaCastMixin, Predictions):
         Raises:
             ValueError: If neither images nor urls are provided, or if both are provided
         """
+        _warn_callback_requires_batch(callback_url, batch, is_image=True)
         # Input validation
         if not images and not urls:
             raise ValueError("Either `images` or `urls` must be provided")
@@ -448,6 +482,7 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
+            _warn_callback_requires_batch(callback_url, batch)
             is_url, file_or_url = self._handle_file_or_url(file, url)
 
             additional_kwargs = {}
@@ -517,6 +552,7 @@ def FilePredictions(route: str):
             Returns:
                 PredictionResponse: Prediction response
             """
+            _warn_callback_requires_batch(callback_url, batch)
             is_url, file_or_url = self._handle_file_or_url(file, url)
 
             additional_kwargs = {}
