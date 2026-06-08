@@ -129,7 +129,7 @@ class Predictions:
 
         return prediction
 
-    def wait(self, id: str, timeout: int = 300, sleep: int = 5) -> PredictionResponse:
+    def wait(self, id: str, timeout: int = 600, sleep: int = 5) -> PredictionResponse:
         """Wait for prediction to complete.
 
         Args:

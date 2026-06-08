@@ -320,7 +320,7 @@ class Agent:
         openai_client = OpenAI(
             api_key=self._client.api_key,
             base_url=base_url,
-            timeout=self._client.timeout,
+            timeout=max(self._client.timeout, 600),
             max_retries=self._client.max_retries,
         )
 
@@ -374,7 +374,7 @@ class Agent:
         async_openai_client = AsyncOpenAI(
             api_key=self._client.api_key,
             base_url=base_url,
-            timeout=self._client.timeout,
+            timeout=max(self._client.timeout, 600),
             max_retries=self._client.max_retries,
         )
 
