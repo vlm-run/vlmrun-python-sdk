@@ -57,7 +57,7 @@ class Executions:
         return AgentExecutionResponse(**response)
 
     def wait(
-        self, id: str, timeout: int = 300, sleep: int = 5
+        self, id: str, timeout: int = 600, sleep: int = 5
     ) -> AgentExecutionResponse:
         """Wait for execution to complete.
 
