@@ -20,7 +20,7 @@ class Executions:
             client: VLM Run API instance
         """
         self._client = client
-        self._requestor = APIRequestor(client, timeout=600)
+        self._requestor = APIRequestor(client, timeout=120)
 
     def list(self, skip: int = 0, limit: int = 10) -> list[AgentExecutionResponse]:
         """List all executions.
