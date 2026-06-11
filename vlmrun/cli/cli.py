@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from vlmrun.client import VLMRun
+from vlmrun.cli._cli.artifacts import app as artifacts_app
 from vlmrun.cli._cli.chat import CHAT_HELP, chat
 from vlmrun.cli._cli.config import app as config_app, resolve_config
 from vlmrun.cli._cli.execute import EXECUTE_HELP, execute
@@ -129,6 +130,7 @@ app.add_typer(files_app, name="files")
 app.add_typer(hub_app, name="hub")
 app.add_typer(models_app, name="models")
 app.add_typer(skills_app, name="skills")
+app.add_typer(artifacts_app, name="artifacts")
 app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
