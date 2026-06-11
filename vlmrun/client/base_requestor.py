@@ -73,6 +73,7 @@ class APIRequestor:
         headers: Optional[Dict[str, str]] = None,
         raw_response: bool = False,
         timeout: Optional[float] = None,
+        allow_redirects: bool = True,
     ) -> Union[
         Tuple[Dict[str, Any], int, Dict[str, str]], Tuple[bytes, int, Dict[str, str]]
     ]:
@@ -87,6 +88,9 @@ class APIRequestor:
             headers: Request headers
             raw_response: Whether to return raw response content
             timeout: Request timeout in seconds
+            allow_redirects: Whether to follow HTTP redirects (default True).
+                Set to False when the caller needs to handle redirects manually
+                (e.g., to avoid leaking auth headers to external presigned URLs).
 
         Returns:
             Tuple of (response_data, status_code, response_headers)
@@ -143,6 +147,7 @@ class APIRequestor:
                     files=files,
                     headers=_headers,
                     timeout=timeout or self._timeout,
+                    allow_redirects=allow_redirects,
                 )
 
                 response.raise_for_status()
