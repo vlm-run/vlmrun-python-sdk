@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 if TYPE_CHECKING:
@@ -20,6 +21,57 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+@app.command()
+def list(
+    ctx: typer.Context,
+    session_id: str | None = typer.Option(
+        None,
+        "--session-id",
+        "-s",
+        help="Session ID to list artifacts for (mutually exclusive with --execution-id)",
+    ),
+    execution_id: str | None = typer.Option(
+        None,
+        "--execution-id",
+        "-e",
+        help="Execution ID to list artifacts for (mutually exclusive with --session-id)",
+    ),
+) -> None:
+    """List artifacts for a session or execution."""
+    client: VLMRun = ctx.obj
+
+    if session_id is None and execution_id is None:
+        console.print(
+            "[red bold]Error:[/] Either --session-id or --execution-id is required."
+        )
+        raise typer.Exit(1)
+
+    if session_id is not None and execution_id is not None:
+        console.print(
+            "[red bold]Error:[/] Only one of --session-id or --execution-id is allowed, not both."
+        )
+        raise typer.Exit(1)
+
+    try:
+        result = client.artifacts.list(
+            session_id=session_id,
+            execution_id=execution_id,
+        )
+    except Exception as exc:
+        console.print(f"[red bold]Error:[/] {exc}")
+        raise typer.Exit(1) from exc
+
+    table = Table(title=f"Artifacts ({result.namespace_id})")
+    table.add_column("Object ID", style="cyan")
+    table.add_column("Filename")
+    table.add_column("Source", style="green")
+
+    for item in result.items:
+        table.add_row(item.object_id, item.filename or "-", item.source)
+
+    console.print(table)
 
 
 @app.command()
