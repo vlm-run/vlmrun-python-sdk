@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from typer.testing import CliRunner
 
 from vlmrun.client.types import (
+    ArtifactListItem,
+    ArtifactListResponse,
     CreditUsage,
     DatasetResponse,
     FileResponse,
@@ -749,9 +751,10 @@ def mock_client(monkeypatch):
 
             def get(
                 self,
-                object_id: str,
+                object_id: str = None,
                 session_id: str = None,
                 execution_id: str = None,
+                filename: str = None,
                 raw_response: bool = False,
             ) -> bytes:
                 if session_id is None and execution_id is None:
@@ -762,10 +765,43 @@ def mock_client(monkeypatch):
                     raise ValueError(
                         "Only one of `session_id` or `execution_id` is allowed, not both"
                     )
+                if object_id is None and filename is None:
+                    raise ValueError("Either `object_id` or `filename` is required")
+                if object_id is not None and filename is not None:
+                    raise ValueError(
+                        "Only one of `object_id` or `filename` is allowed, not both"
+                    )
                 return b"mock artifact content"
 
-            def list(self, session_id: str):
-                raise NotImplementedError("Artifacts.list() is not yet implemented")
+            def list(
+                self,
+                session_id: str = None,
+                execution_id: str = None,
+            ) -> ArtifactListResponse:
+                if session_id is None and execution_id is None:
+                    raise ValueError(
+                        "Either `session_id` or `execution_id` is required"
+                    )
+                if session_id is not None and execution_id is not None:
+                    raise ValueError(
+                        "Only one of `session_id` or `execution_id` is allowed, not both"
+                    )
+                namespace_id = session_id or execution_id
+                return ArtifactListResponse(
+                    namespace_id=namespace_id,
+                    items=[
+                        ArtifactListItem(
+                            object_id="img_a1b2c3",
+                            filename="screenshot.png",
+                            source="store",
+                        ),
+                        ArtifactListItem(
+                            object_id="doc_d4e5f6",
+                            filename=None,
+                            source="manifest",
+                        ),
+                    ],
+                )
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
     return MockVLMRun()

@@ -239,16 +239,18 @@ class AgentExecutionOrCreationConfig(BaseModel):
         default=None,
         description="List of agent skills to enable for this execution. Skills provide domain-specific expertise and capabilities.",
     )
-    service_tier: Literal["auto", "default", "standard", "flex", "priority"] | None = Field(
-        default=None,
-        description=(
-            "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
-            "Gemini Flex/Priority offering. 'standard'/'default' uses baseline "
-            "rates, 'flex' applies a 50% discount with higher latency, "
-            "'priority' applies a 1.8x premium. When omitted (or 'auto'), the "
-            "server default applies (which itself defaults to 'standard'). The "
-            "chosen tier drives BOTH billing AND the actual request routing."
-        ),
+    service_tier: Literal["auto", "default", "standard", "flex", "priority"] | None = (
+        Field(
+            default=None,
+            description=(
+                "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
+                "Gemini Flex/Priority offering. 'standard'/'default' uses baseline "
+                "rates, 'flex' applies a 50% discount with higher latency, "
+                "'priority' applies a 1.8x premium. When omitted (or 'auto'), the "
+                "server default applies (which itself defaults to 'standard'). The "
+                "chosen tier drives BOTH billing AND the actual request routing."
+            ),
+        )
     )
 
     @model_validator(mode="after")
@@ -326,6 +328,29 @@ class AgentCreationResponse(BaseModel):
         ..., description="Date and time when the agent was updated (in UTC timezone)"
     )
     status: JobStatus = Field(..., description="The status of the agent")
+
+
+ArtifactSource = Literal["store", "manifest", "workspace"]
+
+
+class ArtifactListItem(BaseModel):
+    """A single artifact entry returned by the list endpoint."""
+
+    object_id: str = Field(..., description="Artifact object ID for GET /v1/artifacts")
+    filename: str | None = Field(
+        None,
+        description="Workspace or manifest filename; also accepted as GET /v1/artifacts?filename=...",
+    )
+    source: ArtifactSource = Field(..., description="store, manifest, or workspace")
+
+
+class ArtifactListResponse(BaseModel):
+    """Response from the artifacts list endpoint."""
+
+    namespace_id: str = Field(..., description="Session or execution namespace ID")
+    items: list[ArtifactListItem] = Field(
+        default_factory=list, description="Artifact entries in the namespace"
+    )
 
 
 class SkillInfo(BaseModel):
@@ -608,16 +633,18 @@ class GenerationConfig(BaseModel):
         default=None,
         description="0-indexed page indices to process for document files. If None, all pages are processed.",
     )
-    service_tier: Literal["auto", "default", "standard", "flex", "priority"] | None = Field(
-        default=None,
-        description=(
-            "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
-            "Gemini Flex/Priority offering. 'standard'/'default' uses baseline "
-            "rates, 'flex' applies a 50% discount with higher latency, "
-            "'priority' applies a 1.8x premium. When omitted (or 'auto'), the "
-            "server default applies (which itself defaults to 'standard'). The "
-            "chosen tier drives BOTH billing AND the actual request routing."
-        ),
+    service_tier: Literal["auto", "default", "standard", "flex", "priority"] | None = (
+        Field(
+            default=None,
+            description=(
+                "Delivery tier mirroring OpenAI's service_tier and Vertex AI's "
+                "Gemini Flex/Priority offering. 'standard'/'default' uses baseline "
+                "rates, 'flex' applies a 50% discount with higher latency, "
+                "'priority' applies a 1.8x premium. When omitted (or 'auto'), the "
+                "server default applies (which itself defaults to 'standard'). The "
+                "chosen tier drives BOTH billing AND the actual request routing."
+            ),
+        )
     )
     skills: Optional[List["AgentSkill"]] = Field(
         default=None,
