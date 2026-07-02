@@ -223,6 +223,9 @@ class AgentExecutionResponse(BaseModel):
     response: Optional[Dict[str, Any]] = Field(
         None, description="The response from the agent"
     )
+    execution_mode: Optional[str] = Field(
+        None, description="The execution mode used for this agent run"
+    )
     status: JobStatus = Field(..., description="The status of the agent")
     usage: CreditUsage = Field(..., description="The usage of the agent")
 
@@ -251,6 +254,13 @@ class AgentExecutionOrCreationConfig(BaseModel):
                 "chosen tier drives BOTH billing AND the actual request routing."
             ),
         )
+    )
+    orchestration_mode: bool | None = Field(
+        default=None,
+        description=(
+            "Enables multi-step agent orchestration mode. When omitted, the "
+            "server default applies."
+        ),
     )
 
     @model_validator(mode="after")
