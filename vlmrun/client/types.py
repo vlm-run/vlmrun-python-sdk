@@ -76,6 +76,11 @@ class CreditUsage(BaseModel):
     steps: Optional[int] = None
     message: Optional[str] = None
     duration_seconds: int = 0
+    service_tier: Optional[str] = None
+    mode_multiplier: Optional[float] = None
+    standard_cost_dollars: Optional[float] = None
+    cost_dollars: Optional[float] = None
+    savings_dollars: Optional[float] = None
 
 
 class PredictionResponse(BaseModel):

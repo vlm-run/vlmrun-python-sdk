@@ -600,3 +600,57 @@ def test_generation_config_service_tier_invalid():
 
     with pytest.raises(ValidationError):
         GenerationConfig(service_tier="ultra")
+
+
+def test_credit_usage_dollar_fields_parsed_from_api_payload():
+    """CreditUsage exposes the dollar/tier fields returned by the API."""
+    usage = CreditUsage.model_validate(
+        {
+            "elements_processed": 1,
+            "element_type": "page",
+            "credits_used": 50,
+            "duration_seconds": 2,
+            "service_tier": "flex",
+            "mode_multiplier": 0.5,
+            "standard_cost_dollars": 1.0,
+            "cost_dollars": 0.5,
+            "savings_dollars": 0.5,
+        }
+    )
+    assert usage.service_tier == "flex"
+    assert usage.mode_multiplier == 0.5
+    assert usage.standard_cost_dollars == 1.0
+    assert usage.cost_dollars == 0.5
+    assert usage.savings_dollars == 0.5
+
+
+def test_credit_usage_dollar_fields_default_none():
+    """Dollar/tier fields default to None when omitted by the API."""
+    usage = CreditUsage(credits_used=100)
+    assert usage.service_tier is None
+    assert usage.mode_multiplier is None
+    assert usage.standard_cost_dollars is None
+    assert usage.cost_dollars is None
+    assert usage.savings_dollars is None
+
+
+def test_prediction_response_retains_usage_dollar_fields():
+    """PredictionResponse round-trips the dollar/tier usage fields."""
+    response = PredictionResponse(
+        id="pred1",
+        status="completed",
+        created_at="2024-01-01T00:00:00+00:00",
+        completed_at="2024-01-01T00:00:01+00:00",
+        response={"invoice_number": "INV-001", "total_amount": 100.0},
+        usage=CreditUsage(
+            credits_used=50,
+            service_tier="flex",
+            mode_multiplier=0.5,
+            standard_cost_dollars=1.0,
+            cost_dollars=0.5,
+            savings_dollars=0.5,
+        ),
+    )
+    assert response.usage.cost_dollars == 0.5
+    assert response.usage.savings_dollars == 0.5
+    assert response.model_dump()["usage"]["cost_dollars"] == 0.5
