@@ -130,7 +130,9 @@ def patched_cli(monkeypatch):
     holder = {}
 
     def _factory(api_key=None, base_url=None):
-        client = FakeClient(api_key=api_key, base_url=base_url, **holder)
+        healthy = holder.get("healthy", True)
+        client = FakeClient(api_key=api_key, base_url=base_url, healthy=healthy)
+        holder["client"] = client
         return client
 
     monkeypatch.setattr("vlmrun.cli.cli.VLMRun", _factory)
@@ -238,13 +240,27 @@ class TestHelpers:
         assert gw._guess_mime(tmp_path / "a.pdf") == "application/pdf"
         assert gw._guess_mime(tmp_path / "a.png") == "image/png"
 
-    def test_encode_file_part(self, tmp_path):
+    def test_content_part_type(self, tmp_path):
+        assert gw._content_part_type(tmp_path / "a.pdf") == "document_url"
+        assert gw._content_part_type(tmp_path / "a.docx") == "document_url"
+        assert gw._content_part_type(tmp_path / "a.png") == "file_url"
+        assert gw._content_part_type(tmp_path / "a.jpg") == "file_url"
+
+    def test_encode_document_part(self, tmp_path):
         f = tmp_path / "doc.pdf"
         f.write_bytes(b"%PDF-1.7 fake")
         part = gw._encode_file_part(f)
-        assert part["type"] == "image_url"
-        url = part["image_url"]["url"]
+        assert part["type"] == "document_url"
+        url = part["document_url"]["url"]
         assert url.startswith("data:application/pdf;base64,")
+
+    def test_encode_image_part(self, tmp_path):
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        part = gw._encode_file_part(f)
+        assert part["type"] == "file_url"
+        url = part["file_url"]["url"]
+        assert url.startswith("data:image/png;base64,")
 
     def test_build_messages_with_prompt(self, tmp_path):
         f = tmp_path / "img.png"
@@ -252,14 +268,16 @@ class TestHelpers:
         messages = gw._build_messages([f], "describe")
         assert len(messages) == 1
         content = messages[0]["content"]
-        assert content[0]["type"] == "image_url"
+        assert content[0]["type"] == "file_url"
         assert content[-1] == {"type": "text", "text": "describe"}
 
-    def test_build_messages_without_prompt(self, tmp_path):
-        f = tmp_path / "img.png"
-        f.write_bytes(b"fakepng")
-        messages = gw._build_messages([f], None)
-        assert all(p["type"] == "image_url" for p in messages[0]["content"])
+    def test_build_messages_mixed_files(self, tmp_path):
+        img = tmp_path / "img.png"
+        doc = tmp_path / "doc.pdf"
+        img.write_bytes(b"fakepng")
+        doc.write_bytes(b"%PDF fake")
+        content = gw._build_messages([img, doc], None)[0]["content"]
+        assert [p["type"] for p in content] == ["file_url", "document_url"]
 
     def test_parse_extra_json_and_string(self):
         parsed = gw._parse_extra(["temperature=0", "max_tokens=4096", "label=hello"])
@@ -343,6 +361,25 @@ class TestGatewayCLI:
         result = runner.invoke(app, ["gw", "chat", str(f), "-m", "paddle-ocrv6"])
         assert result.exit_code == 0, result.stdout
         assert "Hello world" in result.stdout
+
+    def test_chat_sends_document_and_file_urls(self, runner, patched_cli, tmp_path):
+        pdf = tmp_path / "doc.pdf"
+        img = tmp_path / "scan.png"
+        pdf.write_bytes(b"%PDF fake")
+        img.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            ["gw", "chat", str(pdf), str(img), "-m", "glm-ocr", "--no-stream"],
+        )
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.completions.calls[-1]
+        content = call["messages"][0]["content"]
+        assert content[0]["type"] == "document_url"
+        assert content[0]["document_url"]["url"].startswith(
+            "data:application/pdf;base64,"
+        )
+        assert content[1]["type"] == "file_url"
+        assert content[1]["file_url"]["url"].startswith("data:image/png;base64,")
 
     def test_chat_multiple_files_and_extra(self, runner, patched_cli, tmp_path):
         f1 = tmp_path / "a.pdf"

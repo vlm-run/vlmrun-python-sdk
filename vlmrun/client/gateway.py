@@ -108,7 +108,7 @@ class Gateway:
             response = client.gateway.completions.create(
                 model="glm-ocr",
                 messages=[{"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}},
+                    {"type": "document_url", "document_url": {"url": "data:application/pdf;base64,..."}},
                 ]}],
             )
             ```

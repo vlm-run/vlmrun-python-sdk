@@ -226,9 +226,10 @@ vision-language models (e.g. `glm-ocr`, `paddle-ocrv6`, `qwen3.6-0.8b`) through
 an OpenAI-compatible API, authenticated with the same `VLMRUN_API_KEY`.
 
 Unlike `vlmrun chat` (which calls the Orion agent), the gateway is a raw
-passthrough to the underlying models: input files are sent inline and **most
-models — especially OCR models — do not accept text-only input**, so at least
-one file is required.
+passthrough to the underlying models: input files are sent inline as base64
+`data:` URLs — documents as `document_url` content parts and other files (e.g.
+images) as `file_url` parts. **Most models — especially OCR models — do not
+accept text-only input**, so at least one file is required.
 
 ```bash
 # Health check

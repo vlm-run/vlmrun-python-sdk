@@ -5,10 +5,11 @@ Talk to OpenAI-compatible OCR / VLM models hosted behind the VLM Run gateway
 ``VLMRUN_API_KEY`` used everywhere else.
 
 Unlike ``vlmrun chat`` (which uploads to the Files API and calls the Orion
-agent), the gateway is a raw passthrough to third-party models. Documents and
-images are therefore inlined as base64 ``data:`` URLs in standard OpenAI
-``image_url`` content parts, and most models (especially OCR models such as
-``glm-ocr`` and ``paddle-ocrv6``) do not accept text-only input.
+agent), the gateway is a raw passthrough to third-party models. Inputs are
+inlined as base64 ``data:`` URLs in the message content: documents use
+``document_url`` content parts and other files (e.g. images) use ``file_url``
+parts. Most models (especially OCR models such as ``glm-ocr`` and
+``paddle-ocrv6``) do not accept text-only input.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from vlmrun.cli._cli.chat import (
     format_file_size,
     handle_api_errors,
 )
+from vlmrun.constants import SUPPORTED_DOCUMENT_FILETYPES
 
 console = Console()
 
@@ -66,17 +68,30 @@ def _guess_mime(path: Path) -> str:
     return mime or "application/octet-stream"
 
 
-def _encode_file_part(path: Path) -> Dict[str, Any]:
-    """Encode a local file as an OpenAI ``image_url`` data-URL content part.
+def _content_part_type(path: Path) -> str:
+    """Content-part type for a file.
 
-    The gateway accepts documents and images inline as base64 ``data:`` URLs.
+    Documents (``.pdf``, ``.doc``, ``.docx``) are sent as ``document_url``;
+    all other files (e.g. images) are sent as ``file_url``.
+    """
+    if path.suffix.lower() in SUPPORTED_DOCUMENT_FILETYPES:
+        return "document_url"
+    return "file_url"
+
+
+def _encode_file_part(path: Path) -> Dict[str, Any]:
+    """Encode a local file as a gateway data-URL content part.
+
+    The gateway accepts files inline as base64 ``data:`` URLs under either a
+    ``document_url`` (documents) or ``file_url`` (everything else) content part.
     """
     data = path.read_bytes()
     b64 = base64.b64encode(data).decode("ascii")
     mime = _guess_mime(path)
+    key = _content_part_type(path)
     return {
-        "type": "image_url",
-        "image_url": {"url": f"data:{mime};base64,{b64}"},
+        "type": key,
+        key: {"url": f"data:{mime};base64,{b64}"},
     }
 
 
