@@ -3,6 +3,10 @@ import os
 
 DEFAULT_BASE_URL = "https://api.vlm.run/v1"
 
+# OpenAI-compatible model gateway (third-party OCR / VLM models).
+# Override with the VLMRUN_GATEWAY_URL environment variable.
+DEFAULT_GATEWAY_URL = "https://gateway.vlm.run/v1"
+
 # Cache directories - use VLMRUN_CACHE_DIR env var if set, otherwise default to ~/.vlmrun/cache
 VLMRUN_HOME = Path.home() / ".vlmrun"
 VLMRUN_HOME.mkdir(parents=True, exist_ok=True)
