@@ -71,9 +71,13 @@ class Gateway:
         return f"{self.base_url}/openai"
 
     def _timeout(self) -> Optional[float]:
+        # Gateway calls (especially multi-page PDF OCR) routinely exceed the
+        # client's 120s default, so raise the floor to 600s — but only when the
+        # user is still at that default. An explicit timeout (whether a longer
+        # deadline or a shorter fail-fast) is theirs to keep.
         timeout = self._client.timeout
-        # If the timeout is at its default value of 120.0, increase it to 600.0
-        # for gateway requests which can be slow. Otherwise, respect the user's custom timeout.
+        if timeout is None:
+            return None
         if timeout == 120.0:
             return 600.0
         return timeout

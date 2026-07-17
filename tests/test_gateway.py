@@ -243,13 +243,27 @@ def patched_cli(monkeypatch):
 
 
 class _MiniClient:
-    def __init__(self) -> None:
+    def __init__(self, timeout=120.0) -> None:
         self.api_key = "sk-test"
-        self.timeout = 120.0
+        self.timeout = timeout
         self.max_retries = 3
 
 
 class TestGatewayResource:
+    def test_timeout_raises_floor_at_default(self):
+        # The 120s default is bumped to 600s for slow gateway calls.
+        assert Gateway(_MiniClient(timeout=120.0))._timeout() == 600.0
+
+    def test_timeout_respects_explicit_short(self):
+        # A user's fail-fast timeout must not be silently widened.
+        assert Gateway(_MiniClient(timeout=5.0))._timeout() == 5.0
+
+    def test_timeout_respects_explicit_long(self):
+        assert Gateway(_MiniClient(timeout=900.0))._timeout() == 900.0
+
+    def test_timeout_none_stays_none(self):
+        assert Gateway(_MiniClient(timeout=None))._timeout() is None
+
     def test_default_base_url(self, monkeypatch):
         monkeypatch.delenv("VLMRUN_GATEWAY_URL", raising=False)
         g = Gateway(_MiniClient())
@@ -428,6 +442,26 @@ class TestHelpers:
         assert {"temperature", "max_tokens", "stream", "extra_body"} <= params
         # ... gateway-specific ones are not, and must ride in extra_body.
         assert not ({"method", "method_params", "document_dpi"} & params)
+
+    def test_openai_create_params_missing_dep_raises_dependency_error(
+        self, monkeypatch
+    ):
+        # A missing openai package must surface DependencyError (with install
+        # hints), not a raw ImportError.
+        from vlmrun.client.exceptions import DependencyError
+
+        def _raise():
+            raise DependencyError(
+                message="OpenAI SDK is not installed",
+                suggestion="pip install openai",
+                error_type="missing_dependency",
+            )
+
+        monkeypatch.setattr(gw, "_require_openai", _raise)
+        gw._openai_create_params.cache_clear()
+        with pytest.raises(DependencyError):
+            gw._openai_create_params()
+        gw._openai_create_params.cache_clear()
 
     def test_split_create_kwargs_routes_gateway_fields(self):
         kwargs, body = gw._split_create_kwargs(
@@ -664,6 +698,16 @@ class TestGatewayEmbed:
         result = runner.invoke(app, ["gw", "embed", "-m", "emb"])
         assert result.exit_code == 1
         assert "at least one file or --text" in result.stdout
+
+    def test_embed_rejects_non_image_file(self, runner, patched_cli, tmp_path):
+        # A PDF (or any non-image/video) must be rejected client-side rather
+        # than sent as a mislabelled image_url the gateway would fail on.
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF-1.4 fake")
+        result = runner.invoke(app, ["gw", "embed", str(doc), "-m", "emb"])
+        assert result.exit_code == 1
+        assert "images and video only" in result.stdout
+        assert not patched_cli["client"].gateway.embeddings.calls
 
     def test_embed_dimensions_passed_through(self, runner, patched_cli):
         result = runner.invoke(

@@ -9,7 +9,8 @@ agent), the gateway is a raw passthrough to third-party models. Inputs are
 inlined as base64 ``data:`` URLs in the message content: documents use
 ``document_url`` content parts, images use ``image_url``, and ``file_url`` is
 the fallback for anything unidentifiable. Most models (especially OCR models
-such as ``glm-ocr`` and ``pp-ocrv6``) do not accept text-only input.
+such as ``zai-org/glm-ocr`` and ``paddleocr/pp-ocrv6``) do not accept
+text-only input.
 
 Commands: ``health``, ``models`` (list or detail one model), ``chat``,
 ``embed`` (embeddings) and ``transcribe`` (audio transcriptions).
@@ -36,6 +37,7 @@ from rich.tree import Tree
 from rich import box
 
 from vlmrun.client import VLMRun
+from vlmrun.client.gateway import _require_openai
 from vlmrun.cli._cli.chat import (
     TimedStatus,
     format_file_size,
@@ -49,22 +51,24 @@ CHAT_HELP = """Run OCR / VLM models on the VLM Run gateway.
 
 \b
 EXAMPLES:
-  vlmrun gw chat doc.pdf -m glm-ocr
-  vlmrun gw chat a.pdf b.pdf -m pp-ocrv6
-  vlmrun gw chat img.jpg -m pp-ocrv6
+  vlmrun gw chat doc.pdf -m zai-org/glm-ocr
+  vlmrun gw chat a.pdf b.pdf -m paddleocr/pp-ocrv6
+  vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6
   vlmrun gw chat img.jpg -p "describe this image" -m qwen/qwen3.5-0.8b
-  vlmrun gw chat doc.pdf -m glm-ocr -e temperature=0 -e max_tokens=4096
+  vlmrun gw chat doc.pdf -m zai-org/glm-ocr -e temperature=0 -e max_tokens=4096
 
 \b
 METHODS:
   Each model exposes methods with a default. Run `vlmrun gw models <model>` for
   its methods, params, and copy-pasteable example commands.
-  vlmrun gw chat img.jpg -m pp-ocrv6 --method detect
-  vlmrun gw chat img.jpg -m pp-ocrv6 --method ocr \\
+  vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6 --method detect
+  vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6 --method ocr \\
       --method-params '{"lang": "en", "score_threshold": 0.5}'
 
 \b
 NOTES:
+  Model ids are the full `<org>/<name>` shown by `vlmrun gw models`; short
+  aliases (e.g. `glm-ocr`) also work.
   Most gateway models (e.g. OCR models) require at least one input file and do
   not accept text-only prompts. Use -p only for models that support it.
 """
@@ -193,15 +197,11 @@ def _openai_create_params() -> frozenset:
     Introspected rather than hardcoded so the split below tracks whatever
     version of the ``openai`` package is installed.
     """
-    try:
-        from openai.resources.chat.completions import Completions
-    except ImportError as e:
-        from vlmrun.client.exceptions import DependencyError
-        raise DependencyError(
-            message="OpenAI SDK is not installed",
-            suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
-            error_type="missing_dependency",
-        ) from e
+    # Route a missing dependency through the SDK's DependencyError (with install
+    # hints) instead of surfacing a raw ImportError. Reuses _require_openai so
+    # the install message lives in one place.
+    _require_openai()
+    from openai.resources.chat.completions import Completions
 
     sig = inspect.signature(Completions.create)
     names = {
@@ -358,8 +358,8 @@ MODELS_HELP = """List gateway models, or detail one model.
 
 \b
 EXAMPLES:
-  vlmrun gw models              List every model with its methods.
-  vlmrun gw models pp-ocrv6     Methods, params and example commands for one model.
+  vlmrun gw models                        List every model with its methods.
+  vlmrun gw models paddleocr/pp-ocrv6     Methods, params and examples for one model.
   vlmrun gw models --json       Raw model catalog.
 """
 
@@ -496,7 +496,7 @@ def chat(
         ...,
         "--model",
         "-m",
-        help="Gateway model id (e.g. glm-ocr, pp-ocrv6, qwen/qwen3.5-0.8b).",
+        help="Gateway model id, full <org>/<name> or alias (see `vlmrun gw models`).",
     ),
     prompt: Optional[str] = typer.Option(
         None,
@@ -696,11 +696,26 @@ TRANSCRIBE_FORMATS = ("json", "text", "verbose_json", "srt", "vtt")
 
 
 def _embed_part(path: Path) -> Dict[str, Any]:
-    """Encode a local file as an embedding content part."""
+    """Encode a local file as an embedding content part.
+
+    Embedding models take images and video only; anything else (a PDF, a text
+    file) is rejected here rather than sent as a mislabelled ``image_url`` that
+    the gateway would fail on.
+    """
     data = path.read_bytes()
-    b64 = base64.b64encode(data).decode("ascii")
     mime = _guess_mime(path, data)
-    key = "video_url" if mime.startswith("video/") else "image_url"
+    if mime.startswith("video/"):
+        key = "video_url"
+    elif mime.startswith("image/"):
+        key = "image_url"
+    else:
+        console.print(
+            f"[red]Error:[/] Cannot embed '{path.name}': unsupported type "
+            f"'{mime}'. Embedding models accept images and video only "
+            "(use --text for text)."
+        )
+        raise typer.Exit(1)
+    b64 = base64.b64encode(data).decode("ascii")
     return {"type": key, key: {"url": f"data:{mime};base64,{b64}"}}
 
 
