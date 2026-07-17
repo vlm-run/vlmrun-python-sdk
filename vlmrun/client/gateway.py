@@ -133,6 +133,57 @@ class Gateway:
         """
         return self._async_openai.chat.completions
 
+    @cached_property
+    def embeddings(self):
+        """OpenAI-compatible embeddings interface (synchronous).
+
+        Note:
+            Multimodal input nests content parts one level deeper than plain
+            text: ``input`` is a list whose items are either a string or a
+            *list* of content parts.
+
+        Example:
+            ```python
+            from vlmrun.client import VLMRun
+
+            client = VLMRun()
+            response = client.gateway.embeddings.create(
+                model="qwen/qwen3-vl-embedding-2b",
+                input=[[{"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}]],
+            )
+            ```
+
+        Raises:
+            DependencyError: If the ``openai`` package is not installed.
+
+        Returns:
+            OpenAI Embeddings object configured for the VLM Run gateway.
+        """
+        return self._openai.embeddings
+
+    @cached_property
+    def transcriptions(self):
+        """OpenAI-compatible audio transcriptions interface (synchronous).
+
+        Example:
+            ```python
+            from vlmrun.client import VLMRun
+
+            client = VLMRun()
+            with open("clip.mp3", "rb") as fh:
+                response = client.gateway.transcriptions.create(
+                    model="nvidia/parakeet-tdt-0.6b-v3", file=fh
+                )
+            ```
+
+        Raises:
+            DependencyError: If the ``openai`` package is not installed.
+
+        Returns:
+            OpenAI Transcriptions object configured for the VLM Run gateway.
+        """
+        return self._openai.audio.transcriptions
+
     def models(self) -> List[Any]:
         """List models available on the gateway.
 
