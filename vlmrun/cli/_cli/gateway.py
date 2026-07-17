@@ -171,6 +171,41 @@ def _encode_file_part(path: Path) -> Dict[str, Any]:
     }
 
 
+def _parse_response_format(value: str) -> Dict[str, Any]:
+    """Parse ``--response-format`` into an OpenAI ``response_format`` object.
+
+    Accepts the shorthands ``text`` and ``json_object`` (with ``json`` as an
+    alias), or a full JSON object for advanced cases (e.g. ``json_schema``).
+    Exits with a clear message on anything else.
+    """
+    stripped = value.strip()
+    aliases = {
+        "text": {"type": "text"},
+        "json": {"type": "json_object"},
+        "json_object": {"type": "json_object"},
+    }
+    if stripped in aliases:
+        return aliases[stripped]
+    if stripped.startswith("{"):
+        try:
+            parsed = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError) as e:
+            console.print(f"[red]Error:[/] --response-format must be valid JSON: {e}")
+            raise typer.Exit(1)
+        if not isinstance(parsed, dict) or "type" not in parsed:
+            console.print(
+                "[red]Error:[/] --response-format JSON must be an object with a "
+                "'type' key, e.g. '{\"type\":\"json_object\"}'."
+            )
+            raise typer.Exit(1)
+        return parsed
+    console.print(
+        f"[red]Error:[/] Unknown --response-format '{value}'. Use 'text', "
+        "'json_object', or a JSON object with a 'type' key."
+    )
+    raise typer.Exit(1)
+
+
 def _build_messages(files: List[Path], prompt: Optional[str]) -> List[Dict[str, Any]]:
     """Build a single OpenAI-style user message from files + optional prompt."""
     content: List[Dict[str, Any]] = [_encode_file_part(f) for f in files]
@@ -527,6 +562,16 @@ def chat(
         "--method-params",
         help='JSON object of method arguments, e.g. \'{"lang": "en"}\'.',
     ),
+    response_format: Optional[str] = typer.Option(
+        None,
+        "--response-format",
+        help=(
+            "Ask the MODEL to constrain its output: 'text', 'json_object' (JSON "
+            'mode), or a JSON object like \'{"type":"json_schema",...}\'. '
+            "Sent to the gateway as `response_format`; not yet honored server-side. "
+            "(Distinct from --json, which formats the CLI's own output.)"
+        ),
+    ),
     extra: Optional[List[str]] = typer.Option(
         None,
         "--extra",
@@ -568,6 +613,10 @@ def chat(
             console.print("[red]Error:[/] --method-params must be a JSON object.")
             raise typer.Exit(1)
         extra_body["method_params"] = parsed_params
+
+    if response_format:
+        # A standard OpenAI create() field, so it rides as a top-level kwarg.
+        create_kwargs["response_format"] = _parse_response_format(response_format)
 
     if extra_body:
         create_kwargs["extra_body"] = extra_body

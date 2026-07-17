@@ -443,6 +443,24 @@ class TestHelpers:
         with pytest.raises(Exception):
             gw._parse_extra(["nonsense"])
 
+    def test_parse_response_format_shorthands(self):
+        assert gw._parse_response_format("text") == {"type": "text"}
+        assert gw._parse_response_format("json") == {"type": "json_object"}
+        assert gw._parse_response_format("json_object") == {"type": "json_object"}
+
+    def test_parse_response_format_json_object(self):
+        schema = '{"type": "json_schema", "json_schema": {"name": "x"}}'
+        assert gw._parse_response_format(schema) == {
+            "type": "json_schema",
+            "json_schema": {"name": "x"},
+        }
+
+    def test_parse_response_format_invalid(self):
+        with pytest.raises(Exception):
+            gw._parse_response_format("yaml")
+        with pytest.raises(Exception):
+            gw._parse_response_format('{"no": "type key"}')
+
     def test_openai_create_params_introspection(self):
         params = gw._openai_create_params()
         # Standard OpenAI fields are accepted by create() ...
@@ -947,6 +965,40 @@ class TestGatewayTranscribe:
         }
         # method must not leak into create()'s own kwargs.
         assert "method" not in call
+
+    def test_chat_response_format_sent_as_top_level_kwarg(
+        self, runner, patched_cli, tmp_path
+    ):
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "chat",
+                str(f),
+                "-m",
+                "pp-ocrv6",
+                "--response-format",
+                "json_object",
+                "--no-stream",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.completions.calls[-1]
+        # A standard OpenAI field, so it rides top-level, not in extra_body.
+        assert call["response_format"] == {"type": "json_object"}
+        assert "response_format" not in call.get("extra_body", {})
+
+    def test_chat_response_format_invalid(self, runner, patched_cli, tmp_path):
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            ["gw", "chat", str(f), "-m", "pp-ocrv6", "--response-format", "yaml"],
+        )
+        assert result.exit_code == 1
+        assert "response-format" in result.stdout.lower()
 
     def test_chat_extra_routes_gateway_field_to_extra_body(
         self, runner, patched_cli, tmp_path
