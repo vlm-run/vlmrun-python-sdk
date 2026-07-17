@@ -488,6 +488,20 @@ class TestHelpers:
     def test_renderable_markdown_for_prose(self):
         assert isinstance(gw._renderable("# Heading\n\nsome text"), Markdown)
 
+    def test_content_error_detects_error_payload(self):
+        assert (
+            gw._content_error('{"error": "Unknown method \'zzz\'"}')
+            == "Unknown method 'zzz'"
+        )
+
+    def test_content_error_ignores_normal_output(self):
+        # OCR JSON lines, document-wrapped text, and prose are not errors.
+        assert gw._content_error('{"text": "Arizona", "score": 1.0}') is None
+        assert gw._content_error('<document pages="1">hi</document>') is None
+        assert gw._content_error("plain transcript text") is None
+        # An object that merely contains an error key alongside data is not it.
+        assert gw._content_error('{"error": "x", "text": "y"}') is None
+
     def test_format_methods_marks_default(self):
         out = gw._format_methods(
             {"methods": ["ocr", "detect"], "default_method": "ocr"}
@@ -985,3 +999,25 @@ class TestGatewayTranscribe:
         assert result.exit_code == 0, result.stdout
         assert "DLN B58471293" in result.stdout
         assert "<document" in result.stdout
+
+    def test_chat_error_payload_fails_loudly(self, runner, patched_cli, tmp_path):
+        """An {"error": ...} body (e.g. bad --method) must exit non-zero."""
+        patched_cli["content"] = '{"error": "Unknown method \'bogus\'"}'
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app, ["gw", "chat", str(f), "-m", "pp-ocrv6", "--no-stream"]
+        )
+        assert result.exit_code == 1
+        assert "Unknown method" in result.stdout
+
+    def test_chat_error_payload_nonzero_in_json(self, runner, patched_cli, tmp_path):
+        patched_cli["content"] = '{"error": "boom"}'
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app, ["gw", "chat", str(f), "-m", "pp-ocrv6", "--no-stream", "--json"]
+        )
+        # Still emits the JSON (for scripts) but signals failure.
+        assert result.exit_code == 1
+        assert json.loads(result.stdout)["content"] == '{"error": "boom"}'

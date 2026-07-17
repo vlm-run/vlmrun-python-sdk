@@ -73,8 +73,20 @@ NOTES:
   not accept text-only prompts. Use -p only for models that support it.
 """
 
+GATEWAY_HELP = """OCR, VLM, embedding and transcription models on the VLM Run gateway.
+
+An OpenAI-compatible passthrough to third-party models, authenticated with the
+same VLMRUN_API_KEY as the rest of the CLI. `vlmrun gateway` and `vlmrun gw`
+are the same command.
+
+\b
+Start here:
+  vlmrun gw models              See what is available (task + methods per model)
+  vlmrun gw models <model>      Methods, params and copy-pasteable examples
+"""
+
 app = typer.Typer(
-    help="Run OCR / VLM models on the OpenAI-compatible VLM Run gateway.",
+    help=GATEWAY_HELP,
     add_completion=False,
     no_args_is_help=True,
 )
@@ -360,7 +372,7 @@ MODELS_HELP = """List gateway models, or detail one model.
 EXAMPLES:
   vlmrun gw models                        List every model with its methods.
   vlmrun gw models paddleocr/pp-ocrv6     Methods, params and examples for one model.
-  vlmrun gw models --json       Raw model catalog.
+  vlmrun gw models --json                 Raw model catalog.
 """
 
 
@@ -642,6 +654,8 @@ def chat(
         content = "".join(chunks)
         latency_s = time.time() - start_time
 
+    error = _content_error(content)
+
     if output_json:
         out = {
             "model": model,
@@ -650,7 +664,11 @@ def chat(
             "usage": usage.model_dump() if hasattr(usage, "model_dump") else usage,
         }
         print(json.dumps(out, indent=2, default=str))
-        return
+        raise typer.Exit(1 if error else 0)
+
+    if error:
+        console.print(f"[red]Error:[/] {error}")
+        raise typer.Exit(1)
 
     _print_output(content, model, latency_s, usage)
 
@@ -719,6 +737,28 @@ def _embed_part(path: Path) -> Dict[str, Any]:
     return {"type": key, key: {"url": f"data:{mime};base64,{b64}"}}
 
 
+def _content_error(content: str) -> Optional[str]:
+    """Return the error message if the response body is a gateway error payload.
+
+    On some 200 responses (e.g. an unknown ``--method``) the gateway ships an
+    ``{"error": "..."}`` object as the message content instead of a real
+    result. Detect that exact shape — a lone ``error`` key — so the CLI can fail
+    loudly instead of rendering it as a successful response. Normal outputs are
+    either ``<document>``-wrapped or ``{"text": ...}`` lines, so this never
+    misfires.
+    """
+    stripped = content.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(stripped)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(parsed, dict) and list(parsed.keys()) == ["error"]:
+        return str(parsed["error"])
+    return None
+
+
 def _renderable(content: str):
     """Pick a Rich renderable for gateway output.
 
@@ -773,7 +813,7 @@ def embed(
         None,
         "--text",
         "-t",
-        help="Text to embed (repeatable). With a file, embeds jointly.",
+        help="Text to embed (repeatable). Its own vector unless --join is set.",
     ),
     join: bool = typer.Option(
         False,
