@@ -72,7 +72,11 @@ class Gateway:
 
     def _timeout(self) -> Optional[float]:
         timeout = self._client.timeout
-        return timeout if timeout is None else max(timeout, 600)
+        # If the timeout is at its default value of 120.0, increase it to 600.0
+        # for gateway requests which can be slow. Otherwise, respect the user's custom timeout.
+        if timeout == 120.0:
+            return 600.0
+        return timeout
 
     @cached_property
     def _openai(self):
