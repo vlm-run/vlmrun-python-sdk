@@ -193,7 +193,15 @@ def _openai_create_params() -> frozenset:
     Introspected rather than hardcoded so the split below tracks whatever
     version of the ``openai`` package is installed.
     """
-    from openai.resources.chat.completions import Completions
+    try:
+        from openai.resources.chat.completions import Completions
+    except ImportError as e:
+        from vlmrun.client.exceptions import DependencyError
+        raise DependencyError(
+            message="OpenAI SDK is not installed",
+            suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
+            error_type="missing_dependency",
+        ) from e
 
     sig = inspect.signature(Completions.create)
     names = {
