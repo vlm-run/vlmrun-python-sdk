@@ -25,16 +25,20 @@ MP4_BYTES = b"\x00\x00\x00\x20" + b"ftyp" + b"isom" + b"\x00" * 4
 
 
 class FakeUsage:
-    def __init__(self, prompt_tokens: int = 10, completion_tokens: int = 20) -> None:
+    def __init__(
+        self, prompt_tokens: int = 10, completion_tokens: int = 20, cost=None
+    ) -> None:
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
         self.total_tokens = prompt_tokens + completion_tokens
+        self.cost = cost
 
     def model_dump(self) -> dict:
         return {
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
+            "cost": self.cost,
         }
 
 
@@ -49,9 +53,9 @@ class FakeChoice:
 
 
 class FakeResponse:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str, cost=None) -> None:
         self.choices = [FakeChoice(content)]
-        self.usage = FakeUsage()
+        self.usage = FakeUsage(cost=cost)
 
 
 class FakeDelta:
@@ -74,6 +78,7 @@ class FakeCompletions:
     def __init__(self) -> None:
         self.calls: list[dict] = []
         self.content = "Hello world"
+        self.cost = None
 
     def create(self, model, messages, stream=False, **kwargs):
         self.calls.append(
@@ -83,10 +88,10 @@ class FakeCompletions:
             return iter(
                 [
                     FakeChunk(self.content[:6]),
-                    FakeChunk(self.content[6:], usage=FakeUsage()),
+                    FakeChunk(self.content[6:], usage=FakeUsage(cost=self.cost)),
                 ]
             )
-        return FakeResponse(self.content)
+        return FakeResponse(self.content, cost=self.cost)
 
 
 class FakeModel:
@@ -230,6 +235,8 @@ def patched_cli(monkeypatch):
         client = FakeClient(api_key=api_key, base_url=base_url, healthy=healthy)
         if "content" in holder:
             client.gateway.completions.content = holder["content"]
+        if "cost" in holder:
+            client.gateway.completions.cost = holder["cost"]
         holder["client"] = client
         return client
 
@@ -487,6 +494,15 @@ class TestHelpers:
 
     def test_renderable_markdown_for_prose(self):
         assert isinstance(gw._renderable("# Heading\n\nsome text"), Markdown)
+
+    def test_format_cost(self):
+        assert gw._format_cost(0.001508) == "$0.001508"
+        assert gw._format_cost(0.0482) == "$0.0482"
+        assert gw._format_cost(3.26e-06) == "$0.000003"
+        assert gw._format_cost(1e-9) == "<$0.000001"  # real but tiny, never "$0"
+        assert gw._format_cost(0) == "$0"
+        assert gw._format_cost(None) is None
+        assert gw._format_cost("nan-ish") is None
 
     def test_content_error_detects_error_payload(self):
         assert (
@@ -1021,3 +1037,23 @@ class TestGatewayTranscribe:
         # Still emits the JSON (for scripts) but signals failure.
         assert result.exit_code == 1
         assert json.loads(result.stdout)["content"] == '{"error": "boom"}'
+
+    def test_chat_panel_shows_cost(self, runner, patched_cli, tmp_path):
+        patched_cli["cost"] = 0.001508
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app, ["gw", "chat", str(f), "-m", "pp-ocrv6", "--no-stream"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert "$0.001508" in result.stdout
+
+    def test_chat_json_carries_cost(self, runner, patched_cli, tmp_path):
+        patched_cli["cost"] = 0.0042
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app, ["gw", "chat", str(f), "-m", "pp-ocrv6", "--no-stream", "--json"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert json.loads(result.stdout)["usage"]["cost"] == 0.0042

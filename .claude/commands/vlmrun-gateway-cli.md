@@ -93,6 +93,10 @@ vectors, their dimension) rather than dumping raw floats unless asked. If you
 picked a model/method the user didn't specify, say which and why in one line so
 they can steer next time.
 
+Chat/OCR responses carry `usage.cost` (USD) — the panel footer shows it, and
+`--json` puts it under `usage.cost`. Report the cost when it's relevant, and for
+a batch over many files sum it into a total.
+
 ## Examples
 
 - `"embed this image ~/data/image.jpg"`

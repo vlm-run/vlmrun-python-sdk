@@ -773,6 +773,22 @@ def _renderable(content: str):
     return Markdown(content)
 
 
+def _format_cost(cost: Any) -> Optional[str]:
+    """Format the gateway's per-request ``usage.cost`` (USD), or None."""
+    try:
+        value = float(cost)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return "$0"
+    if value >= 0.01:
+        return f"${value:.4f}"
+    # Sub-cent: show up to 6 decimals without scientific notation, but never
+    # collapse a real cost to "$0".
+    formatted = f"${value:.6f}".rstrip("0").rstrip(".")
+    return formatted if formatted != "$0" else "<$0.000001"
+
+
 def _print_output(content: str, model: str, latency_s: float, usage: Any) -> None:
     """Render the gateway response in a Rich panel."""
     stats = [model]
@@ -782,6 +798,9 @@ def _print_output(content: str, model: str, latency_s: float, usage: Any) -> Non
             prompt_toks = getattr(usage, "prompt_tokens", 0)
             completion_toks = getattr(usage, "completion_tokens", 0)
             stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens")
+        cost = _format_cost(getattr(usage, "cost", None))
+        if cost:
+            stats.append(cost)
     stats.append(f"{latency_s:.2f}s")
 
     console.print(
