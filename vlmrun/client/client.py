@@ -22,6 +22,7 @@ from vlmrun.client.predictions import (
 )
 from vlmrun.client.feedback import Feedback
 from vlmrun.client.agent import Agent
+from vlmrun.client.gateway import Gateway
 from vlmrun.client.skills import Skills
 from vlmrun.client.executions import Executions
 from vlmrun.client.artifacts import Artifacts
@@ -119,6 +120,7 @@ class VLMRun:
         self.video._requestor._timeout = 120.0
         self.feedback = Feedback(self)
         self.agent = Agent(self)
+        self.gateway = Gateway(self)
         self.skills = Skills(self)
         self.executions = Executions(self)
         self.artifacts = Artifacts(self)

@@ -173,6 +173,7 @@ vlmrun chat "What colors are present?" --session-id <session-uuid>
 |----------|-------------|
 | `VLMRUN_API_KEY` | Your VLM Run API key (required) |
 | `VLMRUN_CACHE_DIR` | Custom cache directory (default: `~/.vlmrun/cache/artifacts`) |
+| `VLMRUN_GATEWAY_URL` | Override the model gateway base URL (default: `https://gateway.vlm.run/v1`) |
 
 ## How It Works
 
@@ -217,6 +218,68 @@ vlmrun models list
 # Fine-tune a model
 vlmrun fine-tuning create --model base_model --training-file training_file_id
 ```
+
+### Gateway (`vlmrun gateway` / `vlmrun gw`) - OpenAI-compatible models
+
+The gateway (`https://gateway.vlm.run/v1`) exposes third-party OCR,
+vision-language, embedding and transcription models (e.g. `zai-org/glm-ocr`,
+`paddleocr/pp-ocrv6`, `qwen/qwen3.5-0.8b`) through an OpenAI-compatible API,
+authenticated with the same `VLMRUN_API_KEY`. `vlmrun gateway` and `vlmrun gw`
+are the same command.
+
+Unlike `vlmrun chat` (which calls the Orion agent), the gateway is a raw
+passthrough to the underlying models: input files are sent inline as base64
+`data:` URLs — documents as `document_url` content parts, images as
+`image_url`, and `file_url` as a fallback for anything else. **Most chat/OCR
+models do not accept text-only input**, so at least one file is required.
+
+Model ids are the full `<org>/<name>` shown by `vlmrun gw models`; the short
+aliases listed there (e.g. `glm-ocr`, `pp-ocrv6`) also work.
+
+```bash
+# Health check
+vlmrun gw health
+
+# List models (task + methods); detail one model's methods, params and examples
+vlmrun gw models
+vlmrun gw models paddleocr/pp-ocrv6
+vlmrun gw models --json
+
+# Parse a document (PDF -> text/markdown)
+vlmrun gw chat document.pdf -m zai-org/glm-ocr
+
+# Multiple documents / OCR an image
+vlmrun gw chat doc1.pdf doc2.pdf -m paddleocr/pp-ocrv6
+vlmrun gw chat scan.jpg -m paddleocr/pp-ocrv6
+
+# Select a model method (see `vlmrun gw models <model>`)
+vlmrun gw chat scan.jpg -m paddleocr/pp-ocrv6 --method detect
+vlmrun gw chat scan.jpg -m paddleocr/pp-ocrv6 --method ocr \
+    --method-params '{"lang": "en", "score_threshold": 0.5}'
+
+# Prompt a model that supports text input
+vlmrun gw chat image.jpg -p "describe this image" -m qwen/qwen3.5-0.8b
+
+# Forward extra completion kwargs as key=value (JSON-parsed)
+vlmrun gw chat document.pdf -m zai-org/glm-ocr -e temperature=0 -e max_tokens=4096
+
+# Embed text, images or video (each input -> one vector; --join for a joint one)
+vlmrun gw embed -t "a blue parrot" -m qwen/qwen3-vl-embedding-2b
+vlmrun gw embed photo.jpg -m qwen/qwen3-vl-embedding-2b
+vlmrun gw embed photo.jpg -t "caption" --join -m qwen/qwen3-vl-embedding-2b
+
+# Transcribe audio, or a video's audio track
+vlmrun gw transcribe clip.mp3 -m nvidia/parakeet-tdt-0.6b-v3
+vlmrun gw transcribe clip.mp4 -m nvidia/parakeet-tdt-0.6b-v3 -f srt
+```
+
+| Command | Description |
+|---------|-------------|
+| `vlmrun gw health` | Check gateway reachability |
+| `vlmrun gw models [MODEL]` | List models (task + methods), or detail one model's methods, params and example commands (`--json` for raw output) |
+| `vlmrun gw chat FILES... -m MODEL` | Run a model over one or more files (`--method`/`--method-params`, `-p` prompt, `-e key=value` extras, `--no-stream`, `--json`) |
+| `vlmrun gw embed [FILES...] -m MODEL` | Embed text (`-t`), images or video (`--join`, `--dimensions`, `--json`) |
+| `vlmrun gw transcribe AUDIO -m MODEL` | Transcribe audio or a video's audio track (`-f` format, `--language`, `--prompt`, `--url`, `--json`) |
 
 ### Predictions
 

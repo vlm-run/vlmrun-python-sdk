@@ -25,6 +25,7 @@ class VLMRunProtocol(Protocol):
     fine_tuning: Any
     feedback: Any
     agent: Any
+    gateway: Any
     requestor: Any
     artifacts: Any
 
