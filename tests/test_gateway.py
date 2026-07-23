@@ -1025,6 +1025,84 @@ class TestGatewayTranscribe:
         assert call["extra_body"] == {"document_dpi": 200}
         assert call["temperature"] == 0
 
+    def test_chat_document_dpi_rides_in_extra_body(self, runner, patched_cli, tmp_path):
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app,
+            ["gw", "chat", str(pdf), "-m", "pp-ocrv6", "--document-dpi", "150", "-ns"],
+        )
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.completions.calls[-1]
+        assert call["extra_body"] == {"document_dpi": 150}
+        # A gateway field must not leak into create()'s own kwargs.
+        assert "document_dpi" not in call
+
+    def test_chat_document_dpi_short_flag(self, runner, patched_cli, tmp_path):
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(pdf), "-m", "pp-ocrv6", "-d", "300", "-ns"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert patched_cli["client"].gateway.completions.calls[-1]["extra_body"] == {
+            "document_dpi": 300
+        }
+
+    def test_chat_document_max_pages_rides_in_extra_body(
+        self, runner, patched_cli, tmp_path
+    ):
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "chat",
+                str(pdf),
+                "-m",
+                "pp-ocrv6",
+                "--document-max-pages",
+                "10",
+                "-ns",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert patched_cli["client"].gateway.completions.calls[-1]["extra_body"] == {
+            "document_max_pages": 10
+        }
+
+    def test_chat_dpi_merges_with_method_and_extra(self, runner, patched_cli, tmp_path):
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "chat",
+                str(pdf),
+                "-m",
+                "pp-ocrv6",
+                "--method",
+                "ocr",
+                "--document-dpi",
+                "150",
+                "--document-max-pages",
+                "50",
+                "-e",
+                "temperature=0",
+                "-ns",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.completions.calls[-1]
+        assert call["extra_body"] == {
+            "method": "ocr",
+            "document_dpi": 150,
+            "document_max_pages": 50,
+        }
+        assert call["temperature"] == 0
+
     def test_chat_no_extra_body_when_unused(self, runner, patched_cli, tmp_path):
         f = tmp_path / "img.png"
         f.write_bytes(b"fakepng")

@@ -12,6 +12,11 @@ the fallback for anything unidentifiable. Most models (especially OCR models
 such as ``zai-org/glm-ocr`` and ``paddleocr/pp-ocrv6``) do not accept
 text-only input.
 
+Multi-page PDFs are sent whole; the gateway rasterizes and fans them out per
+page. ``--document-dpi`` tunes that rasterization (default 72; raise to
+150-300 for dense or high-resolution pages) and ``--document-max-pages`` caps
+how many pages are processed.
+
 Commands: ``health``, ``models`` (list or detail one model), ``chat``,
 ``embed`` (embeddings) and ``transcribe`` (audio transcriptions).
 """
@@ -55,6 +60,7 @@ EXAMPLES:
   vlmrun gw chat a.pdf b.pdf -m paddleocr/pp-ocrv6
   vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6
   vlmrun gw chat img.jpg -p "describe this image" -m qwen/qwen3.5-0.8b
+  vlmrun gw chat doc.pdf -m paddleocr/pp-ocrv6 --document-dpi 150
   vlmrun gw chat doc.pdf -m zai-org/glm-ocr -e temperature=0 -e max_tokens=4096
 
 \b
@@ -71,6 +77,8 @@ NOTES:
   aliases (e.g. `glm-ocr`) also work.
   Most gateway models (e.g. OCR models) require at least one input file and do
   not accept text-only prompts. Use -p only for models that support it.
+  PDFs are sent whole; the gateway rasterizes and fans them out per page. Raise
+  `--document-dpi` (default 72) to 150-300 if small or dense text is missed.
 """
 
 GATEWAY_HELP = """OCR, VLM, embedding and transcription models on the VLM Run gateway.
@@ -562,6 +570,21 @@ def chat(
         "--method-params",
         help='JSON object of method arguments, e.g. \'{"lang": "en"}\'.',
     ),
+    document_dpi: Optional[int] = typer.Option(
+        None,
+        "--document-dpi",
+        "-d",
+        help=(
+            "Rasterization DPI per PDF page (gateway default 72; 150 is a good "
+            "balance; 300+ preserves fine print on dense/high-res pages at "
+            "higher cost). PDF input only."
+        ),
+    ),
+    document_max_pages: Optional[int] = typer.Option(
+        None,
+        "--document-max-pages",
+        help="Cap the number of PDF pages processed (gateway default 500).",
+    ),
     response_format: Optional[str] = typer.Option(
         None,
         "--response-format",
@@ -613,6 +636,13 @@ def chat(
             console.print("[red]Error:[/] --method-params must be a JSON object.")
             raise typer.Exit(1)
         extra_body["method_params"] = parsed_params
+
+    # Document rasterization controls are gateway-specific, so they ride in
+    # extra_body as top-level request-body fields (like `method`).
+    if document_dpi is not None:
+        extra_body["document_dpi"] = document_dpi
+    if document_max_pages is not None:
+        extra_body["document_max_pages"] = document_max_pages
 
     if response_format:
         # A standard OpenAI create() field, so it rides as a top-level kwarg.
