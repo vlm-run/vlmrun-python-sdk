@@ -237,6 +237,27 @@ class TestAgentConfigModels:
         with pytest.raises(ValidationError):
             config_class(service_tier="ultra")
 
+    @pytest.mark.parametrize("mode", ["agent", "program"])
+    def test_agent_execution_config_mode(self, mode):
+        """mode is accepted on AgentExecutionConfig and round-trips through model_dump()."""
+        config = AgentExecutionConfig(prompt="hi", mode=mode)
+        assert config.mode == mode
+        dumped = config.model_dump(exclude_none=True)
+        assert dumped["mode"] == mode
+
+    def test_agent_execution_config_mode_default_is_none(self):
+        """mode defaults to None and is excluded from model_dump(exclude_none=True)."""
+        config = AgentExecutionConfig(prompt="hi")
+        assert config.mode is None
+        assert "mode" not in config.model_dump(exclude_none=True)
+
+    def test_agent_execution_config_mode_invalid(self):
+        """Invalid mode values are rejected by pydantic."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AgentExecutionConfig(prompt="hi", mode="auto")
+
 
 class TestAgentCompletions:
     """Test the Agent OpenAI completions integration."""

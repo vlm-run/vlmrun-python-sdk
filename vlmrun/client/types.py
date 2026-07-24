@@ -306,6 +306,15 @@ class AgentExecutionConfig(AgentExecutionOrCreationConfig):
     prompt: Optional[str] = Field(
         default=None, description="The prompt to guide the execution of the agent."
     )
+    mode: Literal["agent", "program"] | None = Field(
+        default=None,
+        description=(
+            "Orion-2 only (ignored for other models). `program` (default): run "
+            "cached skill pipeline.py as fixed code when available. `agent`: "
+            "run the full LLM agent loop. When omitted, the server default "
+            "applies."
+        ),
+    )
 
 
 class AgentInfo(BaseModel):
