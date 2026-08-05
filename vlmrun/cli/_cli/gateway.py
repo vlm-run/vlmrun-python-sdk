@@ -26,6 +26,7 @@ import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
@@ -43,7 +44,10 @@ from vlmrun.cli._cli.chat import (
     format_file_size,
     handle_api_errors,
 )
-from vlmrun.constants import SUPPORTED_DOCUMENT_FILETYPES
+from vlmrun.constants import (
+    SUPPORTED_DOCUMENT_FILETYPES,
+    SUPPORTED_VIDEO_FILETYPES,
+)
 
 console = Console()
 
@@ -55,6 +59,8 @@ EXAMPLES:
   vlmrun gw chat a.pdf b.pdf -m paddleocr/pp-ocrv6
   vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6
   vlmrun gw chat img.jpg -p "describe this image" -m qwen/qwen3.5-0.8b
+  vlmrun gw chat https://example.com/scan.jpg -m paddleocr/pp-ocrv6
+  vlmrun gw chat https://example.com/report.pdf -m zai-org/glm-ocr
   vlmrun gw chat doc.pdf -m zai-org/glm-ocr -e temperature=0 -e max_tokens=4096
 
 \b
@@ -69,8 +75,9 @@ METHODS:
 NOTES:
   Model ids are the full `<org>/<name>` shown by `vlmrun gw models`; short
   aliases (e.g. `glm-ocr`) also work.
-  Most gateway models (e.g. OCR models) require at least one input file and do
-  not accept text-only prompts. Use -p only for models that support it.
+  Inputs are local file paths or http(s) URLs (image, document or video).
+  Most gateway models (e.g. OCR models) require at least one input and do not
+  accept text-only prompts. Use -p only for models that support it.
 """
 
 GATEWAY_HELP = """OCR, VLM, embedding and transcription models on the VLM Run gateway.
@@ -136,6 +143,30 @@ def _guess_mime(path: Path, data: Optional[bytes] = None) -> str:
     return mime or "application/octet-stream"
 
 
+def _is_http_url(value: str) -> bool:
+    """Return True if ``value`` looks like an http(s) URL."""
+    return value.startswith(("http://", "https://"))
+
+
+def _suffix_from_url(url: str) -> str:
+    """File extension from a URL path, ignoring query strings."""
+    return Path(urlparse(url).path).suffix.lower()
+
+
+def _content_part_type_for_suffix(suffix: str, mime: Optional[str] = None) -> str:
+    """Content-part type from a file extension and optional MIME type."""
+    if suffix in SUPPORTED_DOCUMENT_FILETYPES:
+        return "document_url"
+    mime = mime or mimetypes.guess_type(f"name{suffix}")[0] or ""
+    if mime == "application/pdf":
+        return "document_url"
+    if mime.startswith("video/") or suffix in SUPPORTED_VIDEO_FILETYPES:
+        return "video_url"
+    if mime.startswith("image/"):
+        return "image_url"
+    return "file_url"
+
+
 def _content_part_type(path: Path, mime: Optional[str] = None) -> str:
     """Content-part type for a file.
 
@@ -144,14 +175,14 @@ def _content_part_type(path: Path, mime: Optional[str] = None) -> str:
     identify: the gateway routes it through its document/PDF path, which fails
     outright on a plain image.
     """
-    if path.suffix.lower() in SUPPORTED_DOCUMENT_FILETYPES:
-        return "document_url"
-    mime = mime or _guess_mime(path)
-    if mime == "application/pdf":
-        return "document_url"
-    if mime.startswith("image/"):
-        return "image_url"
-    return "file_url"
+    return _content_part_type_for_suffix(path.suffix.lower(), mime or _guess_mime(path))
+
+
+def _content_part_type_from_url(url: str) -> str:
+    """Content-part type for a remote http(s) URL."""
+    suffix = _suffix_from_url(url)
+    mime, _ = mimetypes.guess_type(urlparse(url).path)
+    return _content_part_type_for_suffix(suffix, mime)
 
 
 def _encode_file_part(path: Path) -> Dict[str, Any]:
@@ -169,6 +200,36 @@ def _encode_file_part(path: Path) -> Dict[str, Any]:
         "type": key,
         key: {"url": f"data:{mime};base64,{b64}"},
     }
+
+
+def _encode_url_part(url: str) -> Dict[str, Any]:
+    """Build a gateway content part that references a remote http(s) URL."""
+    key = _content_part_type_from_url(url)
+    return {
+        "type": key,
+        key: {"url": url},
+    }
+
+
+def _encode_chat_input(raw: str) -> Dict[str, Any]:
+    """Encode one chat input — a local file path or http(s) URL."""
+    if _is_http_url(raw):
+        return _encode_url_part(raw)
+    path = Path(raw).expanduser()
+    return _encode_file_part(path)
+
+
+def _validate_chat_input(raw: str) -> None:
+    """Ensure a non-URL chat input refers to a readable local file."""
+    if _is_http_url(raw):
+        return
+    path = Path(raw).expanduser()
+    if not path.is_file():
+        console.print(
+            f"[red]Error:[/] Input '{raw}' is not a file. "
+            "Provide a local path or an http(s) URL."
+        )
+        raise typer.Exit(1)
 
 
 def _parse_response_format(value: str) -> Dict[str, Any]:
@@ -206,9 +267,9 @@ def _parse_response_format(value: str) -> Dict[str, Any]:
     raise typer.Exit(1)
 
 
-def _build_messages(files: List[Path], prompt: Optional[str]) -> List[Dict[str, Any]]:
-    """Build a single OpenAI-style user message from files + optional prompt."""
-    content: List[Dict[str, Any]] = [_encode_file_part(f) for f in files]
+def _build_messages(inputs: List[str], prompt: Optional[str]) -> List[Dict[str, Any]]:
+    """Build a single OpenAI-style user message from file paths/URLs + prompt."""
+    content: List[Dict[str, Any]] = [_encode_chat_input(raw) for raw in inputs]
     if prompt:
         content.append({"type": "text", "text": prompt})
     return [{"role": "user", "content": content}]
@@ -533,11 +594,9 @@ def models(
 @app.command(help=CHAT_HELP, context_settings={"max_content_width": 120})
 def chat(
     ctx: typer.Context,
-    files: List[Path] = typer.Argument(
+    inputs: List[str] = typer.Argument(
         None,
-        help="Input document/image file(s) to process. Repeatable.",
-        exists=True,
-        readable=True,
+        help="Input file path(s) or http(s) URL(s) (image, document or video). Repeatable.",
     ),
     model: str = typer.Option(
         ...,
@@ -589,14 +648,17 @@ def chat(
     """Run a gateway model over one or more documents/images."""
     client: VLMRun = ctx.obj
 
-    if not files and not prompt:
+    inputs = list(inputs or [])
+    if not inputs and not prompt:
         console.print(
-            "[red]Error:[/] Provide at least one input file. "
+            "[red]Error:[/] Provide at least one input file or URL. "
             "Most gateway models do not accept text-only input."
         )
         raise typer.Exit(1)
 
-    files = files or []
+    for raw in inputs:
+        _validate_chat_input(raw)
+
     create_kwargs, extra_body = _split_create_kwargs(_parse_extra(extra))
     if timeout is not None:
         create_kwargs["timeout"] = timeout
@@ -621,22 +683,26 @@ def chat(
     if extra_body:
         create_kwargs["extra_body"] = extra_body
 
-    # Show the files being processed.
-    if files and not output_json:
+    # Show the inputs being processed.
+    if inputs and not output_json:
         tree = Tree("", guide_style="dim", hide_root=True)
-        for f in files:
-            size_str = format_file_size(f.stat().st_size)
-            tree.add(f"{f.name} [dim]({size_str})[/dim]")
+        for raw in inputs:
+            if _is_http_url(raw):
+                tree.add(raw)
+            else:
+                path = Path(raw).expanduser()
+                size_str = format_file_size(path.stat().st_size)
+                tree.add(f"{path.name} [dim]({size_str})[/dim]")
         console.print(
             Panel(
                 tree,
-                title=f"Processing {len(files)} file(s) [dim]({model})[/dim]",
+                title=f"Processing {len(inputs)} input(s) [dim]({model})[/dim]",
                 title_align="left",
                 border_style="dim",
             )
         )
 
-    messages = _build_messages(files, prompt)
+    messages = _build_messages(inputs, prompt)
     start_time = time.time()
     status_msg = f"Processing ([bold]{model}[/bold])..."
 
