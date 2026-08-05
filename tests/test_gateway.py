@@ -364,8 +364,34 @@ class TestHelpers:
         assert gw._content_part_type(tmp_path / "a.docx") == "document_url"
         assert gw._content_part_type(tmp_path / "a.png") == "image_url"
         assert gw._content_part_type(tmp_path / "a.jpg") == "image_url"
+        assert gw._content_part_type(tmp_path / "a.mp4") == "video_url"
         # Unidentifiable content still falls back to file_url.
         assert gw._content_part_type(tmp_path / "a.bin") == "file_url"
+
+    def test_content_part_type_from_url(self):
+        assert (
+            gw._content_part_type_from_url("https://example.com/doc.pdf")
+            == "document_url"
+        )
+        assert (
+            gw._content_part_type_from_url("https://example.com/img.png") == "image_url"
+        )
+        assert (
+            gw._content_part_type_from_url("https://example.com/clip.mp4?token=1")
+            == "video_url"
+        )
+
+    def test_encode_url_part(self):
+        part = gw._encode_url_part("https://example.com/scan.jpg")
+        assert part == {
+            "type": "image_url",
+            "image_url": {"url": "https://example.com/scan.jpg"},
+        }
+
+    def test_encode_url_part_document(self):
+        part = gw._encode_url_part("https://example.com/report.pdf")
+        assert part["type"] == "document_url"
+        assert part["document_url"]["url"] == "https://example.com/report.pdf"
 
     def test_encode_document_part(self, tmp_path):
         f = tmp_path / "doc.pdf"
@@ -421,7 +447,7 @@ class TestHelpers:
     def test_build_messages_with_prompt(self, tmp_path):
         f = tmp_path / "img.png"
         f.write_bytes(PNG_BYTES)
-        messages = gw._build_messages([f], "describe")
+        messages = gw._build_messages([str(f)], "describe")
         assert len(messages) == 1
         content = messages[0]["content"]
         assert content[0]["type"] == "image_url"
@@ -432,8 +458,26 @@ class TestHelpers:
         doc = tmp_path / "doc.pdf"
         img.write_bytes(PNG_BYTES)
         doc.write_bytes(b"%PDF fake")
-        content = gw._build_messages([img, doc], None)[0]["content"]
+        content = gw._build_messages([str(img), str(doc)], None)[0]["content"]
         assert [p["type"] for p in content] == ["image_url", "document_url"]
+
+    def test_build_messages_with_url(self):
+        content = gw._build_messages(["https://example.com/scan.jpg"], None)[0][
+            "content"
+        ]
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"] == "https://example.com/scan.jpg"
+
+    def test_build_messages_mixed_file_and_url(self, tmp_path):
+        img = tmp_path / "img.png"
+        img.write_bytes(PNG_BYTES)
+        content = gw._build_messages([str(img), "https://example.com/doc.pdf"], None)[
+            0
+        ]["content"]
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"].startswith("data:image/png;base64,")
+        assert content[1]["type"] == "document_url"
+        assert content[1]["document_url"]["url"] == "https://example.com/doc.pdf"
 
     def test_parse_extra_json_and_string(self):
         parsed = gw._parse_extra(["temperature=0", "max_tokens=4096", "label=hello"])
@@ -840,7 +884,33 @@ class TestGatewayTranscribe:
     def test_chat_requires_file(self, runner, patched_cli):
         result = runner.invoke(app, ["gw", "chat", "-m", "glm-ocr"])
         assert result.exit_code == 1
-        assert "at least one input file" in result.stdout.lower()
+        assert "at least one input" in result.stdout.lower()
+
+    def test_chat_rejects_missing_file(self, runner, patched_cli):
+        result = runner.invoke(
+            app, ["gw", "chat", "missing.pdf", "-m", "glm-ocr", "--no-stream"]
+        )
+        assert result.exit_code == 1
+        assert "not a file" in result.stdout.lower()
+
+    def test_chat_with_url(self, runner, patched_cli):
+        url = "https://example.com/scan.jpg"
+        result = runner.invoke(
+            app,
+            ["gw", "chat", url, "-m", "paddle-ocrv6", "--no-stream"],
+        )
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.completions.calls[-1]
+        content = call["messages"][0]["content"]
+        assert content[0]["type"] == "image_url"
+        assert content[0]["image_url"]["url"] == url
+        assert call["stream"] is False
+
+    def test_chat_document_url_streams(self, runner, patched_cli):
+        url = "https://example.com/report.pdf"
+        result = runner.invoke(app, ["gw", "chat", url, "-m", "glm-ocr"])
+        assert result.exit_code == 0, result.stdout
+        assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is True
 
     def test_chat_with_file_json(self, runner, patched_cli, tmp_path):
         f = tmp_path / "doc.pdf"
