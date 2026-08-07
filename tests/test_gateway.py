@@ -1060,6 +1060,41 @@ class TestGatewayTranscribe:
         assert call["response_format"] == {"type": "json_object"}
         assert "response_format" not in call.get("extra_body", {})
 
+    def test_chat_json_mode_sent_as_top_level_kwarg(
+        self, runner, patched_cli, tmp_path
+    ):
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            ["gw", "chat", str(f), "-m", "pp-ocrv6", "--json-mode", "--no-stream"],
+        )
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.completions.calls[-1]
+        assert call["response_format"] == {"type": "json_object"}
+        assert "response_format" not in call.get("extra_body", {})
+
+    def test_chat_json_mode_and_response_format_mutually_exclusive(
+        self, runner, patched_cli, tmp_path
+    ):
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "chat",
+                str(f),
+                "-m",
+                "pp-ocrv6",
+                "--json-mode",
+                "--response-format",
+                "json_object",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.stdout.lower()
+
     def test_chat_response_format_invalid(self, runner, patched_cli, tmp_path):
         f = tmp_path / "img.png"
         f.write_bytes(b"fakepng")
