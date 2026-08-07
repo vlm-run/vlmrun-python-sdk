@@ -70,6 +70,7 @@ METHODS:
   vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6 --method detect
   vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6 --method ocr \\
       --method-params '{"lang": "en", "score_threshold": 0.5}'
+  vlmrun gw chat img.jpg -m paddleocr/pp-ocrv6 --json-mode
 
 \b
 NOTES:
@@ -621,6 +622,14 @@ def chat(
         "--method-params",
         help='JSON object of method arguments, e.g. \'{"lang": "en"}\'.',
     ),
+    json_mode: bool = typer.Option(
+        False,
+        "--json-mode",
+        help=(
+            "Enable JSON mode (response_format json_object). Mutually exclusive "
+            "with --response-format."
+        ),
+    ),
     response_format: Optional[str] = typer.Option(
         None,
         "--response-format",
@@ -628,7 +637,8 @@ def chat(
             "Ask the MODEL to constrain its output: 'text', 'json_object' (JSON "
             'mode), or a JSON object like \'{"type":"json_schema",...}\'. '
             "Sent to the gateway as `response_format`; not yet honored server-side. "
-            "(Distinct from --json, which formats the CLI's own output.)"
+            "(Distinct from --json, which formats the CLI's own output. Use "
+            "--json-mode as a shorthand for json_object.)"
         ),
     ),
     extra: Optional[List[str]] = typer.Option(
@@ -676,7 +686,16 @@ def chat(
             raise typer.Exit(1)
         extra_body["method_params"] = parsed_params
 
-    if response_format:
+    if json_mode and response_format:
+        console.print(
+            "[red]Error:[/] --json-mode and --response-format are mutually "
+            "exclusive. Use one or the other."
+        )
+        raise typer.Exit(1)
+
+    if json_mode:
+        create_kwargs["response_format"] = {"type": "json_object"}
+    elif response_format:
         # A standard OpenAI create() field, so it rides as a top-level kwarg.
         create_kwargs["response_format"] = _parse_response_format(response_format)
 
