@@ -79,11 +79,11 @@ Environment variables:
 ## Optional Dependencies
 
 Install based on needed functionality:
-- `pip install vlmrun[cli]` - CLI with Typer/Rich
-- `pip install vlmrun[video]` - Video processing (numpy)
+- `pip install vlmrun[video]` - Video processing (numpy, opencv-python)
 - `pip install vlmrun[doc]` - PDF processing (pypdfium2)
-- `pip install vlmrun[openai]` - OpenAI SDK for chat completions API
-- `pip install vlmrun[all]` - All optional dependencies
+- `pip install vlmrun[all]` - All optional dependencies (video, doc, pandas, IPython)
+
+The CLI, OpenAI SDK, and gateway chat commands are included in the base `pip install vlmrun` install.
 
 ## Testing
 

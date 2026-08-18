@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Any, Literal, Optional, Type, List, Tuple
+from typing import Dict, Any, Literal, Optional, Type, List, Tuple, TYPE_CHECKING
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic.dataclasses import dataclass
 from datetime import datetime
 from vlmrun.hub.utils import jsonschema_to_model
+from vlmrun.common.dependencies import require_pandas
 import math
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 JobStatus = Literal["enqueued", "pending", "running", "completed", "failed", "paused"]
 
@@ -787,7 +790,9 @@ class MarkdownTable(BaseModel):
 
     def __str__(self):
         """Return a string representation of the markdown table."""
-        return self.to_dataframe(header="name").to_markdown()
+        if self.content:
+            return self.content
+        return self.render()
 
     @model_validator(mode="after")
     def validate_metadata(self):
@@ -798,8 +803,9 @@ class MarkdownTable(BaseModel):
 
     def to_dataframe(
         self, header: Literal["id", "name", "none"] = "id"
-    ) -> pd.DataFrame:
+    ) -> "pd.DataFrame":
         """Convert the table to a pandas DataFrame."""
+        pd = require_pandas()
         try:
             self.data = replace_nan_recursive_fast(self.data)
 
@@ -824,7 +830,13 @@ class MarkdownTable(BaseModel):
 
     def render(self) -> str:
         """Render the table as a markdown table."""
-        return self.to_dataframe(header="name").to_markdown()
+        if self.content:
+            return self.content
+        df = self.to_dataframe(header="name")
+        try:
+            return df.to_markdown()
+        except ImportError:
+            return df.to_string(index=False)
 
 
 class MarkdownFigure(BaseModel):

@@ -1,15 +1,17 @@
 from typing import Union, List, Dict, Any, Optional, Tuple, Literal
 from PIL import Image
-import pandas as pd
-from IPython.display import HTML
 import json
 from pydantic import BaseModel
-import cv2
-import numpy as np
 import io
 import base64
 from pathlib import Path
 from vlmrun.common.image import _open_image_with_exif
+from vlmrun.common.dependencies import (
+    require_cv2,
+    require_ipython_html,
+    require_numpy,
+    require_pandas,
+)
 
 DEFAULT_BOX_COLOR = (255, 0, 0)
 DEFAULT_BOX_THICKNESS = 2
@@ -238,6 +240,8 @@ def render_bbox_image(
     image = ensure_image(image)
     response_dict = to_dict(response)
     boxes = get_boxes_from_response(response_dict)
+    cv2 = require_cv2()
+    np = require_numpy()
 
     # Convert PIL to cv2 image
     img = np.array(image)
@@ -413,7 +417,7 @@ def show_results(
     table_style: Optional[str] = None,
     show_content: bool = False,
     show_confidence: bool = False,
-) -> HTML:
+):
     """Display VLM Run results with images in a tabular format.
 
     This function renders VLM Run results alongside their corresponding images in a
@@ -624,6 +628,8 @@ def show_results(
 
             data.append(row)
 
+    pd = require_pandas()
+    HTML = require_ipython_html()
     df = pd.DataFrame(data)
 
     pd.set_option("display.max_colwidth", None)

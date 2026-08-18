@@ -31,26 +31,21 @@ license = {text = "Apache-2.0"}
 dynamic = ["version", "dependencies"]
 
 [project.optional-dependencies]
-test = ["pytest", "openai", "pre-commit"]
+test = ["pytest", "pre-commit"]
 build = ["twine", "build"]
-openai = ["openai>=1.0.0"]
 video = [
     "numpy>=1.24.0",
+    "opencv-python>=4.8.0",
 ]
 doc = [
-    "pypdfium2>=4.30.0"
-]
-cli = [
-    "typer>=0.9.0",
-    "rich>=13.0.0",
-    "openai>=1.0.0",
+    "pypdfium2>=4.30.0",
 ]
 all = [
     "numpy>=1.24.0",
+    "opencv-python>=4.8.0",
     "pypdfium2>=4.30.0",
-    "openai>=1.0.0",
-    "typer>=0.9.0",
-    "rich>=13.0.0",
+    "pandas",
+    "ipython",
 ]
 
 [tool.setuptools.dynamic]

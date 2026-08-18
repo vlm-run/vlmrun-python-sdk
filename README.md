@@ -30,11 +30,6 @@ pip install vlmrun
 
 The package provides optional features that can be installed based on your needs:
 
-- Chat with Orion via the CLI (see `vlmrun chat`)
-  ```bash
-  pip install "vlmrun[cli]"
-  ```
-
 - Video processing features (numpy, opencv-python):
   ```bash
   pip install "vlmrun[video]"
@@ -45,15 +40,17 @@ The package provides optional features that can be installed based on your needs
   pip install "vlmrun[doc]"
   ```
 
-- OpenAI SDK integration (for chat completions API):
+- Visualization and notebook helpers (pandas, IPython):
   ```bash
-  pip install "vlmrun[openai]"
+  pip install "vlmrun[all]"
   ```
 
 - All optional features:
   ```bash
   pip install "vlmrun[all]"
   ```
+
+The CLI and OpenAI-compatible gateway (`vlmrun gw chat`, `vlmrun chat`) work out of the box with `pip install vlmrun`.
 
 ### Basic Usage
 
@@ -119,8 +116,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
-**Installation**: Install with OpenAI support using `pip install vlmrun[openai]`
 
 ### CLI Chat with Skills
 

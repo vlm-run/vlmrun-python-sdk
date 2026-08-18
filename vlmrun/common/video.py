@@ -1,14 +1,19 @@
 """Video utilities for reading and writing video files using OpenCV."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Iterator, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Union
 
-import cv2
-import numpy as np
+from vlmrun.common.dependencies import require_cv2, require_numpy
 
+if TYPE_CHECKING:
+    import numpy as np
 
-T = np.ndarray
+    Frame = np.ndarray
+else:
+    Frame = Any
 
 
 class BaseVideoReader(ABC):
@@ -41,20 +46,20 @@ class BaseVideoReader(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def __iter__(self) -> Iterator[T]:
+    def __iter__(self) -> Iterator[Frame]:
         """Return an iterator over the video frames.
 
         Returns:
-            Iterator[T]: An iterator over the video frames.
+            Iterator[Frame]: An iterator over the video frames.
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def __next__(self) -> T:
+    def __next__(self) -> Frame:
         """Return the next frame in the video.
 
         Returns:
-            T: The next frame in the video.
+            Frame: The next frame in the video.
 
         Raises:
             StopIteration: If there are no more frames in the video.
@@ -62,14 +67,14 @@ class BaseVideoReader(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def __getitem__(self, idx: Union[int, List[int]]) -> Union[T, List[T]]:
+    def __getitem__(self, idx: Union[int, List[int]]) -> Union[Frame, List[Frame]]:
         """Return the frame(s) at the given index/indices.
 
         Args:
             idx (Union[int, List[int]]): The index or list of indices to retrieve.
 
         Returns:
-            Union[T, List[T]]: The frame or list of frames at the given index/indices.
+            Union[Frame, List[Frame]]: The frame or list of frames at the given index/indices.
 
         Raises:
             IndexError: If any index is out of bounds.
@@ -145,6 +150,8 @@ class VideoReader(BaseVideoReader):
         super().__init__(filename)
         if not self.filename.exists():
             raise FileNotFoundError(f"{self.filename} does not exist")
+        self._cv2 = require_cv2()
+        require_numpy()
         self.transform = transform
         self._video = self.open()
 
@@ -156,21 +163,21 @@ class VideoReader(BaseVideoReader):
         """
         if self._video is None:
             return 0
-        return int(self._video.get(cv2.CAP_PROP_FRAME_COUNT))
+        return int(self._video.get(self._cv2.CAP_PROP_FRAME_COUNT))
 
-    def __iter__(self) -> Iterator[T]:
+    def __iter__(self) -> Iterator[Frame]:
         """Return an iterator over the video frames.
 
         Returns:
-            Iterator[T]: An iterator over the video frames.
+            Iterator[Frame]: An iterator over the video frames.
         """
         return self
 
-    def __next__(self) -> T:
+    def __next__(self) -> Frame:
         """Return the next frame in the video.
 
         Returns:
-            T: The next frame in the video.
+            Frame: The next frame in the video.
 
         Raises:
             StopIteration: If there are no more frames in the video.
@@ -181,19 +188,19 @@ class VideoReader(BaseVideoReader):
         ret, frame = self._video.read()
         if not ret:
             raise StopIteration()
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
         if self.transform:
             frame = self.transform(frame)
         return frame
 
-    def __getitem__(self, idx: Union[int, List[int]]) -> Union[T, List[T]]:
+    def __getitem__(self, idx: Union[int, List[int]]) -> Union[Frame, List[Frame]]:
         """Return the frame(s) at the given index/indices.
 
         Args:
             idx (Union[int, List[int]]): The index or list of indices to retrieve.
 
         Returns:
-            Union[T, List[T]]: The frame or list of frames at the given index/indices.
+            Union[Frame, List[Frame]]: The frame or list of frames at the given index/indices.
 
         Raises:
             IndexError: If any index is out of bounds.
@@ -210,16 +217,16 @@ class VideoReader(BaseVideoReader):
         else:
             raise TypeError(f"Unsupported index type: {type(idx)}")
 
-    def open(self) -> cv2.VideoCapture:
+    def open(self):
         """Open the video file.
 
         Returns:
-            cv2.VideoCapture: The opened video capture object.
+            The opened video capture object.
 
         Raises:
             RuntimeError: If the video file cannot be opened.
         """
-        video = cv2.VideoCapture(str(self.filename))
+        video = self._cv2.VideoCapture(str(self.filename))
         if not video.isOpened():
             raise RuntimeError(f"Failed to open video file: {self.filename}")
         return video
@@ -239,7 +246,7 @@ class VideoReader(BaseVideoReader):
         if self._video is None:
             return None
         try:
-            return int(self._video.get(cv2.CAP_PROP_POS_FRAMES))
+            return int(self._video.get(self._cv2.CAP_PROP_POS_FRAMES))
         except Exception:
             return None
 
@@ -257,7 +264,7 @@ class VideoReader(BaseVideoReader):
             raise RuntimeError("Video is not opened")
         if idx < 0 or idx >= len(self):
             raise IndexError(f"Frame index out of bounds: {idx}")
-        self._video.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        self._video.set(self._cv2.CAP_PROP_POS_FRAMES, idx)
 
 
 class VideoWriter:
@@ -276,19 +283,21 @@ class VideoWriter:
         self.filename = Path(str(filename))
         if self.filename.exists():
             raise FileExistsError(f"Output file already exists: {self.filename}")
+        self._cv2 = require_cv2()
+        require_numpy()
         self.fps = fps
         self.writer = None
 
-    def write(self, frame: np.ndarray) -> None:
+    def write(self, frame: Frame) -> None:
         """Write a frame to the video.
 
         Args:
-            frame (np.ndarray): The frame to write. Should be an RGB image.
+            frame: The frame to write. Should be an RGB image.
         """
         if self.writer is None:
             height, width = frame.shape[:2]
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            self.writer = cv2.VideoWriter(
+            fourcc = self._cv2.VideoWriter_fourcc(*"mp4v")
+            self.writer = self._cv2.VideoWriter(
                 str(self.filename), fourcc, self.fps, (width, height), frame.ndim == 3
             )
 

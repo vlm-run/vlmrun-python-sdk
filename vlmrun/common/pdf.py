@@ -5,6 +5,7 @@ from typing import Iterable, Literal, Tuple, Optional, Union
 from PIL import Image
 
 from vlmrun.common.logging import logger
+from vlmrun.common.dependencies import require_pypdfium2
 
 
 @dataclass
@@ -32,7 +33,7 @@ def pdf_images(
     )
 
     if backend == "pypdfium2":
-        import pypdfium2 as pdfium
+        pdfium = require_pypdfium2()
 
         logger.debug(f"Opening PDF document [path={path}]")
         doc = pdfium.PdfDocument(str(path))

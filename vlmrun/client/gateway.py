@@ -17,21 +17,11 @@ from functools import cached_property
 from typing import Any, List, Optional
 
 from vlmrun.constants import DEFAULT_GATEWAY_URL
-from vlmrun.client.exceptions import DependencyError
+from vlmrun.common.dependencies import require_openai
 from vlmrun.types.abstract import VLMRunProtocol
 
-
-def _require_openai():
-    """Import the OpenAI SDK or raise a helpful :class:`DependencyError`."""
-    try:
-        import openai  # noqa: F401
-    except ImportError as e:
-        raise DependencyError(
-            message="OpenAI SDK is not installed",
-            suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
-            error_type="missing_dependency",
-        ) from e
-    return openai
+# Re-export for CLI/tests that patch gateway._require_openai.
+_require_openai = require_openai
 
 
 class Gateway:
@@ -217,13 +207,13 @@ class Gateway:
         Returns:
             True if the gateway is reachable and authenticated, else False.
         """
-        # httpx is a hard dependency of the openai SDK, so it is always
-        # available whenever the gateway is usable.
-        import httpx
+        import requests
 
         headers = {"Authorization": f"Bearer {self._client.api_key}"}
         try:
-            resp = httpx.get(f"{self.base_url}/health", headers=headers, timeout=30.0)
+            resp = requests.get(
+                f"{self.base_url}/health", headers=headers, timeout=30.0
+            )
         except Exception:
             # No dedicated health route reachable — fall back to a real call.
             try:
