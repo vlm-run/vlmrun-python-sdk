@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 import typer
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -21,7 +22,6 @@ from rich.tree import Tree
 
 from vlmrun.client import VLMRun
 from vlmrun.client.types import AgentSkill, AgentToolset, FileResponse
-from vlmrun.common.dependencies import require_openai
 from vlmrun.constants import (
     DEFAULT_BASE_URL,
     SUPPORTED_INPUT_FILETYPES,
@@ -40,12 +40,6 @@ class handle_api_errors:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is None:
             return False
-
-        openai = require_openai()
-        AuthenticationError = openai.AuthenticationError
-        RateLimitError = openai.RateLimitError
-        APIConnectionError = openai.APIConnectionError
-        APIError = openai.APIError
 
         if issubclass(exc_type, AuthenticationError):
             console.print(

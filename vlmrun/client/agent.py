@@ -19,7 +19,7 @@ from vlmrun.client.types import (
     AgentCreationResponse,
     AgentToolset,
 )
-from vlmrun.common.dependencies import require_openai
+from openai import AsyncOpenAI, OpenAI
 
 # VLM Run-specific kwargs accepted by the agent API that are not part of the
 # standard OpenAI chat completions signature. They are forwarded to the server
@@ -307,9 +307,8 @@ class Agent:
         Returns:
             OpenAI Completions object configured for VLMRun agent endpoint
         """
-        openai = require_openai()
         base_url = f"{self._client.base_url}/openai"
-        openai_client = openai.OpenAI(
+        openai_client = OpenAI(
             api_key=self._client.api_key,
             base_url=base_url,
             timeout=self._client.timeout if self._client.timeout is None else max(self._client.timeout, 600),
@@ -353,9 +352,8 @@ class Agent:
         Returns:
             OpenAI AsyncCompletions object configured for VLMRun agent endpoint
         """
-        openai = require_openai()
         base_url = f"{self._client.base_url}/openai"
-        async_openai_client = openai.AsyncOpenAI(
+        async_openai_client = AsyncOpenAI(
             api_key=self._client.api_key,
             base_url=base_url,
             timeout=self._client.timeout if self._client.timeout is None else max(self._client.timeout, 600),
