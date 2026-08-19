@@ -19,7 +19,7 @@ from vlmrun.client.types import (
     AgentCreationResponse,
     AgentToolset,
 )
-from vlmrun.client.exceptions import DependencyError
+from openai import AsyncOpenAI, OpenAI
 
 # VLM Run-specific kwargs accepted by the agent API that are not part of the
 # standard OpenAI chat completions signature. They are forwarded to the server
@@ -307,15 +307,6 @@ class Agent:
         Returns:
             OpenAI Completions object configured for VLMRun agent endpoint
         """
-        try:
-            from openai import OpenAI
-        except ImportError:
-            raise DependencyError(
-                message="OpenAI SDK is not installed",
-                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
-                error_type="missing_dependency",
-            )
-
         base_url = f"{self._client.base_url}/openai"
         openai_client = OpenAI(
             api_key=self._client.api_key,
@@ -361,15 +352,6 @@ class Agent:
         Returns:
             OpenAI AsyncCompletions object configured for VLMRun agent endpoint
         """
-        try:
-            from openai import AsyncOpenAI
-        except ImportError:
-            raise DependencyError(
-                message="OpenAI SDK is not installed",
-                suggestion="Install it with `pip install vlmrun[openai]` or `pip install openai`",
-                error_type="missing_dependency",
-            )
-
         base_url = f"{self._client.base_url}/openai"
         async_openai_client = AsyncOpenAI(
             api_key=self._client.api_key,

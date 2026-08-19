@@ -1,46 +1,77 @@
-"""Tests for verifying correct installation of optional dependencies."""
+"""Tests for verifying optional dependency handling."""
+
+from __future__ import annotations
+
+import builtins
+import sys
 
 import pytest
 
-
-@pytest.mark.skip(reason="Temporarily skipped as requested")
-def test_base_dependencies():
-    """Verify base installation has no optional dependencies."""
-    with pytest.raises(ImportError):
-        import cv2  # noqa: F401
-
-    with pytest.raises(ImportError):
-        import pypdfium2  # noqa: F401
+from vlmrun.client.exceptions import DependencyError
+from vlmrun.common import dependencies
 
 
-@pytest.mark.skip(reason="Temporarily skipped as requested")
-def test_video_dependencies():
-    """Verify video dependencies are available."""
-    import cv2  # noqa: F401
-    import numpy as np  # noqa: F401
+def _block_import(monkeypatch, module_name: str) -> None:
+    for key in list(sys.modules):
+        if key == module_name or key.startswith(f"{module_name}."):
+            monkeypatch.delitem(sys.modules, key, raising=False)
 
-    # Verify we can import and get versions
-    assert cv2.__version__, "cv2 version should be available"
-    assert np.__version__, "numpy version should be available"
+    real_import = builtins.__import__
+
+    def mock_import(name, globals=None, locals=None, fromlist=(), level=0):
+        blocked = (
+            name == module_name
+            or name.startswith(f"{module_name}.")
+            or (fromlist and module_name in fromlist)
+        )
+        if blocked:
+            raise ImportError(f"No module named '{module_name}'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", mock_import)
 
 
-@pytest.mark.skip(reason="Temporarily skipped as requested")
-def test_doc_dependencies():
-    """Verify doc dependencies are available."""
-    import pypdfium2  # noqa: F401
+def test_require_openai_suggestion(monkeypatch):
+    """OpenAI is a core dependency; errors should point at base install."""
+    _block_import(monkeypatch, "openai")
+    with pytest.raises(DependencyError) as exc_info:
+        dependencies.require_openai()
+    assert "pip install vlmrun" in exc_info.value.suggestion
+    assert "[openai]" not in exc_info.value.suggestion
 
-    # Verify we can import and get version
-    assert pypdfium2.__version__, "pypdfium2 version should be available"
+
+@pytest.mark.parametrize(
+    ("require_fn", "module_name", "extra"),
+    [
+        (dependencies.require_pandas, "pandas", "all"),
+        (dependencies.require_numpy, "numpy", "video"),
+        (dependencies.require_cv2, "cv2", "video"),
+        (dependencies.require_ipython_html, "IPython", "all"),
+        (dependencies.require_pypdfium2, "pypdfium2", "doc"),
+    ],
+)
+def test_optional_dependency_errors(require_fn, module_name, extra, monkeypatch):
+    """Missing optional deps should raise DependencyError with install hints."""
+    _block_import(monkeypatch, module_name)
+    with pytest.raises(DependencyError) as exc_info:
+        require_fn()
+    assert f"vlmrun[{extra}]" in exc_info.value.suggestion
 
 
-@pytest.mark.skip(reason="Temporarily skipped as requested")
-def test_all_dependencies():
-    """Verify all dependencies are available."""
-    import cv2  # noqa: F401
-    import numpy as np  # noqa: F401
-    import pypdfium2  # noqa: F401
+def test_markdown_table_to_dataframe_requires_pandas(monkeypatch):
+    """MarkdownTable.to_dataframe should lazy-load pandas."""
+    def _raise_pandas():
+        raise DependencyError(
+            message="pandas is not installed",
+            suggestion="Install it with `pip install vlmrun[all]`",
+        )
 
-    # Verify we can import and get versions
-    assert cv2.__version__, "cv2 version should be available"
-    assert np.__version__, "numpy version should be available"
-    assert pypdfium2.__version__, "pypdfium2 version should be available"
+    monkeypatch.setattr("vlmrun.client.types.require_pandas", _raise_pandas)
+    from vlmrun.client.types import MarkdownTable, TableHeader
+
+    table = MarkdownTable(
+        headers=[TableHeader(id="col1", column=0, name="Column 1")],
+        data=[{"col1": "value"}],
+    )
+    with pytest.raises(DependencyError):
+        table.to_dataframe()

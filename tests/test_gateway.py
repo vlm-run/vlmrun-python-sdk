@@ -308,7 +308,7 @@ class TestGatewayResource:
             status_code = 200
             is_success = True
 
-        monkeypatch.setattr("httpx.get", lambda *a, **k: _Resp())
+        monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
         assert g.health() is True
 
     def test_health_falls_back_to_models_on_404(self, monkeypatch):
@@ -318,7 +318,7 @@ class TestGatewayResource:
             status_code = 404
             is_success = False
 
-        monkeypatch.setattr("httpx.get", lambda *a, **k: _Resp())
+        monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
 
         class _Models:
             def list(self):
@@ -336,7 +336,7 @@ class TestGatewayResource:
         def _boom(*a, **k):
             raise RuntimeError("no network")
 
-        monkeypatch.setattr("httpx.get", _boom)
+        monkeypatch.setattr("requests.get", _boom)
 
         class _Models:
             def list(self):

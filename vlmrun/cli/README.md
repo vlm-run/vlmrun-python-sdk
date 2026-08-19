@@ -4,15 +4,11 @@ Visual AI from your terminal. Chat with VLM Run's Orion visual AI agent to proce
 
 ## Installation
 
-The CLI is included as an extra in the vlmrun package:
-
 ```bash
-# Install vlmrun with CLI support
-pip install "vlmrun[cli]"
-
-# Or with uv
-uv pip install "vlmrun[cli]"
+pip install vlmrun
 ```
+
+The CLI and OpenAI-compatible gateway work out of the box with the base install.
 
 ## Quick Start
 
