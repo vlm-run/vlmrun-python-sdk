@@ -566,6 +566,12 @@ class TestHelpers:
         assert gw._format_cost(None) is None
         assert gw._format_cost("nan-ish") is None
 
+    def test_format_toks_per_sec(self):
+        assert gw._format_toks_per_sec(34156, 14.51) == "2353 toks/s"
+        assert gw._format_toks_per_sec(30, 1.0) == "30 toks/s"
+        assert gw._format_toks_per_sec(0, 1.0) is None
+        assert gw._format_toks_per_sec(10, 0) is None
+
     def test_content_error_detects_error_payload(self):
         assert (
             gw._content_error('{"error": "Unknown method \'zzz\'"}')
@@ -1204,6 +1210,7 @@ class TestGatewayTranscribe:
         )
         assert result.exit_code == 0, result.stdout
         assert "$0.001508" in result.stdout
+        assert " toks/s" in result.stdout
 
     def test_chat_json_carries_cost(self, runner, patched_cli, tmp_path):
         patched_cli["cost"] = 0.0042
