@@ -923,11 +923,11 @@ def _format_cost(cost: Any) -> Optional[str]:
     return formatted if formatted != "$0" else "<$0.000001"
 
 
-def _format_toks_per_sec(total_tokens: int, latency_s: float) -> Optional[str]:
-    """Format throughput as integer tokens/sec, or None when not computable."""
-    if not total_tokens or latency_s <= 0:
+def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[str]:
+    """Format completion throughput as integer tokens/sec, or None when not computable."""
+    if not completion_tokens or latency_s <= 0:
         return None
-    return f"{int(total_tokens / latency_s)} toks/s"
+    return f"{int(completion_tokens / latency_s)} toks/s"
 
 
 def _print_output(content: str, model: str, latency_s: float, usage: Any) -> None:
@@ -939,7 +939,7 @@ def _print_output(content: str, model: str, latency_s: float, usage: Any) -> Non
             prompt_toks = getattr(usage, "prompt_tokens", 0)
             completion_toks = getattr(usage, "completion_tokens", 0)
             stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens")
-            toks_per_sec = _format_toks_per_sec(total, latency_s)
+            toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
             if toks_per_sec:
                 stats.append(toks_per_sec)
     stats.append(f"{latency_s:.2f}s")

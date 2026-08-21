@@ -567,7 +567,7 @@ class TestHelpers:
         assert gw._format_cost("nan-ish") is None
 
     def test_format_toks_per_sec(self):
-        assert gw._format_toks_per_sec(34156, 14.51) == "2353 toks/s"
+        assert gw._format_toks_per_sec(16076, 14.51) == "1107 toks/s"
         assert gw._format_toks_per_sec(30, 1.0) == "30 toks/s"
         assert gw._format_toks_per_sec(0, 1.0) is None
         assert gw._format_toks_per_sec(10, 0) is None
