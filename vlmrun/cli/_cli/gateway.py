@@ -725,17 +725,9 @@ def chat(
     start_time = time.time()
     status_msg = f"Processing ([bold]{model}[/bold])..."
 
-    # The gateway only streams document (PDF) requests: it emits one SSE chunk
-    # per page. Image- and text-only requests ignore `stream` and return a
-    # single plain chat.completion body still labelled text/event-stream, so an
-    # SSE reader finds no events and yields empty content. Stream only when a
-    # document is actually present.
-    has_document = any(
-        part.get("type") == "document_url"
-        for message in messages
-        for part in message["content"]
-    )
-    if not has_document or no_stream:
+    # Stream by default for all input modalities (documents, images, videos,
+    # text). Use --no-stream / -ns to wait for the full response.
+    if no_stream:
         if output_json:
             with handle_api_errors():
                 response = client.gateway.completions.create(
