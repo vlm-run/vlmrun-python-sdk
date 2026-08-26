@@ -956,22 +956,28 @@ class TestGatewayTranscribe:
         assert content[1]["type"] == "image_url"
         assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
 
-    def test_chat_image_only_does_not_stream(self, runner, patched_cli, tmp_path):
-        """Images must not stream: the gateway returns a non-SSE body that an
-        SSE reader drains to empty."""
+    def test_chat_image_streams_by_default(self, runner, patched_cli, tmp_path):
         img = tmp_path / "img.png"
         img.write_bytes(PNG_BYTES)
         result = runner.invoke(app, ["gw", "chat", str(img), "-m", "pp-ocrv6"])
         assert result.exit_code == 0, result.stdout
-        assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is False
+        assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is True
         assert "Hello world" in result.stdout
 
-    def test_chat_text_only_does_not_stream(self, runner, patched_cli):
+    def test_chat_video_streams_by_default(self, runner, patched_cli, tmp_path):
+        video = tmp_path / "clip.mp4"
+        video.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 8)
+        result = runner.invoke(app, ["gw", "chat", str(video), "-m", "pp-ocrv6"])
+        assert result.exit_code == 0, result.stdout
+        assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is True
+        assert "Hello world" in result.stdout
+
+    def test_chat_text_only_streams_by_default(self, runner, patched_cli):
         result = runner.invoke(
             app, ["gw", "chat", "-m", "qwen/qwen3.5-0.8b", "-p", "hi"]
         )
         assert result.exit_code == 0, result.stdout
-        assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is False
+        assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is True
 
     def test_chat_document_streams_by_default(self, runner, patched_cli, tmp_path):
         pdf = tmp_path / "doc.pdf"
