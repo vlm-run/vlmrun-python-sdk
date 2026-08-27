@@ -616,19 +616,6 @@ class TestHelpers:
     def test_format_inputs_empty(self):
         assert gw._format_inputs({}) == "-"
 
-    def test_format_limits_single_image(self):
-        out = gw._format_limits({"capabilities": {"max_images": 1}})
-        assert out == "1 img"
-
-    def test_format_limits_multiple_images_and_video(self):
-        out = gw._format_limits(
-            {"capabilities": {"max_images": 64, "max_videos": 1}}
-        )
-        assert out == "64 imgs, 1 vid"
-
-    def test_format_limits_empty(self):
-        assert gw._format_limits({}) == "-"
-
     def test_parse_extra_body_help_splits_json_and_prose(self):
         examples, notes = gw._parse_extra_body_help(
             '{"method":"ocr"} | {"method":"ocr","method_params":{"lang":"en"}}'
@@ -703,7 +690,6 @@ class TestGatewayCLI:
         assert "paddleocr/pp-ocrv6" in result.stdout
         assert "image_url" in result.stdout
         assert "document_url" in result.stdout
-        assert "1 img" in result.stdout
         # Methods are listed, with the default marked.
         assert "detect" in result.stdout
         assert "ocr*" in result.stdout

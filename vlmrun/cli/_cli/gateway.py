@@ -364,24 +364,6 @@ def _format_inputs(model: Dict[str, Any]) -> str:
     return ", ".join(types)
 
 
-def _format_limits(model: Dict[str, Any]) -> str:
-    """Render per-request image/video caps from model capabilities."""
-    caps = model.get("capabilities") or {}
-    parts: List[str] = []
-
-    max_images = caps.get("max_images")
-    if max_images is not None:
-        label = "img" if max_images == 1 else "imgs"
-        parts.append(f"{max_images} {label}")
-
-    max_videos = caps.get("max_videos")
-    if max_videos:
-        label = "vid" if max_videos == 1 else "vids"
-        parts.append(f"{max_videos} {label}")
-
-    return ", ".join(parts) if parts else "-"
-
-
 def _model_dicts(client: VLMRun) -> List[Dict[str, Any]]:
     """Fetch gateway models and normalize them to plain dicts."""
     with handle_api_errors():
@@ -585,7 +567,6 @@ def run_models(
     table.add_column("MODEL", style="bold cyan", no_wrap=True)
     table.add_column("TASK", style="dim", no_wrap=True)
     table.add_column("INPUTS", style="dim")
-    table.add_column("LIMITS", style="dim", no_wrap=True)
     table.add_column("METHODS", overflow="fold")
 
     for row in rows:
@@ -595,7 +576,6 @@ def run_models(
             str(row.get("id", "-")),
             str(row.get("task", "-")),
             _format_inputs(row),
-            _format_limits(row),
             _format_methods(row),
         )
 
