@@ -364,6 +364,48 @@ def _format_inputs(model: Dict[str, Any]) -> str:
     return ", ".join(types)
 
 
+_TASK_GROUP_ORDER = ("chat", "transcribe", "embed")
+
+
+def _grouped_model_rows(
+    rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any] | None]:
+    """Order models by task group (chat, transcribe, embed), then id.
+
+    Returns model dicts with ``None`` markers between non-empty groups for
+    table separators.
+    """
+    buckets: dict[str, List[Dict[str, Any]]] = {
+        task: [] for task in _TASK_GROUP_ORDER
+    }
+    other: List[Dict[str, Any]] = []
+
+    for row in rows:
+        task = str(row.get("task") or "chat")
+        if task in buckets:
+            buckets[task].append(row)
+        else:
+            other.append(row)
+
+    ordered: List[Dict[str, Any] | None] = []
+    first_group = True
+    for task in _TASK_GROUP_ORDER:
+        group = sorted(buckets[task], key=lambda r: str(r.get("id", "")).lower())
+        if not group:
+            continue
+        if not first_group:
+            ordered.append(None)
+        ordered.extend(group)
+        first_group = False
+
+    if other:
+        if ordered:
+            ordered.append(None)
+        ordered.extend(sorted(other, key=lambda r: str(r.get("id", "")).lower()))
+
+    return ordered
+
+
 def _model_dicts(client: VLMRun) -> List[Dict[str, Any]]:
     """Fetch gateway models and normalize them to plain dicts."""
     with handle_api_errors():
@@ -569,7 +611,10 @@ def run_models(
     table.add_column("INPUTS", style="dim")
     table.add_column("METHODS", overflow="fold")
 
-    for row in rows:
+    for row in _grouped_model_rows(rows):
+        if row is None:
+            table.add_row("", "", "", "")
+            continue
         # Aliases are omitted here to keep method names from truncating at 80
         # columns; the per-model detail view lists them.
         table.add_row(
