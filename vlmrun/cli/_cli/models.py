@@ -1,30 +1,80 @@
-"""Gateway model catalog command."""
+"""Models API commands."""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, List
 
 import typer
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
-from vlmrun.cli._cli.gateway import run_models
+if TYPE_CHECKING:
+    from vlmrun.client import VLMRun
+    from vlmrun.client.types import ModelInfo
 
-MODELS_HELP = """List gateway models, or detail one model.
+app = typer.Typer(
+    help="List supported models and domains.",
+    add_completion=False,
+    no_args_is_help=True,
+)
 
-\b
-EXAMPLES:
-  vlmrun models                        List every model with its methods.
-  vlmrun models paddleocr/pp-ocrv6     Methods, params and examples for one model.
-  vlmrun models --json                 Raw model catalog.
-"""
+console = Console()
 
 
-def models(
+@app.command()
+def list(
     ctx: typer.Context,
-    model: Optional[str] = typer.Argument(
-        None,
-        help="Model id or alias. Shows that model's methods, params and examples.",
+    domain: str = typer.Option(
+        None, help="Filter domains (e.g. 'document' or 'document.invoice')"
     ),
-    output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
 ) -> None:
-    """List gateway models, or detail one model."""
-    run_models(ctx, model, output_json, command="vlmrun models")
+    """List available models."""
+    client: VLMRun = ctx.obj
+    models: List[ModelInfo] = client.models.list()
+
+    if domain:
+        models = [m for m in models if domain in m.domain]
+
+    table = Table(
+        show_header=True,
+        header_style="bold white",
+        box=box.SIMPLE_HEAVY,
+        padding=(0, 1),
+        expand=True,
+    )
+
+    table.add_column("CATEGORY")
+    table.add_column("MODEL", style="bold cyan")
+    table.add_column("DOMAIN", style="dim")
+
+    domain_groups = {}
+    for model in models:
+        category = model.domain.split(".")[0]
+        if category not in domain_groups:
+            domain_groups[category] = []
+        domain_groups[category].append(model)
+
+    for category in sorted(domain_groups.keys()):
+        first_in_category = True
+        for model in sorted(domain_groups[category], key=lambda x: x.domain):
+            if first_in_category:
+                table.add_row(category, model.model, model.domain)
+                first_in_category = False
+            else:
+                table.add_row("", model.model, model.domain)
+        if category != sorted(domain_groups.keys())[-1]:
+            table.add_row("", "", "")
+
+    console.print(
+        Panel(
+            table,
+            title="[bold]Models[/bold]",
+            title_align="left",
+            subtitle=f"[dim]{len(models)} model(s)[/dim]",
+            subtitle_align="right",
+            border_style="blue",
+            padding=(0, 1),
+        )
+    )

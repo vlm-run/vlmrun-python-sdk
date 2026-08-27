@@ -21,7 +21,7 @@ from vlmrun.cli._cli.files import app as files_app
 from vlmrun.cli._cli.gateway import app as gateway_app
 from vlmrun.cli._cli.generate import GENERATE_HELP, generate
 from vlmrun.cli._cli.hub import app as hub_app
-from vlmrun.cli._cli.models import MODELS_HELP, models
+from vlmrun.cli._cli.models import app as models_app
 from vlmrun.cli._cli.predictions import app as predictions_app
 from vlmrun.cli._cli.skills import app as skills_app
 
@@ -131,11 +131,7 @@ app.add_typer(files_app, name="files")
 app.add_typer(hub_app, name="hub")
 app.add_typer(gateway_app, name="gateway")
 app.add_typer(gateway_app, name="gw")
-app.command(
-    "models",
-    help=MODELS_HELP,
-    context_settings={"max_content_width": 120},
-)(models)
+app.add_typer(models_app, name="models")
 app.add_typer(skills_app, name="skills")
 app.add_typer(artifacts_app, name="artifacts")
 app.add_typer(config_app, name="config")

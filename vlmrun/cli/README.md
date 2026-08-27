@@ -208,10 +208,8 @@ vlmrun datasets list
 ### Model Operations
 
 ```bash
-# List gateway models (same catalog as `vlmrun gw models`)
-vlmrun models
-vlmrun models paddleocr/pp-ocrv6
-vlmrun models --json
+# List available models
+vlmrun models list
 
 # Fine-tune a model
 vlmrun fine-tuning create --model base_model --training-file training_file_id
@@ -341,7 +339,7 @@ Here are the main command groups available:
 - `vlmrun fine-tuning` - Model fine-tuning operations
 - `vlmrun generate` - Generate predictions
 - `vlmrun hub` - Access domain schemas and information
-- `vlmrun models` - List gateway models and their capabilities
+- `vlmrun models` - Model operations
 - `vlmrun predictions` - Manage and monitor predictions
 - `vlmrun skills` - Create, list, upload, download, and manage skills
 
