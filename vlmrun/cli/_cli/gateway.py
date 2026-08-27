@@ -542,14 +542,12 @@ def _model_detail_json(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@app.command(help=MODELS_HELP, context_settings={"max_content_width": 120})
-def models(
+def run_models(
     ctx: typer.Context,
-    model: Optional[str] = typer.Argument(
-        None,
-        help="Model id or alias. Shows that model's methods, params and examples.",
-    ),
-    output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
+    model: Optional[str],
+    output_json: bool,
+    *,
+    command: str,
 ) -> None:
     """List gateway models, or detail one model."""
     client: VLMRun = ctx.obj
@@ -565,7 +563,7 @@ def models(
         if not match:
             console.print(
                 f"[red]Error:[/] Model '{model}' not found on the gateway. "
-                "Run `vlmrun gw models` to list available models."
+                f"Run `{command}` to list available models."
             )
             raise typer.Exit(1)
         if output_json:
@@ -606,12 +604,28 @@ def models(
             table,
             title="[bold]Gateway Models[/bold]",
             title_align="left",
-            subtitle=f"[dim]{len(rows)} model(s) · [bold]*[/bold] = default method · `vlmrun gw models <model>` for examples[/dim]",
+            subtitle=(
+                f"[dim]{len(rows)} model(s) · [bold]*[/bold] = default method · "
+                f"`{command} <model>` for examples[/dim]"
+            ),
             subtitle_align="right",
             border_style="blue",
             padding=(0, 1),
         )
     )
+
+
+@app.command(help=MODELS_HELP, context_settings={"max_content_width": 120})
+def models(
+    ctx: typer.Context,
+    model: Optional[str] = typer.Argument(
+        None,
+        help="Model id or alias. Shows that model's methods, params and examples.",
+    ),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
+) -> None:
+    """List gateway models, or detail one model."""
+    run_models(ctx, model, output_json, command="vlmrun gw models")
 
 
 @app.command(help=CHAT_HELP, context_settings={"max_content_width": 120})
