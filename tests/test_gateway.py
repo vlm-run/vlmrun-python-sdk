@@ -191,7 +191,8 @@ class FakeGateway:
                 extra_body_help='{"method":"ocr"} | {"method":"markdown"}'
                 " | document_url PDF (markdown per page)",
                 capabilities={
-                    "supported_input_types": ["text", "image_url", "document_url"]
+                    "supported_input_types": ["text", "image_url", "document_url"],
+                    "max_images": 1,
                 },
             ),
             FakeModel(
@@ -202,7 +203,8 @@ class FakeGateway:
                 extra_body_help='{"method":"ocr","method_params":'
                 '{"lang":"en","score_threshold":0.5}}',
                 capabilities={
-                    "supported_input_types": ["text", "image_url", "document_url"]
+                    "supported_input_types": ["text", "image_url", "document_url"],
+                    "max_images": 1,
                 },
             ),
         ]
@@ -596,11 +598,40 @@ class TestHelpers:
     def test_format_methods_empty(self):
         assert gw._format_methods({}) == "-"
 
-    def test_format_inputs_strips_url_suffix(self):
+    def test_format_inputs_lists_explicit_types(self):
         out = gw._format_inputs(
-            {"capabilities": {"supported_input_types": ["text", "image_url"]}}
+            {
+                "capabilities": {
+                    "supported_input_types": [
+                        "text",
+                        "image_url",
+                        "document_url",
+                        "video_url",
+                    ]
+                }
+            }
         )
-        assert out == "text, image"
+        assert out == "text, image_url, document_url, video_url"
+
+    def test_format_inputs_empty(self):
+        assert gw._format_inputs({}) == "-"
+
+    def test_grouped_model_rows_orders_by_task_then_id(self):
+        rows = [
+            {"id": "z/chat-b", "task": "chat"},
+            {"id": "a/embed", "task": "embed"},
+            {"id": "m/transcribe", "task": "transcribe"},
+            {"id": "a/chat-a", "task": "chat"},
+        ]
+        grouped = gw._grouped_model_rows(rows)
+        assert [r.get("id") if r else None for r in grouped] == [
+            "a/chat-a",
+            "z/chat-b",
+            None,
+            "m/transcribe",
+            None,
+            "a/embed",
+        ]
 
     def test_parse_extra_body_help_splits_json_and_prose(self):
         examples, notes = gw._parse_extra_body_help(
@@ -674,6 +705,8 @@ class TestGatewayCLI:
         assert result.exit_code == 0
         assert "zai-org/glm-ocr" in result.stdout
         assert "paddleocr/pp-ocrv6" in result.stdout
+        assert "image_url" in result.stdout
+        assert "document_url" in result.stdout
         # Methods are listed, with the default marked.
         assert "detect" in result.stdout
         assert "ocr*" in result.stdout

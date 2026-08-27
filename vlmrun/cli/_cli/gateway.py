@@ -356,12 +356,54 @@ def _format_methods(model: Dict[str, Any]) -> str:
 
 
 def _format_inputs(model: Dict[str, Any]) -> str:
-    """Render the input types a model accepts, minus the ``_url`` noise."""
+    """Render the input types a model accepts (e.g. ``text``, ``image_url``)."""
     caps = model.get("capabilities") or {}
     types = caps.get("supported_input_types") or []
     if not types:
         return "-"
-    return ", ".join(t.removesuffix("_url") for t in types)
+    return ", ".join(types)
+
+
+_TASK_GROUP_ORDER = ("chat", "transcribe", "embed")
+
+
+def _grouped_model_rows(
+    rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any] | None]:
+    """Order models by task group (chat, transcribe, embed), then id.
+
+    Returns model dicts with ``None`` markers between non-empty groups for
+    table separators.
+    """
+    buckets: dict[str, List[Dict[str, Any]]] = {
+        task: [] for task in _TASK_GROUP_ORDER
+    }
+    other: List[Dict[str, Any]] = []
+
+    for row in rows:
+        task = str(row.get("task") or "chat")
+        if task in buckets:
+            buckets[task].append(row)
+        else:
+            other.append(row)
+
+    ordered: List[Dict[str, Any] | None] = []
+    first_group = True
+    for task in _TASK_GROUP_ORDER:
+        group = sorted(buckets[task], key=lambda r: str(r.get("id", "")).lower())
+        if not group:
+            continue
+        if not first_group:
+            ordered.append(None)
+        ordered.extend(group)
+        first_group = False
+
+    if other:
+        if ordered:
+            ordered.append(None)
+        ordered.extend(sorted(other, key=lambda r: str(r.get("id", "")).lower()))
+
+    return ordered
 
 
 def _model_dicts(client: VLMRun) -> List[Dict[str, Any]]:
@@ -524,14 +566,12 @@ def _model_detail_json(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@app.command(help=MODELS_HELP, context_settings={"max_content_width": 120})
-def models(
+def run_models(
     ctx: typer.Context,
-    model: Optional[str] = typer.Argument(
-        None,
-        help="Model id or alias. Shows that model's methods, params and examples.",
-    ),
-    output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
+    model: Optional[str],
+    output_json: bool,
+    *,
+    command: str,
 ) -> None:
     """List gateway models, or detail one model."""
     client: VLMRun = ctx.obj
@@ -547,7 +587,7 @@ def models(
         if not match:
             console.print(
                 f"[red]Error:[/] Model '{model}' not found on the gateway. "
-                "Run `vlmrun gw models` to list available models."
+                f"Run `{command}` to list available models."
             )
             raise typer.Exit(1)
         if output_json:
@@ -568,14 +608,19 @@ def models(
     )
     table.add_column("MODEL", style="bold cyan", no_wrap=True)
     table.add_column("TASK", style="dim", no_wrap=True)
-    table.add_column("METHODS")
+    table.add_column("INPUTS", style="dim")
+    table.add_column("METHODS", overflow="fold")
 
-    for row in rows:
+    for row in _grouped_model_rows(rows):
+        if row is None:
+            table.add_row("", "", "", "")
+            continue
         # Aliases are omitted here to keep method names from truncating at 80
         # columns; the per-model detail view lists them.
         table.add_row(
             str(row.get("id", "-")),
             str(row.get("task", "-")),
+            _format_inputs(row),
             _format_methods(row),
         )
 
@@ -584,12 +629,28 @@ def models(
             table,
             title="[bold]Gateway Models[/bold]",
             title_align="left",
-            subtitle=f"[dim]{len(rows)} model(s) · [bold]*[/bold] = default method · `vlmrun gw models <model>` for examples[/dim]",
+            subtitle=(
+                f"[dim]{len(rows)} model(s) · [bold]*[/bold] = default method · "
+                f"`{command} <model>` for examples[/dim]"
+            ),
             subtitle_align="right",
             border_style="blue",
             padding=(0, 1),
         )
     )
+
+
+@app.command(help=MODELS_HELP, context_settings={"max_content_width": 120})
+def models(
+    ctx: typer.Context,
+    model: Optional[str] = typer.Argument(
+        None,
+        help="Model id or alias. Shows that model's methods, params and examples.",
+    ),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
+) -> None:
+    """List gateway models, or detail one model."""
+    run_models(ctx, model, output_json, command="vlmrun gw models")
 
 
 @app.command(help=CHAT_HELP, context_settings={"max_content_width": 120})
