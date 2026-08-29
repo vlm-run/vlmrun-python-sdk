@@ -30,7 +30,6 @@ from urllib.parse import urlparse
 
 import typer
 from rich.console import Console, Group
-from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
@@ -824,38 +823,46 @@ def chat(
             )
         latency_s = time.time() - start_time
     else:
-        # Live incremental display: grow the panel as tokens arrive.
-        with handle_api_errors():
-            with Live(
-                _response_panel("", model, None, None, streaming=True),
-                console=console,
-                refresh_per_second=12,
-                transient=False,
-            ) as live:
-                content, reasoning, usage = _drain_stream(
-                    client.gateway.completions.create(
-                        model=model, messages=messages, stream=True, **create_kwargs
-                    ),
-                    on_update=lambda c, r: live.update(
-                        _response_panel(
-                            c, model, None, None, reasoning=r, streaming=True
-                        )
-                    ),
+        # Live incremental display. A bordered panel can't grow past the
+        # terminal height — Rich would crop it rather than scroll — so stream
+        # tokens straight to the console with soft-wrapping, letting the
+        # terminal scroll to follow, then print the stats footer at the end.
+        console.print(f"[bold]Response[/bold] [dim]({model})[/dim]")
+        # Track how much of the (monotonically growing) content/reasoning has
+        # already been printed, so each update emits only the new tail.
+        seen = {"content": 0, "reasoning": 0, "gap": False}
+
+        def _emit(c: str, r: str) -> None:
+            if len(r) > seen["reasoning"]:
+                console.print(
+                    Text(r[seen["reasoning"] :], style="dim italic"),
+                    end="",
+                    soft_wrap=True,
                 )
-                latency_s = time.time() - start_time
-                if _content_error(content):
-                    # Drop the streamed frame; the error is printed below.
-                    live.update(Text(""))
-                else:
-                    live.update(
-                        _response_panel(
-                            content, model, latency_s, usage, reasoning=reasoning
-                        )
-                    )
+                seen["reasoning"] = len(r)
+            if len(c) > seen["content"]:
+                # Separate reasoning from the answer with a blank line, once.
+                if seen["reasoning"] and not seen["gap"]:
+                    console.line(2)
+                    seen["gap"] = True
+                console.print(Text(c[seen["content"] :]), end="", soft_wrap=True)
+                seen["content"] = len(c)
+
+        with handle_api_errors():
+            content, reasoning, usage = _drain_stream(
+                client.gateway.completions.create(
+                    model=model, messages=messages, stream=True, **create_kwargs
+                ),
+                on_update=_emit,
+            )
+        console.print()  # end the final streamed line
+        latency_s = time.time() - start_time
+
         error = _content_error(content)
         if error:
             console.print(f"[red]Error:[/] {error}")
             raise typer.Exit(1)
+        console.print(_stats_footer(model, latency_s, usage))
         return
 
     error = _content_error(content)
@@ -1035,6 +1042,33 @@ def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
     return "".join(content), "".join(reasoning), usage
 
 
+def _stats_parts(model: str, latency_s: Optional[float], usage: Any) -> List[str]:
+    """The model / token / throughput / latency / cost fragments for a footer."""
+    stats = [model]
+    if usage is not None:
+        total = getattr(usage, "total_tokens", None)
+        if total:
+            prompt_toks = getattr(usage, "prompt_tokens", 0)
+            completion_toks = getattr(usage, "completion_tokens", 0)
+            stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens")
+            if latency_s is not None:
+                toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
+                if toks_per_sec:
+                    stats.append(toks_per_sec)
+    if latency_s is not None:
+        stats.append(f"{latency_s:.2f}s")
+    if usage is not None:
+        cost = _format_cost(getattr(usage, "cost", None))
+        if cost:
+            stats.append(cost)
+    return stats
+
+
+def _stats_footer(model: str, latency_s: Optional[float], usage: Any) -> str:
+    """A dim one-line stats footer, right-padded to sit under streamed text."""
+    return f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage))}[/white][/dim]"
+
+
 def _response_panel(
     content: str,
     model: str,
@@ -1042,15 +1076,13 @@ def _response_panel(
     usage: Any,
     *,
     reasoning: str = "",
-    streaming: bool = False,
 ) -> Panel:
-    """Build the Rich panel for a gateway response.
+    """Build the bordered Rich panel for a buffered gateway response.
 
-    Shared by the buffered path and the live streaming display. While
-    ``streaming`` the subtitle shows a ``streaming…`` hint and the body may be
-    a placeholder; once complete it carries the model / token / throughput /
-    latency / cost stats. Reasoning tokens, when present, render dimmed above
-    the answer.
+    Used by the buffered (`--no-stream`) and final render paths. The live
+    streaming path prints text directly instead — a bordered box cannot grow
+    past the terminal height without Rich cropping it. Reasoning tokens, when
+    present, render dimmed above the answer.
     """
     body_parts: List[Any] = []
     if reasoning:
@@ -1060,35 +1092,10 @@ def _response_panel(
 
     if body_parts:
         body: Any = body_parts[0] if len(body_parts) == 1 else Group(*body_parts)
-    elif streaming:
-        body = "[dim]…[/dim]"
     else:
         body = "[dim](empty response)[/dim]"
 
-    if streaming:
-        subtitle = "[dim]streaming…[/dim]"
-    else:
-        stats = [model]
-        if usage is not None:
-            total = getattr(usage, "total_tokens", None)
-            if total:
-                prompt_toks = getattr(usage, "prompt_tokens", 0)
-                completion_toks = getattr(usage, "completion_tokens", 0)
-                stats.append(
-                    f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens"
-                )
-                if latency_s is not None:
-                    toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
-                    if toks_per_sec:
-                        stats.append(toks_per_sec)
-        if latency_s is not None:
-            stats.append(f"{latency_s:.2f}s")
-        if usage is not None:
-            cost = _format_cost(getattr(usage, "cost", None))
-            if cost:
-                stats.append(cost)
-        subtitle = f"[dim][white]{' · '.join(stats)}[/white][/dim]"
-
+    subtitle = f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage))}[/white][/dim]"
     return Panel(
         body,
         title="[bold]Response[/bold]",
