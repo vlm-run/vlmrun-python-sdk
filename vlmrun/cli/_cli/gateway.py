@@ -29,7 +29,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import typer
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
@@ -787,7 +788,15 @@ def chat(
     status_msg = f"Processing ([bold]{model}[/bold])..."
 
     # Stream by default for all input modalities (documents, images, videos,
-    # text). Use --no-stream / -ns to wait for the full response.
+    # text). The gateway emits SSE for every chat request: real token-by-token
+    # deltas for native vLLM chat models, and simulated deltas (the finished
+    # reply re-chunked) for OCR / adapter models such as `zai-org/glm-ocr`.
+    # Either way an SSE reader gets incremental `delta.content` (plus
+    # `delta.reasoning` for reasoning models), which we render live as it
+    # arrives. `--no-stream` / `-ns` waits for the full response; `--json`
+    # collects the stream but emits one object at the end.
+    reasoning = ""
+
     if no_stream:
         if output_json:
             with handle_api_errors():
@@ -802,44 +811,52 @@ def chat(
                 response = client.gateway.completions.create(
                     model=model, messages=messages, stream=False, **create_kwargs
                 )
-        latency_s = time.time() - start_time
         content = response.choices[0].message.content or ""
         usage = response.usage
-    else:
-        chunks: List[str] = []
-        usage = None
-
-        def _consume(stream) -> None:
-            nonlocal usage
-            for chunk in stream:
-                if (
-                    chunk.choices
-                    and chunk.choices[0].delta
-                    and chunk.choices[0].delta.content
-                ):
-                    chunks.append(chunk.choices[0].delta.content)
-                if getattr(chunk, "usage", None):
-                    usage = chunk.usage
-
-        if output_json:
-            with handle_api_errors():
-                _consume(
-                    client.gateway.completions.create(
-                        model=model, messages=messages, stream=True, **create_kwargs
-                    )
-                )
-        else:
-            with (
-                TimedStatus(status_msg, console=console),
-                handle_api_errors(),
-            ):
-                _consume(
-                    client.gateway.completions.create(
-                        model=model, messages=messages, stream=True, **create_kwargs
-                    )
-                )
-        content = "".join(chunks)
         latency_s = time.time() - start_time
+    elif output_json:
+        # Stream from the gateway but buffer into a single JSON object.
+        with handle_api_errors():
+            content, reasoning, usage = _drain_stream(
+                client.gateway.completions.create(
+                    model=model, messages=messages, stream=True, **create_kwargs
+                )
+            )
+        latency_s = time.time() - start_time
+    else:
+        # Live incremental display: grow the panel as tokens arrive.
+        with handle_api_errors():
+            with Live(
+                _response_panel("", model, None, None, streaming=True),
+                console=console,
+                refresh_per_second=12,
+                transient=False,
+            ) as live:
+                content, reasoning, usage = _drain_stream(
+                    client.gateway.completions.create(
+                        model=model, messages=messages, stream=True, **create_kwargs
+                    ),
+                    on_update=lambda c, r: live.update(
+                        _response_panel(
+                            c, model, None, None, reasoning=r, streaming=True
+                        )
+                    ),
+                )
+                latency_s = time.time() - start_time
+                if _content_error(content):
+                    # Drop the streamed frame; the error is printed below.
+                    live.update(Text(""))
+                else:
+                    live.update(
+                        _response_panel(
+                            content, model, latency_s, usage, reasoning=reasoning
+                        )
+                    )
+        error = _content_error(content)
+        if error:
+            console.print(f"[red]Error:[/] {error}")
+            raise typer.Exit(1)
+        return
 
     error = _content_error(content)
 
@@ -983,35 +1000,109 @@ def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[s
     return f"{int(completion_tokens / latency_s)} toks/s"
 
 
+def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
+    """Consume a chat-completion stream into (content, reasoning, usage).
+
+    Collects ``delta.content`` and, for reasoning models (e.g. qwen3.8-27b),
+    the ``delta.reasoning`` / ``delta.reasoning_content`` tokens they emit
+    before the answer. ``on_update(content, reasoning)`` is called after each
+    chunk that adds text, so callers can render incrementally.
+    """
+    content: List[str] = []
+    reasoning: List[str] = []
+    usage: Any = None
+    for chunk in stream:
+        changed = False
+        choices = getattr(chunk, "choices", None)
+        if choices:
+            delta = choices[0].delta
+            if delta is not None:
+                if getattr(delta, "content", None):
+                    content.append(delta.content)
+                    changed = True
+                # Reasoning models stream their thoughts before the answer;
+                # the field is `reasoning_content` (vLLM) or `reasoning`.
+                thought = getattr(delta, "reasoning_content", None) or getattr(
+                    delta, "reasoning", None
+                )
+                if thought:
+                    reasoning.append(thought)
+                    changed = True
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+        if changed and on_update is not None:
+            on_update("".join(content), "".join(reasoning))
+    return "".join(content), "".join(reasoning), usage
+
+
+def _response_panel(
+    content: str,
+    model: str,
+    latency_s: Optional[float],
+    usage: Any,
+    *,
+    reasoning: str = "",
+    streaming: bool = False,
+) -> Panel:
+    """Build the Rich panel for a gateway response.
+
+    Shared by the buffered path and the live streaming display. While
+    ``streaming`` the subtitle shows a ``streaming…`` hint and the body may be
+    a placeholder; once complete it carries the model / token / throughput /
+    latency / cost stats. Reasoning tokens, when present, render dimmed above
+    the answer.
+    """
+    body_parts: List[Any] = []
+    if reasoning:
+        body_parts.append(Text(reasoning.strip(), style="dim italic"))
+    if content:
+        body_parts.append(_renderable(content))
+
+    if body_parts:
+        body: Any = body_parts[0] if len(body_parts) == 1 else Group(*body_parts)
+    elif streaming:
+        body = "[dim]…[/dim]"
+    else:
+        body = "[dim](empty response)[/dim]"
+
+    if streaming:
+        subtitle = "[dim]streaming…[/dim]"
+    else:
+        stats = [model]
+        if usage is not None:
+            total = getattr(usage, "total_tokens", None)
+            if total:
+                prompt_toks = getattr(usage, "prompt_tokens", 0)
+                completion_toks = getattr(usage, "completion_tokens", 0)
+                stats.append(
+                    f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens"
+                )
+                if latency_s is not None:
+                    toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
+                    if toks_per_sec:
+                        stats.append(toks_per_sec)
+        if latency_s is not None:
+            stats.append(f"{latency_s:.2f}s")
+        if usage is not None:
+            cost = _format_cost(getattr(usage, "cost", None))
+            if cost:
+                stats.append(cost)
+        subtitle = f"[dim][white]{' · '.join(stats)}[/white][/dim]"
+
+    return Panel(
+        body,
+        title="[bold]Response[/bold]",
+        title_align="left",
+        subtitle=subtitle,
+        subtitle_align="right",
+        border_style="blue",
+        padding=(1, 2),
+    )
+
+
 def _print_output(content: str, model: str, latency_s: float, usage: Any) -> None:
     """Render the gateway response in a Rich panel."""
-    stats = [model]
-    if usage is not None:
-        total = getattr(usage, "total_tokens", None)
-        if total:
-            prompt_toks = getattr(usage, "prompt_tokens", 0)
-            completion_toks = getattr(usage, "completion_tokens", 0)
-            stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens")
-            toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
-            if toks_per_sec:
-                stats.append(toks_per_sec)
-    stats.append(f"{latency_s:.2f}s")
-    if usage is not None:
-        cost = _format_cost(getattr(usage, "cost", None))
-        if cost:
-            stats.append(cost)
-
-    console.print(
-        Panel(
-            _renderable(content) if content else "[dim](empty response)[/dim]",
-            title="[bold]Response[/bold]",
-            title_align="left",
-            subtitle=f"[dim][white]{' · '.join(stats)}[/white][/dim]",
-            subtitle_align="right",
-            border_style="blue",
-            padding=(1, 2),
-        )
-    )
+    console.print(_response_panel(content, model, latency_s, usage))
 
 
 @app.command(help=EMBED_HELP, context_settings={"max_content_width": 120})
