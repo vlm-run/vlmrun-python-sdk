@@ -826,8 +826,13 @@ def chat(
         # Live incremental display. A bordered panel can't grow past the
         # terminal height — Rich would crop it rather than scroll — so stream
         # tokens straight to the console with soft-wrapping, letting the
-        # terminal scroll to follow, then print the stats footer at the end.
-        console.print(f"[bold]Response[/bold] [dim]({model})[/dim]")
+        # terminal scroll to follow. Frame the stream with a top rule and a
+        # closing stats rule instead of a box.
+        console.rule(
+            f"[bold]Response[/bold] [dim]({model})[/dim]",
+            align="left",
+            style="blue",
+        )
         # Track how much of the (monotonically growing) content/reasoning has
         # already been printed, so each update emits only the new tail.
         seen = {"content": 0, "reasoning": 0, "gap": False}
@@ -862,7 +867,7 @@ def chat(
         if error:
             console.print(f"[red]Error:[/] {error}")
             raise typer.Exit(1)
-        console.print(_stats_footer(model, latency_s, usage))
+        console.rule(_stats_footer(model, latency_s, usage), align="right", style="blue")
         return
 
     error = _content_error(content)
