@@ -1028,6 +1028,64 @@ class TestGatewayTranscribe:
         assert result.exit_code == 0, result.stdout
         assert patched_cli["client"].gateway.completions.calls[-1]["stream"] is False
 
+    def test_drain_stream_collects_content_reasoning_usage(self):
+        """The stream drainer accumulates content and reasoning separately,
+        keeps the trailing usage, and fires on_update once per text chunk."""
+
+        class _Delta:
+            def __init__(self, content=None, reasoning=None):
+                self.content = content
+                self.reasoning_content = reasoning
+
+        class _Choice:
+            def __init__(self, delta):
+                self.delta = delta
+
+        class _Chunk:
+            def __init__(self, delta=None, usage=None):
+                self.choices = [_Choice(delta)] if delta is not None else []
+                self.usage = usage
+
+        usage = FakeUsage()
+        stream = [
+            _Chunk(_Delta(reasoning="think ")),
+            _Chunk(_Delta(reasoning="more")),
+            _Chunk(_Delta(content="Hello ")),
+            _Chunk(_Delta(content="world")),
+            _Chunk(usage=usage),  # usage-only trailing chunk, no text
+        ]
+        updates: list = []
+        content, reasoning, got_usage = gw._drain_stream(
+            iter(stream), on_update=lambda c, r: updates.append((c, r))
+        )
+        assert content == "Hello world"
+        assert reasoning == "think more"
+        assert got_usage is usage
+        # one update per text-bearing chunk (4); the usage-only chunk is silent
+        assert len(updates) == 4
+        assert updates[-1] == ("Hello world", "think more")
+
+    def test_drain_stream_reasoning_field_fallback(self):
+        """`delta.reasoning` is honored when `reasoning_content` is absent."""
+
+        class _Delta:
+            def __init__(self, reasoning):
+                self.content = None
+                self.reasoning = reasoning  # no reasoning_content attribute
+
+        class _Choice:
+            def __init__(self, delta):
+                self.delta = delta
+
+        class _Chunk:
+            def __init__(self, delta):
+                self.choices = [_Choice(delta)]
+                self.usage = None
+
+        content, reasoning, _ = gw._drain_stream(iter([_Chunk(_Delta("hm"))]))
+        assert content == ""
+        assert reasoning == "hm"
+
     def test_chat_multiple_files_and_extra(self, runner, patched_cli, tmp_path):
         f1 = tmp_path / "a.pdf"
         f2 = tmp_path / "b.pdf"
