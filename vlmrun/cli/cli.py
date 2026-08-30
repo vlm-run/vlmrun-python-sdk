@@ -11,7 +11,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from vlmrun.client import VLMRun
 from vlmrun.cli._cli.artifacts import app as artifacts_app
 from vlmrun.cli._cli.chat import CHAT_HELP, chat
 from vlmrun.cli._cli.config import app as config_app, resolve_config
@@ -106,6 +105,8 @@ def main(
         return
 
     if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "config":
+        from vlmrun.client import VLMRun
+
         cfg = resolve_config(api_key=api_key, base_url=base_url)
         check_credentials(cfg.api_key)
         ctx.obj = VLMRun(api_key=cfg.api_key, base_url=cfg.base_url)
@@ -138,3 +139,12 @@ app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
     app()
+
+
+def __getattr__(name: str):
+    """Lazy re-export for tests that patch ``vlmrun.cli.cli.VLMRun``."""
+    if name == "VLMRun":
+        from vlmrun.client import VLMRun
+
+        return VLMRun
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

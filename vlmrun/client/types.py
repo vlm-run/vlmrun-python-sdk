@@ -8,7 +8,6 @@ from typing import Dict, Any, Literal, Optional, Type, List, Tuple, TYPE_CHECKIN
 from pydantic import BaseModel, Field, model_validator
 from pydantic.dataclasses import dataclass
 from datetime import datetime
-from vlmrun.hub.utils import jsonschema_to_model
 from vlmrun.common.dependencies import require_pandas
 import math
 
@@ -110,6 +109,9 @@ class SchemaResponse(BaseModel):
 
     @property
     def response_model(self) -> Type[BaseModel]:
+        # Lazy import: vlmrun-hub pulls in datamodel-code-generator (heavy).
+        from vlmrun.hub.utils import jsonschema_to_model
+
         return jsonschema_to_model(self.json_schema)
 
 
