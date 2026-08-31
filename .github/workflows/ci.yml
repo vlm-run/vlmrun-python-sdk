@@ -35,7 +35,6 @@ jobs:
             ~/.cache/uv
             ~/.cache/pip
           key: uv-${{ matrix.python-version }}-${{
-            hashFiles('requirements/requirements*.txt') }}-${{
             hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{
             env.CACHE_NUMBER }}
           restore-keys: |
