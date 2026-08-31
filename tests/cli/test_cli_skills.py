@@ -52,7 +52,7 @@ def test_list_skills_json(runner, mock_client, config_file):
 def test_list_skills_empty(runner, mock_client, config_file, monkeypatch):
     """skills list prints a warning when no skills are returned."""
     monkeypatch.setattr(mock_client.skills, "list", lambda **kw: [])
-    monkeypatch.setattr("vlmrun.cli.cli.VLMRun", lambda **kw: mock_client)
+    monkeypatch.setattr("vlmrun.client.VLMRun", lambda **kw: mock_client)
     result = runner.invoke(app, ["skills", "list"])
     assert result.exit_code == 0
     assert "No skills found" in result.stdout

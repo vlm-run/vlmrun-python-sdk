@@ -803,7 +803,7 @@ def mock_client(monkeypatch):
                     ],
                 )
 
-    monkeypatch.setattr("vlmrun.cli.cli.VLMRun", MockVLMRun)
+    monkeypatch.setattr("vlmrun.client.VLMRun", MockVLMRun)
     return MockVLMRun()
 
 

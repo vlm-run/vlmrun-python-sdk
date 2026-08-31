@@ -242,7 +242,7 @@ def patched_cli(monkeypatch):
         holder["client"] = client
         return client
 
-    monkeypatch.setattr("vlmrun.cli.cli.VLMRun", _factory)
+    monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
     return holder
 
 
