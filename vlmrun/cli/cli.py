@@ -139,12 +139,3 @@ app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
     app()
-
-
-def __getattr__(name: str):
-    """Lazy re-export for tests that patch ``vlmrun.cli.cli.VLMRun``."""
-    if name == "VLMRun":
-        from vlmrun.client import VLMRun
-
-        return VLMRun
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
