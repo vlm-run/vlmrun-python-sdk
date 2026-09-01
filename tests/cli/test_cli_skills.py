@@ -70,6 +70,40 @@ def test_list_skills_grouped(runner, mock_client, config_file):
     assert result.exit_code == 0
 
 
+def test_list_skills_default_excludes_public(
+    runner, mock_client, config_file, monkeypatch
+):
+    """skills list (no flag) requests only non-public skills (include_public=False)."""
+    captured = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(mock_client.skills, "list", fake_list)
+    monkeypatch.setattr("vlmrun.cli.cli.VLMRun", lambda **kw: mock_client)
+    result = runner.invoke(app, ["skills", "list"])
+    assert result.exit_code == 0
+    assert captured.get("include_public") is False
+
+
+def test_list_skills_public_flag_includes_public(
+    runner, mock_client, config_file, monkeypatch
+):
+    """skills list --public requests public skills too (include_public=True)."""
+    captured = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(mock_client.skills, "list", fake_list)
+    monkeypatch.setattr("vlmrun.cli.cli.VLMRun", lambda **kw: mock_client)
+    result = runner.invoke(app, ["skills", "list", "--public"])
+    assert result.exit_code == 0
+    assert captured.get("include_public") is True
+
+
 # ---------------------------------------------------------------------------
 # skills get
 # ---------------------------------------------------------------------------
