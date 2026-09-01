@@ -29,7 +29,7 @@ jobs:
           path: |
             ~/.cache/uv
             ~/.cache/pip
-          key: uv-py310-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
+          key: uv-py310-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
             uv-py310-
 
@@ -67,7 +67,7 @@ jobs:
           path: |
             ~/.cache/uv
             ~/.cache/pip
-          key: uv-${{ hashFiles('requirements/requirements*.txt') }}-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
+          key: uv-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('MANIFEST.in') }}-${{ env.CACHE_NUMBER }}
           restore-keys: |
             uv-
 

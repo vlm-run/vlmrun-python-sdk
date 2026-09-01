@@ -28,7 +28,19 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 license = {text = "Apache-2.0"}
-dynamic = ["version", "dependencies"]
+dependencies = [
+    "cachetools==7.1.7",
+    "loguru==0.7.3",
+    "openai==1.109.1",
+    "Pillow==11.3.0",
+    "pydantic==2.13.5",
+    "requests==2.34.2",
+    "rich==14.3.4",
+    "tenacity==9.1.4",
+    "typer==0.27.2",
+    "vlmrun-hub==0.1.35",
+]
+dynamic = ["version"]
 
 [project.optional-dependencies]
 test = ["pytest", "pre-commit"]
@@ -50,7 +62,6 @@ all = [
 
 [tool.setuptools.dynamic]
 version = {attr = "vlmrun.version.__version__"}
-dependencies = {file = ["requirements/requirements.txt"]}
 
 [tool.setuptools.packages.find]
 include = ["vlmrun*"]
