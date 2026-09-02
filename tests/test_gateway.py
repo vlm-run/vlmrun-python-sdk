@@ -630,6 +630,18 @@ class TestHelpers:
         parts = gw._stats_parts("glm-ocr", 1.0, usage, pages=None)
         assert all("pages" not in p for p in parts)
 
+    def test_stats_parts_prefers_generation_s_for_throughput(self):
+        usage = FakeUsage(prompt_tokens=100, completion_tokens=100)
+        total_latency = " · ".join(
+            gw._stats_parts("m", latency_s=10.0, usage=usage)
+        )
+        gen_latency = " · ".join(
+            gw._stats_parts("m", latency_s=10.0, usage=usage, generation_s=1.0)
+        )
+        assert "10 toks/s" in total_latency
+        assert "100 toks/s" in gen_latency
+        assert "10s" in gen_latency
+
     def test_content_error_detects_error_payload(self):
         assert (
             gw._content_error('{"error": "Unknown method \'zzz\'"}')
@@ -1111,12 +1123,14 @@ class TestGatewayTranscribe:
             _Chunk(usage=usage),  # usage-only trailing chunk, no text
         ]
         updates: list = []
-        content, reasoning, got_usage = gw._drain_stream(
+        content, reasoning, got_usage, generation_s = gw._drain_stream(
             iter(stream), on_update=lambda c, r: updates.append((c, r))
         )
         assert content == "Hello world"
         assert reasoning == "think more"
         assert got_usage is usage
+        assert generation_s is not None
+        assert generation_s >= 0
         # one update per text-bearing chunk (4); the usage-only chunk is silent
         assert len(updates) == 4
         assert updates[-1] == ("Hello world", "think more")
@@ -1138,9 +1152,12 @@ class TestGatewayTranscribe:
                 self.choices = [_Choice(delta)]
                 self.usage = None
 
-        content, reasoning, _ = gw._drain_stream(iter([_Chunk(_Delta("hm"))]))
+        content, reasoning, _, generation_s = gw._drain_stream(
+            iter([_Chunk(_Delta("hm"))])
+        )
         assert content == ""
         assert reasoning == "hm"
+        assert generation_s is not None
 
     def test_chat_multiple_files_and_extra(self, runner, patched_cli, tmp_path):
         f1 = tmp_path / "a.pdf"

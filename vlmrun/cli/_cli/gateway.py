@@ -786,6 +786,7 @@ def chat(
     messages = _build_messages(inputs, prompt)
     start_time = time.time()
     status_msg = f"Processing ([bold]{model}[/bold])..."
+    generation_s: Optional[float] = None
 
     # Stream by default for all input modalities (documents, images, videos,
     # text). The gateway emits SSE for every chat request: real token-by-token
@@ -817,7 +818,7 @@ def chat(
     elif output_json:
         # Stream from the gateway but buffer into a single JSON object.
         with handle_api_errors():
-            content, reasoning, usage = _drain_stream(
+            content, reasoning, usage, generation_s = _drain_stream(
                 client.gateway.completions.create(
                     model=model, messages=messages, stream=True, **create_kwargs
                 )
@@ -855,7 +856,7 @@ def chat(
                 seen["content"] = len(c)
 
         with handle_api_errors():
-            content, reasoning, usage = _drain_stream(
+            content, reasoning, usage, generation_s = _drain_stream(
                 client.gateway.completions.create(
                     model=model, messages=messages, stream=True, **create_kwargs
                 ),
@@ -870,7 +871,9 @@ def chat(
             raise typer.Exit(1)
         pages = _parse_document_pages_from_content(content)
         console.rule(
-            _stats_footer(model, latency_s, usage, pages=pages),
+            _stats_footer(
+                model, latency_s, usage, pages=pages, generation_s=generation_s
+            ),
             align="right",
             style="dim",
         )
@@ -893,7 +896,9 @@ def chat(
         raise typer.Exit(1)
 
     pages = _parse_document_pages_from_content(content)
-    _print_output(content, model, latency_s, usage, pages=pages)
+    _print_output(
+        content, model, latency_s, usage, pages=pages, generation_s=generation_s
+    )
 
 
 EMBED_HELP = """Embed text, images or video with a gateway embedding model.
@@ -1012,11 +1017,16 @@ def _format_cost(cost: Any) -> Optional[str]:
     return formatted if formatted != "$0" else "<$0.000001"
 
 
-def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[str]:
-    """Format completion throughput as integer tokens/sec, or None when not computable."""
-    if not completion_tokens or latency_s <= 0:
+def _format_toks_per_sec(completion_tokens: int, generation_s: float) -> Optional[str]:
+    """Format completion throughput as integer tokens/sec, or None when not computable.
+
+    ``generation_s`` should cover only the token-generation window (from the
+    first streamed token to the end), not time-to-first-token or request setup.
+    """
+    if not completion_tokens or generation_s <= 0:
         return None
-    return f"{int(completion_tokens / latency_s)} toks/s"
+    return f"{int(completion_tokens / generation_s)} toks/s"
+
 
 
 _DOCUMENT_OPEN_RE = re.compile(r"<document\b[^>]*>", re.IGNORECASE)
@@ -1095,17 +1105,21 @@ def _format_pages_per_sec(pages: int, latency_s: float) -> Optional[str]:
     return f"{rate:.2f} pages/s"
 
 
-def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
-    """Consume a chat-completion stream into (content, reasoning, usage).
+def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any, Optional[float]]:
+    """Consume a chat-completion stream into (content, reasoning, usage, generation_s).
 
     Collects ``delta.content`` and, for reasoning models (e.g. qwen3.8-27b),
     the ``delta.reasoning`` / ``delta.reasoning_content`` tokens they emit
     before the answer. ``on_update(content, reasoning)`` is called after each
     chunk that adds text, so callers can render incrementally.
+
+    ``generation_s`` is the wall time from the first content/reasoning token to
+    the end of the stream, excluding time-to-first-token.
     """
     content: List[str] = []
     reasoning: List[str] = []
     usage: Any = None
+    first_token_at: float | None = None
     for chunk in stream:
         changed = False
         choices = getattr(chunk, "choices", None)
@@ -1123,11 +1137,16 @@ def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
                 if thought:
                     reasoning.append(thought)
                     changed = True
+        if changed and first_token_at is None:
+            first_token_at = time.perf_counter()
         if getattr(chunk, "usage", None):
             usage = chunk.usage
         if changed and on_update is not None:
             on_update("".join(content), "".join(reasoning))
-    return "".join(content), "".join(reasoning), usage
+    generation_s: float | None = None
+    if first_token_at is not None:
+        generation_s = time.perf_counter() - first_token_at
+    return "".join(content), "".join(reasoning), usage, generation_s
 
 
 _STATS_LINE_STYLE = "dim white not bold"
@@ -1144,6 +1163,7 @@ def _stats_parts(
     usage: Any,
     *,
     pages: Optional[int] = None,
+    generation_s: Optional[float] = None,
 ) -> List[str]:
     """The model / token / throughput / latency / cost fragments for a footer."""
     stats = [model]
@@ -1153,8 +1173,9 @@ def _stats_parts(
             prompt_toks = getattr(usage, "prompt_tokens", 0)
             completion_toks = getattr(usage, "completion_tokens", 0)
             stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} toks")
-            if latency_s is not None:
-                toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
+            throughput_s = generation_s if generation_s is not None else latency_s
+            if throughput_s is not None:
+                toks_per_sec = _format_toks_per_sec(completion_toks, throughput_s)
                 if toks_per_sec:
                     stats.append(toks_per_sec)
     if pages is not None:
@@ -1178,9 +1199,12 @@ def _stats_footer(
     usage: Any,
     *,
     pages: Optional[int] = None,
+    generation_s: Optional[float] = None,
 ) -> str:
     """A dim one-line stats footer, right-padded to sit under streamed text."""
-    return _stats_markup(_stats_parts(model, latency_s, usage, pages=pages))
+    return _stats_markup(
+        _stats_parts(model, latency_s, usage, pages=pages, generation_s=generation_s)
+    )
 
 
 def _response_panel(
@@ -1191,6 +1215,7 @@ def _response_panel(
     *,
     reasoning: str = "",
     pages: Optional[int] = None,
+    generation_s: Optional[float] = None,
 ) -> Panel:
     """Build the bordered Rich panel for a buffered gateway response.
 
@@ -1210,7 +1235,9 @@ def _response_panel(
     else:
         body = "[dim](empty response)[/dim]"
 
-    subtitle = _stats_markup(_stats_parts(model, latency_s, usage, pages=pages))
+    subtitle = _stats_markup(
+        _stats_parts(model, latency_s, usage, pages=pages, generation_s=generation_s)
+    )
     return Panel(
         body,
         title="[bold]Response[/bold]",
@@ -1229,10 +1256,18 @@ def _print_output(
     usage: Any,
     *,
     pages: Optional[int] = None,
+    generation_s: Optional[float] = None,
 ) -> None:
     """Render the gateway response in a Rich panel."""
     console.print(
-        _response_panel(content, model, latency_s, usage, pages=pages)
+        _response_panel(
+            content,
+            model,
+            latency_s,
+            usage,
+            pages=pages,
+            generation_s=generation_s,
+        )
     )
 
 
