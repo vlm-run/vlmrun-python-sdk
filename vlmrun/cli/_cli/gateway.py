@@ -39,9 +39,7 @@ from rich.tree import Tree
 from rich import box
 
 from vlmrun.client import VLMRun
-from vlmrun.client.exceptions import DependencyError
 from vlmrun.client.gateway import _require_openai
-from vlmrun.common.dependencies import require_pypdfium2
 from vlmrun.cli._cli.chat import (
     TimedStatus,
     format_file_size,
@@ -870,11 +868,7 @@ def chat(
         if error:
             console.print(f"[red]Error:[/] {error}")
             raise typer.Exit(1)
-        pages = (
-            _document_page_count(inputs, content)
-            if any(_is_document_input(raw) for raw in inputs)
-            else None
-        )
+        pages = _parse_document_pages_from_content(content)
         console.rule(
             _stats_footer(model, latency_s, usage, pages=pages),
             align="right",
@@ -885,24 +879,20 @@ def chat(
     error = _content_error(content)
 
     if output_json:
-        out = {
-            "model": model,
-            "content": content,
-            "latency_s": latency_s,
-            "usage": usage.model_dump() if hasattr(usage, "model_dump") else usage,
-        }
-        print(json.dumps(out, indent=2, default=str))
+        print(
+            json.dumps(
+                _build_chat_json(model, content, latency_s, usage),
+                indent=2,
+                default=str,
+            )
+        )
         raise typer.Exit(1 if error else 0)
 
     if error:
         console.print(f"[red]Error:[/] {error}")
         raise typer.Exit(1)
 
-    pages = (
-        _document_page_count(inputs, content)
-        if any(_is_document_input(raw) for raw in inputs)
-        else None
-    )
+    pages = _parse_document_pages_from_content(content)
     _print_output(content, model, latency_s, usage, pages=pages)
 
 
@@ -1032,14 +1022,6 @@ def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[s
 _DOCUMENT_PAGES_RE = re.compile(r"<document\s+pages=\"(\d+)\"", re.IGNORECASE)
 
 
-def _is_document_input(raw: str) -> bool:
-    """Return True if ``raw`` is a document file path or URL."""
-    if _is_http_url(raw):
-        return _content_part_type_from_url(raw) == "document_url"
-    path = Path(raw).expanduser()
-    return _content_part_type(path) == "document_url"
-
-
 def _parse_document_pages_from_content(content: str) -> Optional[int]:
     """Sum ``pages`` attributes from ``<document pages="N">`` wrappers in OCR output."""
     matches = _DOCUMENT_PAGES_RE.findall(content)
@@ -1048,40 +1030,25 @@ def _parse_document_pages_from_content(content: str) -> Optional[int]:
     return sum(int(m) for m in matches)
 
 
-def _count_local_document_pages(path: Path) -> Optional[int]:
-    """Page count for a local document file, or None when unknown."""
-    suffix = path.suffix.lower()
-    if suffix != ".pdf":
-        return None
-    try:
-        pdfium = require_pypdfium2()
-    except DependencyError:
-        return None
-    try:
-        doc = pdfium.PdfDocument(str(path))
-        count = len(doc)
-        doc.close()
-        return count
-    except Exception:
-        return None
-
-
-def _document_page_count(inputs: List[str], content: str) -> Optional[int]:
-    """Total pages for document chat inputs, preferring gateway response metadata."""
-    from_content = _parse_document_pages_from_content(content)
-    if from_content is not None:
-        return from_content
-    total = 0
-    counted = False
-    for raw in inputs:
-        if _is_http_url(raw) or not _is_document_input(raw):
-            continue
-        path = Path(raw).expanduser()
-        pages = _count_local_document_pages(path)
-        if pages is not None:
-            total += pages
-            counted = True
-    return total if counted else None
+def _build_chat_json(
+    model: str,
+    content: str,
+    latency_s: float,
+    usage: Any,
+) -> Dict[str, Any]:
+    """JSON payload for ``gw chat --json``, including pages parsed from OCR output."""
+    out: Dict[str, Any] = {
+        "model": model,
+        "content": content,
+        "latency_s": latency_s,
+        "usage": usage.model_dump() if hasattr(usage, "model_dump") else usage,
+    }
+    pages = _parse_document_pages_from_content(content)
+    if pages is not None:
+        out["pages"] = pages
+        if latency_s > 0:
+            out["pages_per_sec"] = int(pages / latency_s)
+    return out
 
 
 def _format_pages_per_sec(pages: int, latency_s: float) -> Optional[str]:

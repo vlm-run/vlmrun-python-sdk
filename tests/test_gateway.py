@@ -581,6 +581,13 @@ class TestHelpers:
         assert gw._parse_document_pages_from_content(content) == 3
         assert gw._parse_document_pages_from_content("plain text") is None
 
+    def test_build_chat_json_includes_pages_from_output(self):
+        content = '<document pages="5">\n<page index="0">hi</page>\n</document>'
+        out = gw._build_chat_json("glm-ocr", content, 2.5, FakeUsage())
+        assert out["pages"] == 5
+        assert out["pages_per_sec"] == 2
+        assert "pages" not in gw._build_chat_json("glm-ocr", "plain", 1.0, FakeUsage())
+
     def test_format_pages_per_sec(self):
         assert gw._format_pages_per_sec(10, 5.0) == "pages/s: 2"
         assert gw._format_pages_per_sec(4, 0) is None
@@ -1357,3 +1364,35 @@ class TestGatewayTranscribe:
         )
         assert result.exit_code == 0, result.stdout
         assert json.loads(result.stdout)["usage"]["cost"] == 0.0042
+
+    def test_chat_json_includes_pages_from_output_no_stream(
+        self, runner, patched_cli, tmp_path
+    ):
+        patched_cli["content"] = (
+            '<document pages="4">\n<page index="0">\nhello\n</page>\n</document>'
+        )
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--no-stream", "--json"]
+        )
+        assert result.exit_code == 0, result.stdout
+        out = json.loads(result.stdout)
+        assert out["pages"] == 4
+        assert out["pages_per_sec"] >= 1
+
+    def test_chat_json_includes_pages_from_output_stream(
+        self, runner, patched_cli, tmp_path
+    ):
+        patched_cli["content"] = (
+            '<document pages="3">\n<page index="0">\nhello\n</page>\n</document>'
+        )
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--json"]
+        )
+        assert result.exit_code == 0, result.stdout
+        out = json.loads(result.stdout)
+        assert out["pages"] == 3
+        assert out["pages_per_sec"] >= 1
