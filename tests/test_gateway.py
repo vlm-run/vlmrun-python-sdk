@@ -581,6 +581,11 @@ class TestHelpers:
         assert gw._parse_document_pages_from_content(content) == 3
         assert gw._parse_document_pages_from_content("plain text") is None
         assert gw._parse_document_pages_from_content('<document pages="0">') is None
+        glm_ocr_doc = (
+            '<document file_name="tsla-8k.pdf" mimetype="application/pdf" '
+            'num_pages="5" dpi="96">\n<page page_index="0">hi</page>\n</document>'
+        )
+        assert gw._parse_document_pages_from_content(glm_ocr_doc) == 5
 
     def test_build_chat_json_includes_pages_from_output(self):
         content = '<document pages="5">\n<page index="0">hi</page>\n</document>'

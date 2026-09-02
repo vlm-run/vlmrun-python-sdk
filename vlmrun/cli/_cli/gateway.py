@@ -1019,11 +1019,14 @@ def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[s
     return f"{int(completion_tokens / latency_s)} toks/s"
 
 
-_DOCUMENT_PAGES_RE = re.compile(r"<document\s+pages=\"(\d+)\"", re.IGNORECASE)
+_DOCUMENT_PAGES_RE = re.compile(
+    r"<document[^>]*\s(?:pages|num_pages)=\"(\d+)\"",
+    re.IGNORECASE,
+)
 
 
 def _parse_document_pages_from_content(content: str) -> Optional[int]:
-    """Sum ``pages`` attributes from ``<document pages="N">`` wrappers in OCR output."""
+    """Sum page counts from ``<document pages="N">`` / ``num_pages="N">`` OCR wrappers."""
     matches = _DOCUMENT_PAGES_RE.findall(content)
     if not matches:
         return None
