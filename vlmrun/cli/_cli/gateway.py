@@ -1027,7 +1027,18 @@ def _parse_document_pages_from_content(content: str) -> Optional[int]:
     matches = _DOCUMENT_PAGES_RE.findall(content)
     if not matches:
         return None
-    return sum(int(m) for m in matches)
+    try:
+        total = sum(int(m) for m in matches)
+    except ValueError:
+        return None
+    return total if total > 0 else None
+
+
+def _pages_per_sec(pages: int, latency_s: float) -> Optional[float]:
+    """Pages per second rounded to two decimals, or None when not computable."""
+    if pages <= 0 or latency_s <= 0:
+        return None
+    return round(pages / latency_s, 2)
 
 
 def _build_chat_json(
@@ -1046,16 +1057,18 @@ def _build_chat_json(
     pages = _parse_document_pages_from_content(content)
     if pages is not None:
         out["pages"] = pages
-        if latency_s > 0:
-            out["pages_per_sec"] = int(pages / latency_s)
+        rate = _pages_per_sec(pages, latency_s)
+        if rate is not None:
+            out["pages_per_sec"] = rate
     return out
 
 
 def _format_pages_per_sec(pages: int, latency_s: float) -> Optional[str]:
-    """Format document throughput as integer pages/sec, or None when not computable."""
-    if not pages or latency_s <= 0:
+    """Format document throughput as pages/sec with two decimal places."""
+    rate = _pages_per_sec(pages, latency_s)
+    if rate is None:
         return None
-    return f"pages/s: {int(pages / latency_s)}"
+    return f"pages/s: {rate:.2f}"
 
 
 def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
@@ -1112,7 +1125,7 @@ def _stats_parts(
                 toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
                 if toks_per_sec:
                     stats.append(toks_per_sec)
-    if pages is not None and pages > 0:
+    if pages is not None:
         stats.append(f"pages: {pages}")
         if latency_s is not None:
             pages_per_sec = _format_pages_per_sec(pages, latency_s)

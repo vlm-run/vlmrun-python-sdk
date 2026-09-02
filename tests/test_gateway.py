@@ -580,16 +580,18 @@ class TestHelpers:
         )
         assert gw._parse_document_pages_from_content(content) == 3
         assert gw._parse_document_pages_from_content("plain text") is None
+        assert gw._parse_document_pages_from_content('<document pages="0">') is None
 
     def test_build_chat_json_includes_pages_from_output(self):
         content = '<document pages="5">\n<page index="0">hi</page>\n</document>'
         out = gw._build_chat_json("glm-ocr", content, 2.5, FakeUsage())
         assert out["pages"] == 5
-        assert out["pages_per_sec"] == 2
+        assert out["pages_per_sec"] == 2.0
         assert "pages" not in gw._build_chat_json("glm-ocr", "plain", 1.0, FakeUsage())
 
     def test_format_pages_per_sec(self):
-        assert gw._format_pages_per_sec(10, 5.0) == "pages/s: 2"
+        assert gw._format_pages_per_sec(10, 5.0) == "pages/s: 2.00"
+        assert gw._format_pages_per_sec(1, 3.0) == "pages/s: 0.33"
         assert gw._format_pages_per_sec(4, 0) is None
 
     def test_stats_parts_uses_toks_label_and_pages(self):
@@ -598,7 +600,7 @@ class TestHelpers:
         assert "T:20 toks" in parts[1]
         assert "7 toks/s" in parts[2]
         assert parts[3] == "pages: 4"
-        assert parts[4] == "pages/s: 2"
+        assert parts[4] == "pages/s: 2.00"
 
     def test_stats_parts_skips_pages_for_images(self):
         usage = FakeUsage()
@@ -1379,7 +1381,7 @@ class TestGatewayTranscribe:
         assert result.exit_code == 0, result.stdout
         out = json.loads(result.stdout)
         assert out["pages"] == 4
-        assert out["pages_per_sec"] >= 1
+        assert out["pages_per_sec"] == round(4 / out["latency_s"], 2)
 
     def test_chat_json_includes_pages_from_output_stream(
         self, runner, patched_cli, tmp_path
@@ -1395,4 +1397,4 @@ class TestGatewayTranscribe:
         assert result.exit_code == 0, result.stdout
         out = json.loads(result.stdout)
         assert out["pages"] == 3
-        assert out["pages_per_sec"] >= 1
+        assert out["pages_per_sec"] == round(3 / out["latency_s"], 2)
