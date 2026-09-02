@@ -1092,7 +1092,7 @@ def _format_pages_per_sec(pages: int, latency_s: float) -> Optional[str]:
     rate = _pages_per_sec(pages, latency_s)
     if rate is None:
         return None
-    return f"pages/s: {rate:.2f}"
+    return f"{rate:.2f} pages/s"
 
 
 def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
@@ -1158,7 +1158,7 @@ def _stats_parts(
                 if toks_per_sec:
                     stats.append(toks_per_sec)
     if pages is not None:
-        stats.append(f"pages: {pages}")
+        stats.append(f"{pages} pages")
         if latency_s is not None:
             pages_per_sec = _format_pages_per_sec(pages, latency_s)
             if pages_per_sec:

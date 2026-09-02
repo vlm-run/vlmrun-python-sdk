@@ -605,8 +605,8 @@ class TestHelpers:
         assert "pages" not in gw._build_chat_json("glm-ocr", "plain", 1.0, FakeUsage())
 
     def test_format_pages_per_sec(self):
-        assert gw._format_pages_per_sec(10, 5.0) == "pages/s: 2.00"
-        assert gw._format_pages_per_sec(1, 3.0) == "pages/s: 0.33"
+        assert gw._format_pages_per_sec(10, 5.0) == "2.00 pages/s"
+        assert gw._format_pages_per_sec(1, 3.0) == "0.33 pages/s"
         assert gw._format_pages_per_sec(4, 0) is None
 
     def test_stats_parts_uses_toks_label_and_pages(self):
@@ -614,8 +614,8 @@ class TestHelpers:
         parts = gw._stats_parts("glm-ocr", 2.0, usage, pages=4)
         assert "T:20 toks" in parts[1]
         assert "7 toks/s" in parts[2]
-        assert parts[3] == "pages: 4"
-        assert parts[4] == "pages/s: 2.00"
+        assert parts[3] == "4 pages"
+        assert parts[4] == "2.00 pages/s"
         assert "2s" in parts
 
     def test_stats_markup_is_dim_white_not_bold(self):
@@ -1377,8 +1377,8 @@ class TestGatewayTranscribe:
             app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--no-stream"]
         )
         assert result.exit_code == 0, result.stdout
-        assert "pages: 5" in result.stdout
-        assert "pages/s:" in result.stdout
+        assert "5 pages" in result.stdout
+        assert "pages/s" in result.stdout
 
     def test_chat_document_url_shows_pages_streaming(self, runner, patched_cli):
         patched_cli["content"] = (
@@ -1388,8 +1388,8 @@ class TestGatewayTranscribe:
         url = "https://example.com/report.pdf"
         result = runner.invoke(app, ["gw", "chat", url, "-m", "glm-ocr"])
         assert result.exit_code == 0, result.stdout
-        assert "pages: 5" in result.stdout
-        assert "pages/s:" in result.stdout
+        assert "5 pages" in result.stdout
+        assert "pages/s" in result.stdout
         content = patched_cli["client"].gateway.completions.calls[-1]["messages"][0][
             "content"
         ]
@@ -1406,8 +1406,8 @@ class TestGatewayTranscribe:
             app, ["gw", "chat", url, "-m", "glm-ocr", "--no-stream"]
         )
         assert result.exit_code == 0, result.stdout
-        assert "pages: 4" in result.stdout
-        assert "pages/s:" in result.stdout
+        assert "4 pages" in result.stdout
+        assert "pages/s" in result.stdout
 
     def test_chat_json_carries_cost(self, runner, patched_cli, tmp_path):
         patched_cli["cost"] = 0.0042
