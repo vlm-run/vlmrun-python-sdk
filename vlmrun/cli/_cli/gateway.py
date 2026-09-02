@@ -1084,11 +1084,11 @@ def _document_page_count(inputs: List[str], content: str) -> Optional[int]:
     return total if counted else None
 
 
-def _format_pages_stat(pages: int, latency_s: Optional[float]) -> str:
-    """Format document page count and throughput for the stats footer."""
-    if latency_s is not None and latency_s > 0:
-        return f"pages: {pages}, pages/s: {int(pages / latency_s)}"
-    return f"pages: {pages}"
+def _format_pages_per_sec(pages: int, latency_s: float) -> Optional[str]:
+    """Format document throughput as integer pages/sec, or None when not computable."""
+    if not pages or latency_s <= 0:
+        return None
+    return f"pages/s: {int(pages / latency_s)}"
 
 
 def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
@@ -1146,7 +1146,11 @@ def _stats_parts(
                 if toks_per_sec:
                     stats.append(toks_per_sec)
     if pages is not None and pages > 0:
-        stats.append(_format_pages_stat(pages, latency_s))
+        stats.append(f"pages: {pages}")
+        if latency_s is not None:
+            pages_per_sec = _format_pages_per_sec(pages, latency_s)
+            if pages_per_sec:
+                stats.append(pages_per_sec)
     if latency_s is not None:
         stats.append(f"{latency_s:.2f}s")
     if usage is not None:

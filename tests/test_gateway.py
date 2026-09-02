@@ -581,16 +581,17 @@ class TestHelpers:
         assert gw._parse_document_pages_from_content(content) == 3
         assert gw._parse_document_pages_from_content("plain text") is None
 
-    def test_format_pages_stat(self):
-        assert gw._format_pages_stat(10, 5.0) == "pages: 10, pages/s: 2"
-        assert gw._format_pages_stat(4, None) == "pages: 4"
+    def test_format_pages_per_sec(self):
+        assert gw._format_pages_per_sec(10, 5.0) == "pages/s: 2"
+        assert gw._format_pages_per_sec(4, 0) is None
 
     def test_stats_parts_uses_toks_label_and_pages(self):
         usage = FakeUsage(prompt_tokens=5, completion_tokens=15)
         parts = gw._stats_parts("glm-ocr", 2.0, usage, pages=4)
         assert "T:20 toks" in parts[1]
         assert "7 toks/s" in parts[2]
-        assert "pages: 4, pages/s: 2" in parts[3]
+        assert parts[3] == "pages: 4"
+        assert parts[4] == "pages/s: 2"
 
     def test_stats_parts_skips_pages_for_images(self):
         usage = FakeUsage()
