@@ -601,6 +601,13 @@ class TestHelpers:
         assert "7 toks/s" in parts[2]
         assert parts[3] == "pages: 4"
         assert parts[4] == "pages/s: 2.00"
+        assert "2s" in parts
+
+    def test_stats_markup_is_light_not_bold(self):
+        markup = gw._stats_markup(["glm-ocr", "2s"])
+        assert "not bold" in markup
+        assert "[white]" not in markup
+        assert "[bold]" not in markup
 
     def test_stats_parts_skips_pages_for_images(self):
         usage = FakeUsage()

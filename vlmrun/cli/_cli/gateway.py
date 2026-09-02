@@ -1106,6 +1106,14 @@ def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
     return "".join(content), "".join(reasoning), usage
 
 
+_STATS_LINE_STYLE = "dim not bold"
+
+
+def _stats_markup(parts: List[str]) -> str:
+    """Rich markup for the gw chat stats line — light mono, not bold."""
+    return f"[{_STATS_LINE_STYLE}]{' · '.join(parts)}[/{_STATS_LINE_STYLE}]"
+
+
 def _stats_parts(
     model: str,
     latency_s: Optional[float],
@@ -1132,7 +1140,7 @@ def _stats_parts(
             if pages_per_sec:
                 stats.append(pages_per_sec)
     if latency_s is not None:
-        stats.append(f"{latency_s:.2f}s")
+        stats.append(f"{int(round(latency_s))}s")
     if usage is not None:
         cost = _format_cost(getattr(usage, "cost", None))
         if cost:
@@ -1148,9 +1156,7 @@ def _stats_footer(
     pages: Optional[int] = None,
 ) -> str:
     """A dim one-line stats footer, right-padded to sit under streamed text."""
-    return (
-        f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage, pages=pages))}[/white][/dim]"
-    )
+    return _stats_markup(_stats_parts(model, latency_s, usage, pages=pages))
 
 
 def _response_panel(
@@ -1180,9 +1186,7 @@ def _response_panel(
     else:
         body = "[dim](empty response)[/dim]"
 
-    subtitle = (
-        f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage, pages=pages))}[/white][/dim]"
-    )
+    subtitle = _stats_markup(_stats_parts(model, latency_s, usage, pages=pages))
     return Panel(
         body,
         title="[bold]Response[/bold]",
