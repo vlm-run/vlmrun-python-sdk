@@ -574,6 +574,62 @@ class TestHelpers:
         assert gw._format_toks_per_sec(0, 1.0) is None
         assert gw._format_toks_per_sec(10, 0) is None
 
+    def test_parse_document_pages_from_content(self):
+        content = (
+            '<document pages="3">\n<page index="0">a</page>\n</document>'
+        )
+        assert gw._parse_document_pages_from_content(content) == 3
+        assert gw._parse_document_pages_from_content("plain text") is None
+        assert gw._parse_document_pages_from_content('<document pages="0">') is None
+        glm_ocr_doc = (
+            '<document file_name="tsla-8k.pdf" mimetype="application/pdf" '
+            'num_pages="5" dpi="96">\n<page page_index="0">hi</page>\n</document>'
+        )
+        assert gw._parse_document_pages_from_content(glm_ocr_doc) == 5
+        assert gw._parse_document_pages_from_content(
+            "<document file_name='report.pdf' num_pages='4'>"
+        ) == 4
+        # URL-backed glm-ocr markdown can omit the count attribute; count <page> tags.
+        assert gw._parse_document_pages_from_content(
+            "<document file_name=\"tsla-8k.pdf\">\n"
+            "<page page_index=\"0\">a</page>\n"
+            "<page page_index=\"1\">b</page>\n"
+            "</document>"
+        ) == 2
+
+    def test_build_chat_json_includes_pages_from_output(self):
+        content = '<document pages="5">\n<page index="0">hi</page>\n</document>'
+        out = gw._build_chat_json("glm-ocr", content, 2.5, FakeUsage())
+        assert out["pages"] == 5
+        assert out["pages_per_sec"] == 2.0
+        assert "pages" not in gw._build_chat_json("glm-ocr", "plain", 1.0, FakeUsage())
+
+    def test_format_pages_per_sec(self):
+        assert gw._format_pages_per_sec(10, 5.0) == "2.00 pages/s"
+        assert gw._format_pages_per_sec(1, 3.0) == "0.33 pages/s"
+        assert gw._format_pages_per_sec(4, 0) is None
+
+    def test_stats_parts_uses_toks_label_and_pages(self):
+        usage = FakeUsage(prompt_tokens=5, completion_tokens=15)
+        parts = gw._stats_parts("glm-ocr", 2.0, usage, pages=4)
+        assert "T:20 toks" in parts[1]
+        assert "7 toks/s" in parts[2]
+        assert parts[3] == "4 pages"
+        assert parts[4] == "2.00 pages/s"
+        assert "2s" in parts
+
+    def test_stats_markup_is_dim_white_not_bold(self):
+        markup = gw._stats_markup(["glm-ocr", "2s"])
+        assert "dim" in markup
+        assert "white" in markup
+        assert "not bold" in markup
+        assert "[bold]" not in markup
+
+    def test_stats_parts_skips_pages_for_images(self):
+        usage = FakeUsage()
+        parts = gw._stats_parts("glm-ocr", 1.0, usage, pages=None)
+        assert all("pages" not in p for p in parts)
+
     def test_content_error_detects_error_payload(self):
         assert (
             gw._content_error('{"error": "Unknown method \'zzz\'"}')
@@ -1308,6 +1364,50 @@ class TestGatewayTranscribe:
         assert result.exit_code == 0, result.stdout
         assert "$0.001508" in result.stdout
         assert " toks/s" in result.stdout
+        assert " toks" in result.stdout
+        assert " tokens" not in result.stdout
+
+    def test_chat_panel_shows_document_pages(self, runner, patched_cli, tmp_path):
+        patched_cli["content"] = (
+            '<document pages="5">\n<page index="0">\nhello\n</page>\n</document>'
+        )
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF-1.4 fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--no-stream"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert "5 pages" in result.stdout
+        assert "pages/s" in result.stdout
+
+    def test_chat_document_url_shows_pages_streaming(self, runner, patched_cli):
+        patched_cli["content"] = (
+            '<document file_name="report.pdf" mimetype="application/pdf" '
+            'num_pages="5" dpi="96">\n<page page_index="0">hello</page>\n</document>'
+        )
+        url = "https://example.com/report.pdf"
+        result = runner.invoke(app, ["gw", "chat", url, "-m", "glm-ocr"])
+        assert result.exit_code == 0, result.stdout
+        assert "5 pages" in result.stdout
+        assert "pages/s" in result.stdout
+        content = patched_cli["client"].gateway.completions.calls[-1]["messages"][0][
+            "content"
+        ]
+        assert content[0]["type"] == "document_url"
+        assert content[0]["document_url"]["url"] == url
+
+    def test_chat_document_url_shows_pages_no_stream(self, runner, patched_cli):
+        patched_cli["content"] = (
+            '<document file_name="report.pdf" num_pages="4">\n'
+            '<page page_index="0">hello</page>\n</document>'
+        )
+        url = "https://storage.example.com/hub/examples/report.pdf"
+        result = runner.invoke(
+            app, ["gw", "chat", url, "-m", "glm-ocr", "--no-stream"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert "4 pages" in result.stdout
+        assert "pages/s" in result.stdout
 
     def test_chat_json_carries_cost(self, runner, patched_cli, tmp_path):
         patched_cli["cost"] = 0.0042
@@ -1318,3 +1418,35 @@ class TestGatewayTranscribe:
         )
         assert result.exit_code == 0, result.stdout
         assert json.loads(result.stdout)["usage"]["cost"] == 0.0042
+
+    def test_chat_json_includes_pages_from_output_no_stream(
+        self, runner, patched_cli, tmp_path
+    ):
+        patched_cli["content"] = (
+            '<document pages="4">\n<page index="0">\nhello\n</page>\n</document>'
+        )
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--no-stream", "--json"]
+        )
+        assert result.exit_code == 0, result.stdout
+        out = json.loads(result.stdout)
+        assert out["pages"] == 4
+        assert out["pages_per_sec"] == round(4 / out["latency_s"], 2)
+
+    def test_chat_json_includes_pages_from_output_stream(
+        self, runner, patched_cli, tmp_path
+    ):
+        patched_cli["content"] = (
+            '<document pages="3">\n<page index="0">\nhello\n</page>\n</document>'
+        )
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--json"]
+        )
+        assert result.exit_code == 0, result.stdout
+        out = json.loads(result.stdout)
+        assert out["pages"] == 3
+        assert out["pages_per_sec"] == round(3 / out["latency_s"], 2)
