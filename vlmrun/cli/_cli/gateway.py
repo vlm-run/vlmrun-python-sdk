@@ -1019,22 +1019,43 @@ def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[s
     return f"{int(completion_tokens / latency_s)} toks/s"
 
 
-_DOCUMENT_PAGES_RE = re.compile(
-    r"<document[^>]*\s(?:pages|num_pages)=\"(\d+)\"",
+_DOCUMENT_OPEN_RE = re.compile(r"<document\b[^>]*>", re.IGNORECASE)
+_PAGE_COUNT_ATTR_RE = re.compile(
+    r"(?:pages|num_pages)\s*=\s*['\"](\d+)['\"]",
     re.IGNORECASE,
 )
+_PAGE_OPEN_RE = re.compile(r"<page\b", re.IGNORECASE)
 
 
 def _parse_document_pages_from_content(content: str) -> Optional[int]:
-    """Sum page counts from ``<document pages="N">`` / ``num_pages="N">`` OCR wrappers."""
-    matches = _DOCUMENT_PAGES_RE.findall(content)
-    if not matches:
+    """Page count from gateway OCR output (``pages`` / ``num_pages`` or ``<page>`` tags)."""
+    if not content:
         return None
+
+    from_attrs = 0
+    found_attr = False
+    for tag in _DOCUMENT_OPEN_RE.findall(content):
+        match = _PAGE_COUNT_ATTR_RE.search(tag)
+        if match:
+            from_attrs += int(match.group(1))
+            found_attr = True
+    if found_attr:
+        return from_attrs if from_attrs > 0 else None
+
+    # Attributes can appear outside a single-line opener (streaming / long tags).
     try:
-        total = sum(int(m) for m in matches)
+        from_attrs = sum(int(m) for m in _PAGE_COUNT_ATTR_RE.findall(content))
     except ValueError:
-        return None
-    return total if total > 0 else None
+        from_attrs = 0
+    if from_attrs > 0:
+        return from_attrs
+
+    # glm-ocr markdown: per-page ``<page page_index="N">`` blocks without a count attr.
+    page_tags = _PAGE_OPEN_RE.findall(content)
+    if page_tags:
+        return len(page_tags)
+
+    return None
 
 
 def _pages_per_sec(pages: int, latency_s: float) -> Optional[float]:

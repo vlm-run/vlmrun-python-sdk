@@ -586,6 +586,16 @@ class TestHelpers:
             'num_pages="5" dpi="96">\n<page page_index="0">hi</page>\n</document>'
         )
         assert gw._parse_document_pages_from_content(glm_ocr_doc) == 5
+        assert gw._parse_document_pages_from_content(
+            "<document file_name='report.pdf' num_pages='4'>"
+        ) == 4
+        # URL-backed glm-ocr markdown can omit the count attribute; count <page> tags.
+        assert gw._parse_document_pages_from_content(
+            "<document file_name=\"tsla-8k.pdf\">\n"
+            "<page page_index=\"0\">a</page>\n"
+            "<page page_index=\"1\">b</page>\n"
+            "</document>"
+        ) == 2
 
     def test_build_chat_json_includes_pages_from_output(self):
         content = '<document pages="5">\n<page index="0">hi</page>\n</document>'
@@ -1367,6 +1377,35 @@ class TestGatewayTranscribe:
         )
         assert result.exit_code == 0, result.stdout
         assert "pages: 5" in result.stdout
+        assert "pages/s:" in result.stdout
+
+    def test_chat_document_url_shows_pages_streaming(self, runner, patched_cli):
+        patched_cli["content"] = (
+            '<document file_name="report.pdf" mimetype="application/pdf" '
+            'num_pages="5" dpi="96">\n<page page_index="0">hello</page>\n</document>'
+        )
+        url = "https://example.com/report.pdf"
+        result = runner.invoke(app, ["gw", "chat", url, "-m", "glm-ocr"])
+        assert result.exit_code == 0, result.stdout
+        assert "pages: 5" in result.stdout
+        assert "pages/s:" in result.stdout
+        content = patched_cli["client"].gateway.completions.calls[-1]["messages"][0][
+            "content"
+        ]
+        assert content[0]["type"] == "document_url"
+        assert content[0]["document_url"]["url"] == url
+
+    def test_chat_document_url_shows_pages_no_stream(self, runner, patched_cli):
+        patched_cli["content"] = (
+            '<document file_name="report.pdf" num_pages="4">\n'
+            '<page page_index="0">hello</page>\n</document>'
+        )
+        url = "https://storage.example.com/hub/examples/report.pdf"
+        result = runner.invoke(
+            app, ["gw", "chat", url, "-m", "glm-ocr", "--no-stream"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert "pages: 4" in result.stdout
         assert "pages/s:" in result.stdout
 
     def test_chat_json_carries_cost(self, runner, patched_cli, tmp_path):
