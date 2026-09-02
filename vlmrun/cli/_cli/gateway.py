@@ -872,7 +872,7 @@ def chat(
         console.rule(
             _stats_footer(model, latency_s, usage, pages=pages),
             align="right",
-            style="blue",
+            style="dim",
         )
         return
 
@@ -1130,11 +1130,11 @@ def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
     return "".join(content), "".join(reasoning), usage
 
 
-_STATS_LINE_STYLE = "dim not bold"
+_STATS_LINE_STYLE = "dim white not bold"
 
 
 def _stats_markup(parts: List[str]) -> str:
-    """Rich markup for the gw chat stats line — light mono, not bold."""
+    """Rich markup for the gw chat stats line — dim white, not bold."""
     return f"[{_STATS_LINE_STYLE}]{' · '.join(parts)}[/{_STATS_LINE_STYLE}]"
 
 

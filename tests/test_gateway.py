@@ -618,10 +618,11 @@ class TestHelpers:
         assert parts[4] == "pages/s: 2.00"
         assert "2s" in parts
 
-    def test_stats_markup_is_light_not_bold(self):
+    def test_stats_markup_is_dim_white_not_bold(self):
         markup = gw._stats_markup(["glm-ocr", "2s"])
+        assert "dim" in markup
+        assert "white" in markup
         assert "not bold" in markup
-        assert "[white]" not in markup
         assert "[bold]" not in markup
 
     def test_stats_parts_skips_pages_for_images(self):
