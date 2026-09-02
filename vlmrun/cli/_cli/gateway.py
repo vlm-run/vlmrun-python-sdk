@@ -894,16 +894,17 @@ EMBED_HELP = """Embed text, images or video with a gateway embedding model.
 \b
 EXAMPLES:
   vlmrun gw embed -t "a blue parrot" -m qwen/qwen3-vl-embedding-2b
+  vlmrun gw embed -p "a blue parrot" -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed photo.jpg -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed https://example.com/photo.jpg -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed a.jpg b.jpg -t "caption" -m qwen/qwen3-vl-embedding-2b
-  vlmrun gw embed photo.jpg -t "caption" --join -m qwen/qwen3-vl-embedding-2b
+  vlmrun gw embed photo.jpg -p "caption" --join -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed -t "hi" -m qwen/qwen3-vl-embedding-2b --dimensions 64
   vlmrun gw embed photo.jpg -m qwen/qwen3-vl-embedding-2b --json  # full vectors
 
 \b
 NOTES:
-  Every file and every -t/--text is embedded as its own vector. Use --join to
+  Every file and every -p/--text is embedded as its own vector. Use --join to
   embed them together as a single vector instead (e.g. an image plus its
   caption); models embed at most one image per vector, so --join accepts at
   most one file.
@@ -951,7 +952,7 @@ def _embed_part(path: Path) -> Dict[str, Any]:
         console.print(
             f"[red]Error:[/] Cannot embed '{path.name}': unsupported type "
             f"'{mime}'. Embedding models accept images and video only "
-            "(use --text for text)."
+            "(use -p/--text for text)."
         )
         raise typer.Exit(1)
     b64 = base64.b64encode(data).decode("ascii")
@@ -965,7 +966,7 @@ def _embed_input(raw: str) -> Dict[str, Any]:
         if not _embed_part_type_allowed(part_type):
             console.print(
                 f"[red]Error:[/] Cannot embed '{raw}': unsupported URL type. "
-                "Embedding models accept images and video only (use --text for text)."
+                "Embedding models accept images and video only (use -p/--text for text)."
             )
             raise typer.Exit(1)
         return _encode_url_part(raw)
@@ -1170,6 +1171,7 @@ def embed(
         None,
         "--text",
         "-t",
+        "-p",
         help="Text to embed (repeatable). Its own vector unless --join is set.",
     ),
     join: bool = typer.Option(
@@ -1193,7 +1195,7 @@ def embed(
     texts = list(text or [])
 
     if not file_inputs and not texts:
-        console.print("[red]Error:[/] Provide at least one file or --text to embed.")
+        console.print("[red]Error:[/] Provide at least one file or -p/--text to embed.")
         raise typer.Exit(1)
     for raw in file_inputs:
         _validate_embed_input(raw)

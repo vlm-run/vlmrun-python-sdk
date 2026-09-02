@@ -779,6 +779,12 @@ class TestGatewayEmbed:
         # Plain text rides as a bare string.
         assert call["input"] == ["hello"]
 
+    def test_embed_text_prompt_alias(self, runner, patched_cli):
+        result = runner.invoke(app, ["gw", "embed", "-p", "hello", "-m", "emb"])
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.embeddings.calls[-1]
+        assert call["input"] == ["hello"]
+
     def test_embed_image_nests_content_parts(self, runner, patched_cli, tmp_path):
         """Each item must be a *list* of parts; a flat parts list is rejected."""
         img = tmp_path / "a.png"
@@ -861,7 +867,7 @@ class TestGatewayEmbed:
     def test_embed_requires_input(self, runner, patched_cli):
         result = runner.invoke(app, ["gw", "embed", "-m", "emb"])
         assert result.exit_code == 1
-        assert "at least one file or --text" in result.stdout
+        assert "at least one file or -p/--text" in result.stdout
 
     def test_embed_rejects_non_image_file(self, runner, patched_cli, tmp_path):
         # A PDF (or any non-image/video) must be rejected client-side rather
