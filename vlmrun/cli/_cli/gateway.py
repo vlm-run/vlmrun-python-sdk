@@ -22,6 +22,7 @@ import base64
 import inspect
 import json
 import mimetypes
+import re
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -38,7 +39,9 @@ from rich.tree import Tree
 from rich import box
 
 from vlmrun.client import VLMRun
+from vlmrun.client.exceptions import DependencyError
 from vlmrun.client.gateway import _require_openai
+from vlmrun.common.dependencies import require_pypdfium2
 from vlmrun.cli._cli.chat import (
     TimedStatus,
     format_file_size,
@@ -867,7 +870,16 @@ def chat(
         if error:
             console.print(f"[red]Error:[/] {error}")
             raise typer.Exit(1)
-        console.rule(_stats_footer(model, latency_s, usage), align="right", style="blue")
+        pages = (
+            _document_page_count(inputs, content)
+            if any(_is_document_input(raw) for raw in inputs)
+            else None
+        )
+        console.rule(
+            _stats_footer(model, latency_s, usage, pages=pages),
+            align="right",
+            style="blue",
+        )
         return
 
     error = _content_error(content)
@@ -886,7 +898,12 @@ def chat(
         console.print(f"[red]Error:[/] {error}")
         raise typer.Exit(1)
 
-    _print_output(content, model, latency_s, usage)
+    pages = (
+        _document_page_count(inputs, content)
+        if any(_is_document_input(raw) for raw in inputs)
+        else None
+    )
+    _print_output(content, model, latency_s, usage, pages=pages)
 
 
 EMBED_HELP = """Embed text, images or video with a gateway embedding model.
@@ -1012,6 +1029,68 @@ def _format_toks_per_sec(completion_tokens: int, latency_s: float) -> Optional[s
     return f"{int(completion_tokens / latency_s)} toks/s"
 
 
+_DOCUMENT_PAGES_RE = re.compile(r"<document\s+pages=\"(\d+)\"", re.IGNORECASE)
+
+
+def _is_document_input(raw: str) -> bool:
+    """Return True if ``raw`` is a document file path or URL."""
+    if _is_http_url(raw):
+        return _content_part_type_from_url(raw) == "document_url"
+    path = Path(raw).expanduser()
+    return _content_part_type(path) == "document_url"
+
+
+def _parse_document_pages_from_content(content: str) -> Optional[int]:
+    """Sum ``pages`` attributes from ``<document pages="N">`` wrappers in OCR output."""
+    matches = _DOCUMENT_PAGES_RE.findall(content)
+    if not matches:
+        return None
+    return sum(int(m) for m in matches)
+
+
+def _count_local_document_pages(path: Path) -> Optional[int]:
+    """Page count for a local document file, or None when unknown."""
+    suffix = path.suffix.lower()
+    if suffix != ".pdf":
+        return None
+    try:
+        pdfium = require_pypdfium2()
+    except DependencyError:
+        return None
+    try:
+        doc = pdfium.PdfDocument(str(path))
+        count = len(doc)
+        doc.close()
+        return count
+    except Exception:
+        return None
+
+
+def _document_page_count(inputs: List[str], content: str) -> Optional[int]:
+    """Total pages for document chat inputs, preferring gateway response metadata."""
+    from_content = _parse_document_pages_from_content(content)
+    if from_content is not None:
+        return from_content
+    total = 0
+    counted = False
+    for raw in inputs:
+        if _is_http_url(raw) or not _is_document_input(raw):
+            continue
+        path = Path(raw).expanduser()
+        pages = _count_local_document_pages(path)
+        if pages is not None:
+            total += pages
+            counted = True
+    return total if counted else None
+
+
+def _format_pages_stat(pages: int, latency_s: Optional[float]) -> str:
+    """Format document page count and throughput for the stats footer."""
+    if latency_s is not None and latency_s > 0:
+        return f"pages: {pages}, pages/s: {int(pages / latency_s)}"
+    return f"pages: {pages}"
+
+
 def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
     """Consume a chat-completion stream into (content, reasoning, usage).
 
@@ -1047,7 +1126,13 @@ def _drain_stream(stream, on_update=None) -> Tuple[str, str, Any]:
     return "".join(content), "".join(reasoning), usage
 
 
-def _stats_parts(model: str, latency_s: Optional[float], usage: Any) -> List[str]:
+def _stats_parts(
+    model: str,
+    latency_s: Optional[float],
+    usage: Any,
+    *,
+    pages: Optional[int] = None,
+) -> List[str]:
     """The model / token / throughput / latency / cost fragments for a footer."""
     stats = [model]
     if usage is not None:
@@ -1055,11 +1140,13 @@ def _stats_parts(model: str, latency_s: Optional[float], usage: Any) -> List[str
         if total:
             prompt_toks = getattr(usage, "prompt_tokens", 0)
             completion_toks = getattr(usage, "completion_tokens", 0)
-            stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} tokens")
+            stats.append(f"P:{prompt_toks} / C:{completion_toks} / T:{total} toks")
             if latency_s is not None:
                 toks_per_sec = _format_toks_per_sec(completion_toks, latency_s)
                 if toks_per_sec:
                     stats.append(toks_per_sec)
+    if pages is not None and pages > 0:
+        stats.append(_format_pages_stat(pages, latency_s))
     if latency_s is not None:
         stats.append(f"{latency_s:.2f}s")
     if usage is not None:
@@ -1069,9 +1156,17 @@ def _stats_parts(model: str, latency_s: Optional[float], usage: Any) -> List[str
     return stats
 
 
-def _stats_footer(model: str, latency_s: Optional[float], usage: Any) -> str:
+def _stats_footer(
+    model: str,
+    latency_s: Optional[float],
+    usage: Any,
+    *,
+    pages: Optional[int] = None,
+) -> str:
     """A dim one-line stats footer, right-padded to sit under streamed text."""
-    return f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage))}[/white][/dim]"
+    return (
+        f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage, pages=pages))}[/white][/dim]"
+    )
 
 
 def _response_panel(
@@ -1081,6 +1176,7 @@ def _response_panel(
     usage: Any,
     *,
     reasoning: str = "",
+    pages: Optional[int] = None,
 ) -> Panel:
     """Build the bordered Rich panel for a buffered gateway response.
 
@@ -1100,7 +1196,9 @@ def _response_panel(
     else:
         body = "[dim](empty response)[/dim]"
 
-    subtitle = f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage))}[/white][/dim]"
+    subtitle = (
+        f"[dim][white]{' · '.join(_stats_parts(model, latency_s, usage, pages=pages))}[/white][/dim]"
+    )
     return Panel(
         body,
         title="[bold]Response[/bold]",
@@ -1112,9 +1210,18 @@ def _response_panel(
     )
 
 
-def _print_output(content: str, model: str, latency_s: float, usage: Any) -> None:
+def _print_output(
+    content: str,
+    model: str,
+    latency_s: float,
+    usage: Any,
+    *,
+    pages: Optional[int] = None,
+) -> None:
     """Render the gateway response in a Rich panel."""
-    console.print(_response_panel(content, model, latency_s, usage))
+    console.print(
+        _response_panel(content, model, latency_s, usage, pages=pages)
+    )
 
 
 @app.command(help=EMBED_HELP, context_settings={"max_content_width": 120})

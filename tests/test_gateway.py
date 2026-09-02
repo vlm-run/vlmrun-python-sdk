@@ -574,6 +574,29 @@ class TestHelpers:
         assert gw._format_toks_per_sec(0, 1.0) is None
         assert gw._format_toks_per_sec(10, 0) is None
 
+    def test_parse_document_pages_from_content(self):
+        content = (
+            '<document pages="3">\n<page index="0">a</page>\n</document>'
+        )
+        assert gw._parse_document_pages_from_content(content) == 3
+        assert gw._parse_document_pages_from_content("plain text") is None
+
+    def test_format_pages_stat(self):
+        assert gw._format_pages_stat(10, 5.0) == "pages: 10, pages/s: 2"
+        assert gw._format_pages_stat(4, None) == "pages: 4"
+
+    def test_stats_parts_uses_toks_label_and_pages(self):
+        usage = FakeUsage(prompt_tokens=5, completion_tokens=15)
+        parts = gw._stats_parts("glm-ocr", 2.0, usage, pages=4)
+        assert "T:20 toks" in parts[1]
+        assert "7 toks/s" in parts[2]
+        assert "pages: 4, pages/s: 2" in parts[3]
+
+    def test_stats_parts_skips_pages_for_images(self):
+        usage = FakeUsage()
+        parts = gw._stats_parts("glm-ocr", 1.0, usage, pages=None)
+        assert all("pages" not in p for p in parts)
+
     def test_content_error_detects_error_payload(self):
         assert (
             gw._content_error('{"error": "Unknown method \'zzz\'"}')
@@ -1308,6 +1331,21 @@ class TestGatewayTranscribe:
         assert result.exit_code == 0, result.stdout
         assert "$0.001508" in result.stdout
         assert " toks/s" in result.stdout
+        assert " toks" in result.stdout
+        assert " tokens" not in result.stdout
+
+    def test_chat_panel_shows_document_pages(self, runner, patched_cli, tmp_path):
+        patched_cli["content"] = (
+            '<document pages="5">\n<page index="0">\nhello\n</page>\n</document>'
+        )
+        doc = tmp_path / "doc.pdf"
+        doc.write_bytes(b"%PDF-1.4 fake")
+        result = runner.invoke(
+            app, ["gw", "chat", str(doc), "-m", "glm-ocr", "--no-stream"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert "pages: 5" in result.stdout
+        assert "pages/s:" in result.stdout
 
     def test_chat_json_carries_cost(self, runner, patched_cli, tmp_path):
         patched_cli["cost"] = 0.0042
