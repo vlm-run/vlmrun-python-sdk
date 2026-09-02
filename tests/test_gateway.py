@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+import typer
 from rich.markdown import Markdown
 from rich.text import Text
 from typer.testing import CliRunner
@@ -395,6 +396,16 @@ class TestHelpers:
         assert part["type"] == "document_url"
         assert part["document_url"]["url"] == "https://example.com/report.pdf"
 
+    def test_embed_input_url(self):
+        part = gw._embed_input("https://example.com/scan.jpg")
+        assert part["type"] == "image_url"
+        assert part["image_url"]["url"] == "https://example.com/scan.jpg"
+
+    def test_embed_input_rejects_document_url(self, monkeypatch):
+        monkeypatch.setattr(gw.console, "print", lambda *a, **k: None)
+        with pytest.raises(typer.Exit):
+            gw._embed_input("https://example.com/report.pdf")
+
     def test_encode_document_part(self, tmp_path):
         f = tmp_path / "doc.pdf"
         f.write_bytes(b"%PDF-1.7 fake")
@@ -781,6 +792,28 @@ class TestGatewayEmbed:
         assert item[0]["type"] == "image_url"
         assert item[0]["image_url"]["url"].startswith("data:image/png;base64,")
 
+    def test_embed_image_url(self, runner, patched_cli):
+        url = "https://example.com/a.png"
+        result = runner.invoke(app, ["gw", "embed", url, "-m", "emb"])
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.embeddings.calls[-1]
+        item = call["input"][0]
+        assert item[0]["type"] == "image_url"
+        assert item[0]["image_url"]["url"] == url
+
+    def test_embed_rejects_document_url(self, runner, patched_cli):
+        result = runner.invoke(
+            app, ["gw", "embed", "https://example.com/doc.pdf", "-m", "emb"]
+        )
+        assert result.exit_code == 1
+        assert "images and video only" in result.stdout
+        assert not patched_cli["client"].gateway.embeddings.calls
+
+    def test_embed_rejects_missing_file(self, runner, patched_cli):
+        result = runner.invoke(app, ["gw", "embed", "missing.png", "-m", "emb"])
+        assert result.exit_code == 1
+        assert "not a file" in result.stdout.lower()
+
     def test_embed_video_uses_video_url_part(self, runner, patched_cli, tmp_path):
         vid = tmp_path / "clip.mp4"
         vid.write_bytes(MP4_BYTES)
@@ -896,10 +929,17 @@ class TestGatewayTranscribe:
         call = patched_cli["client"].gateway.transcriptions.calls[-1]
         assert call["extra_body"] == {"url": "https://x/a.mp3"}
 
+    def test_transcribe_positional_url(self, runner, patched_cli):
+        url = "https://example.com/a.mp3"
+        result = runner.invoke(app, ["gw", "transcribe", url, "-m", "asr"])
+        assert result.exit_code == 0, result.stdout
+        call = patched_cli["client"].gateway.transcriptions.calls[-1]
+        assert call["extra_body"] == {"url": url}
+
     def test_transcribe_requires_input(self, runner, patched_cli):
         result = runner.invoke(app, ["gw", "transcribe", "-m", "asr"])
         assert result.exit_code == 1
-        assert "audio file or --url" in result.stdout
+        assert "audio file or url" in result.stdout.lower()
 
     def test_transcribe_rejects_file_and_url(self, runner, patched_cli, tmp_path):
         audio = tmp_path / "clip.mp3"
@@ -910,6 +950,11 @@ class TestGatewayTranscribe:
         )
         assert result.exit_code == 1
         assert "not both" in result.stdout
+
+    def test_transcribe_rejects_missing_file(self, runner, patched_cli):
+        result = runner.invoke(app, ["gw", "transcribe", "missing.mp3", "-m", "asr"])
+        assert result.exit_code == 1
+        assert "not a file" in result.stdout.lower()
 
     def test_transcribe_bad_format(self, runner, patched_cli, tmp_path):
         audio = tmp_path / "clip.mp3"
