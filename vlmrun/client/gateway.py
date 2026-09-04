@@ -72,12 +72,16 @@ class Gateway:
             return 600.0
         return timeout
 
+    def _openai_api_key(self) -> str:
+        """API key for the OpenAI SDK (empty string when unset)."""
+        return self._client.api_key or ""
+
     @cached_property
     def _openai(self):
         """Synchronous OpenAI client pointed at the gateway."""
         openai = _require_openai()
         return openai.OpenAI(
-            api_key=self._client.api_key,
+            api_key=self._openai_api_key(),
             base_url=self.openai_base_url,
             timeout=self._timeout(),
             max_retries=self._client.max_retries,
@@ -88,7 +92,7 @@ class Gateway:
         """Asynchronous OpenAI client pointed at the gateway."""
         openai = _require_openai()
         return openai.AsyncOpenAI(
-            api_key=self._client.api_key,
+            api_key=self._openai_api_key(),
             base_url=self.openai_base_url,
             timeout=self._timeout(),
             max_retries=self._client.max_retries,
@@ -209,7 +213,9 @@ class Gateway:
         """
         import requests
 
-        headers = {"Authorization": f"Bearer {self._client.api_key}"}
+        headers = {}
+        if self._client.api_key:
+            headers["Authorization"] = f"Bearer {self._client.api_key}"
         try:
             resp = requests.get(
                 f"{self.base_url}/health", headers=headers, timeout=30.0

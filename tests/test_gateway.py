@@ -232,7 +232,7 @@ def patched_cli(monkeypatch):
     monkeypatch.setenv("VLMRUN_API_KEY", "test-key")
     holder = {}
 
-    def _factory(api_key=None, base_url=None):
+    def _factory(api_key=None, base_url=None, require_api_key=True, **_kwargs):
         healthy = holder.get("healthy", True)
         client = FakeClient(api_key=api_key, base_url=base_url, healthy=healthy)
         if "content" in holder:
@@ -349,6 +349,31 @@ class TestGatewayResource:
 
         g.__dict__["_openai"] = _OpenAI()
         assert g.health() is False
+
+    def test_health_omits_auth_header_without_api_key(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @property
+            def is_success(self):
+                return True
+
+        def _get(url, headers=None, timeout=None):
+            captured["headers"] = headers
+            return _Resp()
+
+        monkeypatch.setattr("requests.get", _get)
+        client = _MiniClient()
+        client.api_key = None
+        assert Gateway(client).health() is True
+        assert captured["headers"] == {}
+
+    def test_openai_api_key_defaults_to_empty_string(self):
+        client = _MiniClient()
+        client.api_key = None
+        assert Gateway(client)._openai_api_key() == ""
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +776,25 @@ class TestHelpers:
 
 
 class TestGatewayCLI:
+    def test_gw_skips_api_key_check(self, runner, monkeypatch):
+        monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
+        holder: dict[str, object] = {}
+
+        def _factory(**kwargs):
+            holder["kwargs"] = kwargs
+            return FakeClient(api_key=kwargs.get("api_key"), healthy=True)
+
+        monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
+        result = runner.invoke(app, ["gw", "health"])
+        assert result.exit_code == 0
+        assert holder["kwargs"]["require_api_key"] is False
+
+    def test_non_gw_still_requires_api_key(self, runner, monkeypatch):
+        monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
+        result = runner.invoke(app, ["files", "list"])
+        assert result.exit_code == 1
+        assert "API key not found" in result.stdout
+
     @pytest.mark.parametrize("alias", ["gw", "gateway"])
     def test_both_aliases_registered(self, runner, patched_cli, alias):
         result = runner.invoke(app, [alias, "health"])

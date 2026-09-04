@@ -45,6 +45,9 @@ class VLMRun:
             VLMRUN_BASE_URL environment variable or https://api.vlm.run/v1.
         timeout: Request timeout in seconds. Defaults to 120.0.
         max_retries: Maximum number of retry attempts for failed requests. Defaults to 5.
+        require_api_key: When True (default), missing API keys raise ConfigurationError
+            and the key is validated against the platform /health endpoint. Set to
+            False for gateway-only usage where an API key is optional.
         files: Files resource for managing files
         models: Models resource for accessing available models
         finetune: Fine-tuning resource for model fine-tuning
@@ -54,6 +57,7 @@ class VLMRun:
     base_url: Optional[str] = None
     timeout: float = 120.0
     max_retries: int = 5
+    require_api_key: bool = True
 
     def __post_init__(self):
         """Initialize the client after dataclass initialization.
@@ -65,7 +69,7 @@ class VLMRun:
         # Handle API key first
         if not self.api_key:  # Handle both None and empty string
             self.api_key = os.getenv("VLMRUN_API_KEY", None)
-            if not self.api_key:  # Still None or empty after env check
+            if not self.api_key and self.require_api_key:
                 raise ConfigurationError(
                     message="Missing API key",
                     error_type="missing_api_key",
@@ -81,28 +85,29 @@ class VLMRun:
         if self.base_url is None:
             self.base_url = os.getenv("VLMRUN_BASE_URL", DEFAULT_BASE_URL)
 
-        # Initialize requestor for API key validation
-        requestor = APIRequestor(
-            self, timeout=self.timeout, max_retries=self.max_retries
-        )
-
-        # Validate API key by making a health check request
-        try:
-            _, status_code, _ = requestor.request(
-                method="GET", url="/health", raw_response=True
+        if self.require_api_key:
+            # Initialize requestor for API key validation
+            requestor = APIRequestor(
+                self, timeout=self.timeout, max_retries=self.max_retries
             )
-            if status_code != 200:
+
+            # Validate API key by making a health check request
+            try:
+                _, status_code, _ = requestor.request(
+                    method="GET", url="/health", raw_response=True
+                )
+                if status_code != 200:
+                    raise AuthenticationError(
+                        message="Invalid API key",
+                        error_type="invalid_api_key",
+                        suggestion="Please check your API key and ensure it is valid. You can get your API key at https://app.vlm.run/dashboard",
+                    )
+            except AuthenticationError as e:
                 raise AuthenticationError(
                     message="Invalid API key",
                     error_type="invalid_api_key",
                     suggestion="Please check your API key and ensure it is valid. You can get your API key at https://app.vlm.run/dashboard",
-                )
-        except AuthenticationError as e:
-            raise AuthenticationError(
-                message="Invalid API key",
-                error_type="invalid_api_key",
-                suggestion="Please check your API key and ensure it is valid. You can get your API key at https://app.vlm.run/dashboard",
-            ) from e
+                ) from e
 
         # Initialize resources
         self.datasets = Datasets(self)
