@@ -375,6 +375,45 @@ class TestGatewayResource:
         client.api_key = None
         assert Gateway(client)._openai_api_key() == ""
 
+    def test_openai_api_key_passes_through_client_key(self):
+        client = _MiniClient()
+        client.api_key = "sk-gateway"
+        assert Gateway(client)._openai_api_key() == "sk-gateway"
+
+    def test_health_includes_auth_header_with_api_key(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @property
+            def is_success(self):
+                return True
+
+        def _get(url, headers=None, timeout=None):
+            captured["headers"] = headers
+            return _Resp()
+
+        monkeypatch.setattr("requests.get", _get)
+        client = _MiniClient()
+        client.api_key = "sk-gateway"
+        assert Gateway(client).health() is True
+        assert captured["headers"] == {"Authorization": "Bearer sk-gateway"}
+
+    def test_openai_client_receives_api_key(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class _OpenAI:
+            def __init__(self, api_key=None, base_url=None, timeout=None, max_retries=None):
+                captured["api_key"] = api_key
+                captured["base_url"] = base_url
+
+        monkeypatch.setattr("vlmrun.client.gateway._require_openai", lambda: type("openai", (), {"OpenAI": _OpenAI})())
+        client = _MiniClient()
+        client.api_key = "sk-gateway"
+        Gateway(client)._openai  # noqa: B018 - populate cached_property
+        assert captured["api_key"] == "sk-gateway"
+
 
 # ---------------------------------------------------------------------------
 # CLI helper functions
@@ -788,6 +827,41 @@ class TestGatewayCLI:
         result = runner.invoke(app, ["gw", "health"])
         assert result.exit_code == 0
         assert holder["kwargs"]["require_api_key"] is False
+
+    def test_gw_uses_api_key_when_present(self, runner, monkeypatch):
+        monkeypatch.setenv("VLMRUN_API_KEY", "env-gateway-key")
+        holder: dict[str, object] = {}
+
+        def _factory(**kwargs):
+            holder["kwargs"] = kwargs
+            client = FakeClient(api_key=kwargs.get("api_key"), healthy=True)
+            holder["client"] = client
+            return client
+
+        monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
+        result = runner.invoke(app, ["gw", "health"])
+        assert result.exit_code == 0
+        assert holder["kwargs"]["require_api_key"] is False
+        assert holder["kwargs"]["api_key"] == "env-gateway-key"
+        assert holder["client"].api_key == "env-gateway-key"
+
+    def test_gw_cli_flag_api_key_takes_precedence(self, runner, monkeypatch):
+        monkeypatch.setenv("VLMRUN_API_KEY", "env-gateway-key")
+        holder: dict[str, object] = {}
+
+        def _factory(**kwargs):
+            holder["kwargs"] = kwargs
+            client = FakeClient(api_key=kwargs.get("api_key"), healthy=True)
+            holder["client"] = client
+            return client
+
+        monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
+        result = runner.invoke(
+            app, ["--api-key", "cli-gateway-key", "gw", "health"]
+        )
+        assert result.exit_code == 0
+        assert holder["kwargs"]["api_key"] == "cli-gateway-key"
+        assert holder["client"].api_key == "cli-gateway-key"
 
     def test_non_gw_still_requires_api_key(self, runner, monkeypatch):
         monkeypatch.delenv("VLMRUN_API_KEY", raising=False)

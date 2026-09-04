@@ -79,6 +79,15 @@ def test_client_without_api_key_when_not_required(monkeypatch):
     assert client.base_url == "https://api.vlm.run/v1"
 
 
+def test_client_gateway_uses_env_api_key_when_not_required(monkeypatch):
+    """Gateway-only clients still pick up VLMRUN_API_KEY when present."""
+    monkeypatch.setenv("VLMRUN_API_KEY", "env-gateway-key")
+    monkeypatch.delenv("VLMRUN_BASE_URL", raising=False)
+
+    client = VLMRun(require_api_key=False)
+    assert client.api_key == "env-gateway-key"
+
+
 def test_client_env_precedence(monkeypatch):
     """Test that constructor values take precedence over environment variables."""
     monkeypatch.setenv("VLMRUN_API_KEY", "env-key")
