@@ -26,33 +26,124 @@ from vlmrun.common.dependencies import require_openai
 # via `extra_body`.
 _VLM_EXTRA_KEYS: frozenset[str] = frozenset({"skills", "toolsets", "models"})
 
+# Default wall-clock budget for following a Modal 303 long-request poll URL.
+_DEFAULT_LONG_REQUEST_TIMEOUT = 900.0
 
-def _patch_create(create_fn: Any) -> Any:
-    """Wrap an OpenAI ``create`` callable to accept VLM Run-specific kwargs.
+
+def _pop_vlm_extra_kwargs(kwargs: dict[str, Any]) -> None:
+    """Move VLM-specific kwargs into ``extra_body`` in-place."""
+    vlm_kwargs = {k: kwargs.pop(k) for k in _VLM_EXTRA_KEYS if k in kwargs}
+    if vlm_kwargs:
+        kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **vlm_kwargs}
+
+
+def _status_code_from_exc(exc: BaseException) -> int | None:
+    """Best-effort extract of an HTTP status code from an OpenAI/httpx error."""
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    response = getattr(exc, "response", None)
+    if response is not None:
+        status = getattr(response, "status_code", None)
+        if isinstance(status, int):
+            return status
+    return None
+
+
+def _headers_from_exc(exc: BaseException) -> dict[str, Any]:
+    """Best-effort extract of response headers from an OpenAI/httpx error."""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return {}
+    headers = getattr(response, "headers", None) or {}
+    try:
+        return dict(headers)
+    except Exception:
+        return {}
+
+
+def _parse_chat_completion(body: bytes) -> Any:
+    """Parse poll-response bytes into an OpenAI ChatCompletion object."""
+    import json
+
+    from openai.types.chat import ChatCompletion
+
+    payload = json.loads(body)
+    return ChatCompletion.model_validate(payload)
+
+
+def _follow_long_request_303(
+    exc: BaseException,
+    *,
+    api_key: str | None,
+    timeout: float,
+) -> Any:
+    """Poll the Modal ``Location`` URL from a 303 and return the ChatCompletion."""
+    from vlmrun.client.long_request import (
+        extract_location,
+        poll_location,
+    )
+
+    location = extract_location(_headers_from_exc(exc))
+    if not location:
+        raise exc
+
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    body, _status, _resp_headers = poll_location(
+        location,
+        headers=headers,
+        timeout=timeout,
+    )
+    return _parse_chat_completion(body)
+
+
+def _patch_create(create_fn: Any, *, api_key: str | None, timeout: float) -> Any:
+    """Wrap an OpenAI ``create`` callable for VLM kwargs + Modal 303 polling.
 
     ``skills``, ``toolsets``, and ``models`` are popped from ``kwargs`` and
-    merged into ``extra_body`` before the underlying call is made.
+    merged into ``extra_body`` before the underlying call is made. If the
+    gateway returns ``303 See Other`` (long request), the Location URL is
+    polled until the chat completion is ready.
     """
 
     @functools.wraps(create_fn)
     def _create(*args: Any, **kwargs: Any) -> Any:
-        vlm_kwargs = {k: kwargs.pop(k) for k in _VLM_EXTRA_KEYS if k in kwargs}
-        if vlm_kwargs:
-            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **vlm_kwargs}
-        return create_fn(*args, **kwargs)
+        _pop_vlm_extra_kwargs(kwargs)
+        try:
+            return create_fn(*args, **kwargs)
+        except Exception as exc:
+            if _status_code_from_exc(exc) != 303:
+                raise
+            return _follow_long_request_303(
+                exc,
+                api_key=api_key,
+                timeout=max(float(timeout or 0), _DEFAULT_LONG_REQUEST_TIMEOUT),
+            )
 
     return _create
 
 
-def _patch_async_create(create_fn: Any) -> Any:
+def _patch_async_create(create_fn: Any, *, api_key: str | None, timeout: float) -> Any:
     """Async variant of :func:`_patch_create`."""
+    import asyncio
 
     @functools.wraps(create_fn)
     async def _create(*args: Any, **kwargs: Any) -> Any:
-        vlm_kwargs = {k: kwargs.pop(k) for k in _VLM_EXTRA_KEYS if k in kwargs}
-        if vlm_kwargs:
-            kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **vlm_kwargs}
-        return await create_fn(*args, **kwargs)
+        _pop_vlm_extra_kwargs(kwargs)
+        try:
+            return await create_fn(*args, **kwargs)
+        except Exception as exc:
+            if _status_code_from_exc(exc) != 303:
+                raise
+            return await asyncio.to_thread(
+                _follow_long_request_303,
+                exc,
+                api_key=api_key,
+                timeout=max(float(timeout or 0), _DEFAULT_LONG_REQUEST_TIMEOUT),
+            )
 
     return _create
 
@@ -317,7 +408,11 @@ class Agent:
         )
 
         completions = openai_client.chat.completions
-        completions.create = _patch_create(completions.create)
+        completions.create = _patch_create(
+            completions.create,
+            api_key=self._client.api_key,
+            timeout=float(self._client.timeout or _DEFAULT_LONG_REQUEST_TIMEOUT),
+        )
         return completions
 
     @cached_property
@@ -363,5 +458,9 @@ class Agent:
         )
 
         completions = async_openai_client.chat.completions
-        completions.create = _patch_async_create(completions.create)
+        completions.create = _patch_async_create(
+            completions.create,
+            api_key=self._client.api_key,
+            timeout=float(self._client.timeout or _DEFAULT_LONG_REQUEST_TIMEOUT),
+        )
         return completions
