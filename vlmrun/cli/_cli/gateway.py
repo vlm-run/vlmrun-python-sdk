@@ -906,18 +906,21 @@ EMBED_HELP = """Embed text, images or video with a gateway embedding model.
 \b
 EXAMPLES:
   vlmrun gw embed -t "a blue parrot" -m qwen/qwen3-vl-embedding-2b
+  vlmrun gw embed -p "a blue parrot" -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed photo.jpg -m qwen/qwen3-vl-embedding-2b
+  vlmrun gw embed https://example.com/photo.jpg -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed a.jpg b.jpg -t "caption" -m qwen/qwen3-vl-embedding-2b
-  vlmrun gw embed photo.jpg -t "caption" --join -m qwen/qwen3-vl-embedding-2b
+  vlmrun gw embed photo.jpg -p "caption" --join -m qwen/qwen3-vl-embedding-2b
   vlmrun gw embed -t "hi" -m qwen/qwen3-vl-embedding-2b --dimensions 64
   vlmrun gw embed photo.jpg -m qwen/qwen3-vl-embedding-2b --json  # full vectors
 
 \b
 NOTES:
-  Every file and every -t/--text is embedded as its own vector. Use --join to
+  Every file and every -p/--text is embedded as its own vector. Use --join to
   embed them together as a single vector instead (e.g. an image plus its
   caption); models embed at most one image per vector, so --join accepts at
   most one file.
+  Inputs are local file paths or http(s) URLs (image or video).
   Video is accepted by the API but is not currently backed by any embedding
   model: it returns the same vector regardless of the clip.
 """
@@ -928,17 +931,23 @@ TRANSCRIBE_HELP = """Transcribe audio with a gateway transcription model.
 EXAMPLES:
   vlmrun gw transcribe clip.mp3 -m nvidia/parakeet-tdt-0.6b-v3
   vlmrun gw transcribe clip.mp4 -m nvidia/parakeet-tdt-0.6b-v3   # video's audio track
+  vlmrun gw transcribe https://example.com/a.mp3 -m nvidia/parakeet-tdt-0.6b-v3
   vlmrun gw transcribe clip.mp3 -m nvidia/parakeet-tdt-0.6b-v3 -f srt
   vlmrun gw transcribe clip.mp3 -m nvidia/parakeet-tdt-0.6b-v3 --language en
-  vlmrun gw transcribe --url https://example.com/a.mp3 -m nvidia/parakeet-tdt-0.6b-v3
 
 \b
 NOTES:
-  Accepts audio files, or a video file whose audio track is transcribed.
+  Accepts local audio/video files or http(s) URLs. A video file's audio track
+  is transcribed.
   Formats: json, text, verbose_json, srt, vtt.
 """
 
 TRANSCRIBE_FORMATS = ("json", "text", "verbose_json", "srt", "vtt")
+
+
+def _embed_part_type_allowed(part_type: str) -> bool:
+    """Return True if a content-part type is valid for embedding models."""
+    return part_type in ("image_url", "video_url")
 
 
 def _embed_part(path: Path) -> Dict[str, Any]:
@@ -950,19 +959,50 @@ def _embed_part(path: Path) -> Dict[str, Any]:
     """
     data = path.read_bytes()
     mime = _guess_mime(path, data)
-    if mime.startswith("video/"):
-        key = "video_url"
-    elif mime.startswith("image/"):
-        key = "image_url"
-    else:
+    key = _content_part_type(path, mime)
+    if not _embed_part_type_allowed(key):
         console.print(
             f"[red]Error:[/] Cannot embed '{path.name}': unsupported type "
             f"'{mime}'. Embedding models accept images and video only "
-            "(use --text for text)."
+            "(use -p/--text for text)."
         )
         raise typer.Exit(1)
     b64 = base64.b64encode(data).decode("ascii")
     return {"type": key, key: {"url": f"data:{mime};base64,{b64}"}}
+
+
+def _embed_input(raw: str) -> Dict[str, Any]:
+    """Encode one embed input — a local file path or http(s) URL."""
+    if _is_http_url(raw):
+        part_type = _content_part_type_from_url(raw)
+        if not _embed_part_type_allowed(part_type):
+            console.print(
+                f"[red]Error:[/] Cannot embed '{raw}': unsupported URL type. "
+                "Embedding models accept images and video only (use -p/--text for text)."
+            )
+            raise typer.Exit(1)
+        return _encode_url_part(raw)
+    return _embed_part(Path(raw).expanduser())
+
+
+def _validate_embed_input(raw: str) -> None:
+    """Ensure a non-URL embed input refers to a readable local file."""
+    if _is_http_url(raw):
+        return
+    path = Path(raw).expanduser()
+    if not path.is_file():
+        console.print(
+            f"[red]Error:[/] Input '{raw}' is not a file. "
+            "Provide a local path or an http(s) URL."
+        )
+        raise typer.Exit(1)
+
+
+def _embed_input_label(raw: str) -> str:
+    """Short label for an embed input in result tables."""
+    if _is_http_url(raw):
+        return raw
+    return Path(raw).expanduser().name
 
 
 def _content_error(content: str) -> Optional[str]:
@@ -1274,11 +1314,9 @@ def _print_output(
 @app.command(help=EMBED_HELP, context_settings={"max_content_width": 120})
 def embed(
     ctx: typer.Context,
-    files: List[Path] = typer.Argument(
+    inputs: List[str] = typer.Argument(
         None,
-        help="Image/video file(s) to embed. Repeatable.",
-        exists=True,
-        readable=True,
+        help="Image/video file path(s) or http(s) URL(s) to embed. Repeatable.",
     ),
     model: str = typer.Option(
         ..., "--model", "-m", help="Embedding model id (see `vlmrun gw models`)."
@@ -1287,6 +1325,7 @@ def embed(
         None,
         "--text",
         "-t",
+        "-p",
         help="Text to embed (repeatable). Its own vector unless --join is set.",
     ),
     join: bool = typer.Option(
@@ -1306,13 +1345,15 @@ def embed(
 ) -> None:
     """Embed text, images or video with a gateway embedding model."""
     client: VLMRun = ctx.obj
-    files = files or []
+    file_inputs = list(inputs or [])
     texts = list(text or [])
 
-    if not files and not texts:
-        console.print("[red]Error:[/] Provide at least one file or --text to embed.")
+    if not file_inputs and not texts:
+        console.print("[red]Error:[/] Provide at least one file or -p/--text to embed.")
         raise typer.Exit(1)
-    if join and len(files) > 1:
+    for raw in file_inputs:
+        _validate_embed_input(raw)
+    if join and len(file_inputs) > 1:
         console.print(
             "[red]Error:[/] --join accepts at most one file: embedding models take "
             "a single image per vector. Drop --join to embed each file separately."
@@ -1321,19 +1362,24 @@ def embed(
 
     # `input` is a list whose items are each either a plain string or a *list*
     # of content parts; a flat list of parts is rejected by the API.
-    inputs: List[Any] = []
+    embed_inputs: List[Any] = []
     labels: List[str] = []
     if join:
-        parts = [_embed_part(f) for f in files]
+        parts = [_embed_input(raw) for raw in file_inputs]
         parts += [{"type": "text", "text": t} for t in texts]
-        inputs.append(parts)
-        labels.append(" + ".join([f.name for f in files] + [f'"{t}"' for t in texts]))
+        embed_inputs.append(parts)
+        labels.append(
+            " + ".join(
+                [_embed_input_label(raw) for raw in file_inputs]
+                + [f'"{t}"' for t in texts]
+            )
+        )
     else:
-        for f in files:
-            inputs.append([_embed_part(f)])
-            labels.append(f.name)
+        for raw in file_inputs:
+            embed_inputs.append([_embed_input(raw)])
+            labels.append(_embed_input_label(raw))
         for t in texts:
-            inputs.append(t)
+            embed_inputs.append(t)
             labels.append(f'"{t}"')
 
     create_kwargs: Dict[str, Any] = {}
@@ -1346,7 +1392,7 @@ def embed(
     if output_json:
         with handle_api_errors():
             response = client.gateway.embeddings.create(
-                model=model, input=inputs, **create_kwargs
+                model=model, input=embed_inputs, **create_kwargs
             )
     else:
         with (
@@ -1354,7 +1400,7 @@ def embed(
             handle_api_errors(),
         ):
             response = client.gateway.embeddings.create(
-                model=model, input=inputs, **create_kwargs
+                model=model, input=embed_inputs, **create_kwargs
             )
     latency_s = time.time() - start_time
 
@@ -1411,17 +1457,17 @@ def embed(
 @app.command(help=TRANSCRIBE_HELP, context_settings={"max_content_width": 120})
 def transcribe(
     ctx: typer.Context,
-    file: Optional[Path] = typer.Argument(
+    input: Optional[str] = typer.Argument(
         None,
-        help="Audio file (or a video whose audio track is transcribed).",
-        exists=True,
-        readable=True,
+        help="Audio/video file path or http(s) URL to transcribe.",
     ),
     model: str = typer.Option(
         ..., "--model", "-m", help="Transcription model id (see `vlmrun gw models`)."
     ),
     url: Optional[str] = typer.Option(
-        None, "--url", help="Hosted audio URL instead of a local file."
+        None,
+        "--url",
+        help="Hosted audio URL (alternative to passing a URL positionally).",
     ),
     response_format: str = typer.Option(
         "json",
@@ -1443,12 +1489,31 @@ def transcribe(
     """Transcribe audio with a gateway transcription model."""
     client: VLMRun = ctx.obj
 
-    if not file and not url:
-        console.print("[red]Error:[/] Provide an audio file or --url.")
+    if not input and not url:
+        console.print("[red]Error:[/] Provide an audio file or URL.")
         raise typer.Exit(1)
-    if file and url:
-        console.print("[red]Error:[/] Provide either a file or --url, not both.")
+    if input and url:
+        console.print(
+            "[red]Error:[/] Provide either a positional input or --url, not both."
+        )
         raise typer.Exit(1)
+
+    source = input or url
+    assert source is not None
+
+    file: Optional[Path] = None
+    remote_url: Optional[str] = None
+    if _is_http_url(source):
+        remote_url = source
+    else:
+        file = Path(source).expanduser()
+        if not file.is_file():
+            console.print(
+                f"[red]Error:[/] Input '{source}' is not a file. "
+                "Provide a local path or an http(s) URL."
+            )
+            raise typer.Exit(1)
+
     if response_format not in TRANSCRIBE_FORMATS:
         console.print(
             f"[red]Error:[/] Unknown --format '{response_format}'. "
@@ -1463,14 +1528,20 @@ def transcribe(
         create_kwargs["prompt"] = prompt
     if timeout is not None:
         create_kwargs["timeout"] = timeout
-    if url:
+    if remote_url:
         # `url` is a gateway extension to the OpenAI transcription form.
-        create_kwargs["extra_body"] = {"url": url}
+        create_kwargs["extra_body"] = {"url": remote_url}
 
-    if file and not output_json:
+    if not output_json:
+        if file is not None:
+            panel_body = (
+                f"{file.name} [dim]({format_file_size(file.stat().st_size)})[/dim]"
+            )
+        else:
+            panel_body = remote_url or ""
         console.print(
             Panel(
-                f"{file.name} [dim]({format_file_size(file.stat().st_size)})[/dim]",
+                panel_body,
                 title=f"Transcribing [dim]({model})[/dim]",
                 title_align="left",
                 border_style="dim",
@@ -1480,7 +1551,7 @@ def transcribe(
     start_time = time.time()
 
     def _create():
-        if file:
+        if file is not None:
             with file.open("rb") as fh:
                 return client.gateway.transcriptions.create(
                     model=model, file=fh, **create_kwargs
