@@ -71,6 +71,11 @@ def is_help_requested() -> bool:
     return "--help" in sys.argv or "-h" in sys.argv
 
 
+def is_gateway_subcommand(subcommand: str | None) -> bool:
+    """Return True when the invoked subcommand is the gateway CLI group."""
+    return subcommand in {"gw", "gateway"}
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -108,8 +113,14 @@ def main(
         from vlmrun.client import VLMRun
 
         cfg = resolve_config(api_key=api_key, base_url=base_url)
-        check_credentials(cfg.api_key)
-        ctx.obj = VLMRun(api_key=cfg.api_key, base_url=cfg.base_url)
+        gateway_command = is_gateway_subcommand(ctx.invoked_subcommand)
+        if not gateway_command:
+            check_credentials(cfg.api_key)
+        ctx.obj = VLMRun(
+            api_key=cfg.api_key,
+            base_url=cfg.base_url,
+            require_api_key=not gateway_command,
+        )
 
 
 # Add subcommands

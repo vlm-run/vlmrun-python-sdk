@@ -100,9 +100,10 @@ def mock_client(monkeypatch):
                     )
                 return prediction
 
-        def __init__(self, api_key=None, base_url=None):
+        def __init__(self, api_key=None, base_url=None, require_api_key=True, **_kwargs):
             self.api_key = api_key or "test-key"
             self.base_url = base_url or "https://api.vlm.run"
+            self.require_api_key = require_api_key
             self.timeout = 120.0
             self.max_retries = 1
             self.dataset = self.Dataset(self)

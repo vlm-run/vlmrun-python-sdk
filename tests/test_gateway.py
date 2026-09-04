@@ -232,7 +232,7 @@ def patched_cli(monkeypatch):
     monkeypatch.setenv("VLMRUN_API_KEY", "test-key")
     holder = {}
 
-    def _factory(api_key=None, base_url=None):
+    def _factory(api_key=None, base_url=None, require_api_key=True, **_kwargs):
         healthy = holder.get("healthy", True)
         client = FakeClient(api_key=api_key, base_url=base_url, healthy=healthy)
         if "content" in holder:
@@ -349,6 +349,70 @@ class TestGatewayResource:
 
         g.__dict__["_openai"] = _OpenAI()
         assert g.health() is False
+
+    def test_health_omits_auth_header_without_api_key(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @property
+            def is_success(self):
+                return True
+
+        def _get(url, headers=None, timeout=None):
+            captured["headers"] = headers
+            return _Resp()
+
+        monkeypatch.setattr("requests.get", _get)
+        client = _MiniClient()
+        client.api_key = None
+        assert Gateway(client).health() is True
+        assert captured["headers"] == {}
+
+    def test_openai_api_key_defaults_to_empty_string(self):
+        client = _MiniClient()
+        client.api_key = None
+        assert Gateway(client)._openai_api_key() == ""
+
+    def test_openai_api_key_passes_through_client_key(self):
+        client = _MiniClient()
+        client.api_key = "sk-gateway"
+        assert Gateway(client)._openai_api_key() == "sk-gateway"
+
+    def test_health_includes_auth_header_with_api_key(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class _Resp:
+            status_code = 200
+
+            @property
+            def is_success(self):
+                return True
+
+        def _get(url, headers=None, timeout=None):
+            captured["headers"] = headers
+            return _Resp()
+
+        monkeypatch.setattr("requests.get", _get)
+        client = _MiniClient()
+        client.api_key = "sk-gateway"
+        assert Gateway(client).health() is True
+        assert captured["headers"] == {"Authorization": "Bearer sk-gateway"}
+
+    def test_openai_client_receives_api_key(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class _OpenAI:
+            def __init__(self, api_key=None, base_url=None, timeout=None, max_retries=None):
+                captured["api_key"] = api_key
+                captured["base_url"] = base_url
+
+        monkeypatch.setattr("vlmrun.client.gateway._require_openai", lambda: type("openai", (), {"OpenAI": _OpenAI})())
+        client = _MiniClient()
+        client.api_key = "sk-gateway"
+        Gateway(client)._openai  # noqa: B018 - populate cached_property
+        assert captured["api_key"] == "sk-gateway"
 
 
 # ---------------------------------------------------------------------------
@@ -751,6 +815,60 @@ class TestHelpers:
 
 
 class TestGatewayCLI:
+    def test_gw_skips_api_key_check(self, runner, monkeypatch):
+        monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
+        holder: dict[str, object] = {}
+
+        def _factory(**kwargs):
+            holder["kwargs"] = kwargs
+            return FakeClient(api_key=kwargs.get("api_key"), healthy=True)
+
+        monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
+        result = runner.invoke(app, ["gw", "health"])
+        assert result.exit_code == 0
+        assert holder["kwargs"]["require_api_key"] is False
+
+    def test_gw_uses_api_key_when_present(self, runner, monkeypatch):
+        monkeypatch.setenv("VLMRUN_API_KEY", "env-gateway-key")
+        holder: dict[str, object] = {}
+
+        def _factory(**kwargs):
+            holder["kwargs"] = kwargs
+            client = FakeClient(api_key=kwargs.get("api_key"), healthy=True)
+            holder["client"] = client
+            return client
+
+        monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
+        result = runner.invoke(app, ["gw", "health"])
+        assert result.exit_code == 0
+        assert holder["kwargs"]["require_api_key"] is False
+        assert holder["kwargs"]["api_key"] == "env-gateway-key"
+        assert holder["client"].api_key == "env-gateway-key"
+
+    def test_gw_cli_flag_api_key_takes_precedence(self, runner, monkeypatch):
+        monkeypatch.setenv("VLMRUN_API_KEY", "env-gateway-key")
+        holder: dict[str, object] = {}
+
+        def _factory(**kwargs):
+            holder["kwargs"] = kwargs
+            client = FakeClient(api_key=kwargs.get("api_key"), healthy=True)
+            holder["client"] = client
+            return client
+
+        monkeypatch.setattr("vlmrun.client.VLMRun", _factory)
+        result = runner.invoke(
+            app, ["--api-key", "cli-gateway-key", "gw", "health"]
+        )
+        assert result.exit_code == 0
+        assert holder["kwargs"]["api_key"] == "cli-gateway-key"
+        assert holder["client"].api_key == "cli-gateway-key"
+
+    def test_non_gw_still_requires_api_key(self, runner, monkeypatch):
+        monkeypatch.delenv("VLMRUN_API_KEY", raising=False)
+        result = runner.invoke(app, ["files", "list"])
+        assert result.exit_code == 1
+        assert "API key not found" in result.stdout
+
     @pytest.mark.parametrize("alias", ["gw", "gateway"])
     def test_both_aliases_registered(self, runner, patched_cli, alias):
         result = runner.invoke(app, [alias, "health"])
@@ -1397,12 +1515,24 @@ class TestGatewayTranscribe:
         assert "5 pages" in result.stdout
         assert "pages/s" in result.stdout
 
-    def test_chat_document_url_shows_pages_streaming(self, runner, patched_cli):
+    def test_chat_document_url_shows_pages_streaming(
+        self, runner, patched_cli, monkeypatch
+    ):
         patched_cli["content"] = (
             '<document file_name="report.pdf" mimetype="application/pdf" '
             'num_pages="5" dpi="96">\n<page page_index="0">hello</page>\n</document>'
         )
         url = "https://example.com/report.pdf"
+        wall = iter([1000.0, 1005.0])
+        perf = iter([0.0, 5.0])
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway.time.time",
+            lambda: next(wall, 1005.0),
+        )
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway.time.perf_counter",
+            lambda: next(perf, 5.0),
+        )
         result = runner.invoke(app, ["gw", "chat", url, "-m", "glm-ocr"])
         assert result.exit_code == 0, result.stdout
         assert "5 pages" in result.stdout

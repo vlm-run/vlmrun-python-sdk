@@ -1,8 +1,8 @@
 """Gateway commands for the VLM Run CLI.
 
 Talk to OpenAI-compatible OCR / VLM models hosted behind the VLM Run gateway
-(``https://gateway.vlm.run/v1``), authenticating with the same
-``VLMRUN_API_KEY`` used everywhere else.
+(``https://gateway.vlm.run/v1``). An API key is optional; set ``VLMRUN_API_KEY``
+only when your gateway deployment requires authentication.
 
 Unlike ``vlmrun chat`` (which uploads to the Files API and calls the Orion
 agent), the gateway is a raw passthrough to third-party models. Inputs are
@@ -84,9 +84,9 @@ NOTES:
 
 GATEWAY_HELP = """OCR, VLM, embedding and transcription models on the VLM Run gateway.
 
-An OpenAI-compatible passthrough to third-party models, authenticated with the
-same VLMRUN_API_KEY as the rest of the CLI. `vlmrun gateway` and `vlmrun gw`
-are the same command.
+An OpenAI-compatible passthrough to third-party models. No API key is required;
+set VLMRUN_API_KEY only if your gateway deployment needs it. `vlmrun gateway`
+and `vlmrun gw` are the same command.
 
 \b
 Start here:
