@@ -1515,12 +1515,24 @@ class TestGatewayTranscribe:
         assert "5 pages" in result.stdout
         assert "pages/s" in result.stdout
 
-    def test_chat_document_url_shows_pages_streaming(self, runner, patched_cli):
+    def test_chat_document_url_shows_pages_streaming(
+        self, runner, patched_cli, monkeypatch
+    ):
         patched_cli["content"] = (
             '<document file_name="report.pdf" mimetype="application/pdf" '
             'num_pages="5" dpi="96">\n<page page_index="0">hello</page>\n</document>'
         )
         url = "https://example.com/report.pdf"
+        wall = iter([1000.0, 1005.0])
+        perf = iter([0.0, 5.0])
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway.time.time",
+            lambda: next(wall, 1005.0),
+        )
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway.time.perf_counter",
+            lambda: next(perf, 5.0),
+        )
         result = runner.invoke(app, ["gw", "chat", url, "-m", "glm-ocr"])
         assert result.exit_code == 0, result.stdout
         assert "5 pages" in result.stdout
