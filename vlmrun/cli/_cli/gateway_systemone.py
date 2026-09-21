@@ -24,7 +24,7 @@ from rich.text import Text
 
 from vlmrun.client import VLMRun
 from vlmrun.client.exceptions import DependencyError, InputError
-from vlmrun.client.systemone import MAX_IMAGES, normalize_questions
+from vlmrun.client.systemone import MAX_IMAGES, normalize_questions, timings_of
 from vlmrun.common.mime import guess_mime, is_http_url, mime_from_url, suffix_from_url
 
 console = Console()
@@ -654,16 +654,76 @@ def _render_repeat(
         lines.append(line)
         lines.append(Text(" " * (name_width + 2) + detail, style="dim", no_wrap=True))
 
-    tokens = sum(getattr(run.usage, "input_tokens", 0) or 0 for run in runs)
     console.print(
         Panel(
             Group(*lines),
             title=f"Decisions [dim]({runs[0].model}, {len(runs)} reads)[/dim]",
             title_align="left",
-            subtitle=f"[dim]{tokens} input tokens · {latency_s * 1000 / len(runs):.0f} ms/read[/dim]",
+            subtitle=f"[dim]{' · '.join(_stats_parts(runs, latency_s))}[/dim]",
             border_style="dim",
         )
     )
+
+
+def _stats_parts(runs: List[Any], wall_s: float) -> List[str]:
+    """The footer's numbers: tokens, then where the time actually went.
+
+    `api` is measured around the HTTP call. A decision is not streamed and its
+    body is a few hundred bytes, so time-to-first-byte is normally the whole of
+    it — `ttfb` is only broken out when the two diverge. `prep` is the local
+    encoding, `wall` is everything this process did.
+    """
+    timings = [t for t in (timings_of(run) for run in runs) if t is not None]
+    tokens = sum(getattr(run.usage, "input_tokens", 0) or 0 for run in runs)
+    parts = [f"{tokens} tok"] if tokens else []
+
+    def summarize(values: List[float], label: str) -> str | None:
+        if not values:
+            return None
+        if len(values) == 1:
+            return f"{label} {values[0]:.0f} ms"
+        ordered = sorted(values)
+        p95 = ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))]
+        return f"{label} {statistics.median(ordered):.0f}/{p95:.0f} ms"
+
+    api = [t.api_ms for t in timings if t.api_ms is not None]
+    ttfb = [t.ttfb_ms for t in timings if t.ttfb_ms is not None]
+    prep = [t.prep_ms for t in timings]
+    transfer = [t.transfer_ms for t in timings if t.transfer_ms is not None]
+
+    for value in (summarize(api, "api"),):
+        if value:
+            parts.append(value)
+    # Only worth a column when the body took real time to come down.
+    if transfer and max(transfer) >= 5.0:
+        value = summarize(ttfb, "ttfb")
+        if value:
+            parts.append(value)
+    if prep and max(prep) >= 1.0:
+        value = summarize(prep, "prep")
+        if value:
+            parts.append(value)
+    parts.append(f"wall {wall_s * 1000 / max(1, len(runs)):.0f} ms")
+    if len(runs) > 1:
+        parts.append("p50/p95")
+    return parts
+
+
+def _timings_json(runs: List[Any], wall_s: float) -> str:
+    """The same numbers as JSON, for --json runs (written to stderr)."""
+    rows = []
+    for run in runs:
+        t = timings_of(run)
+        rows.append(
+            {
+                "prep_ms": round(t.prep_ms, 1) if t else None,
+                "ttfb_ms": round(t.ttfb_ms, 1) if t and t.ttfb_ms is not None else None,
+                "api_ms": round(t.api_ms, 1) if t and t.api_ms is not None else None,
+                "total_ms": round(t.total_ms, 1) if t else None,
+                "input_tokens": getattr(run.usage, "input_tokens", None),
+            }
+        )
+    return json.dumps({"wall_ms": round(wall_s * 1000, 1), "reads": rows})
 
 
 def _elide(value: Any) -> Any:
@@ -711,10 +771,7 @@ def _render(response: Any, latency_s: float) -> None:
             for chunk in textwrap.wrap(probabilities, width=width) or [probabilities]:
                 lines.append(Text(indent + chunk, style="dim", no_wrap=True))
 
-    stats = [f"{latency_s * 1000:.0f} ms"]
-    input_tokens = getattr(response.usage, "input_tokens", None)
-    if input_tokens:
-        stats.insert(0, f"{input_tokens} input tokens")
+    stats = _stats_parts([response], latency_s)
     console.print(
         Panel(
             Group(*lines),
@@ -963,6 +1020,7 @@ def systemone(
     folded = _aggregate(runs)
     if output_json:
         _print_json(runs if repeat > 1 else runs[0])
+        Console(stderr=True).print(_timings_json(runs, latency_s), soft_wrap=True)
     elif repeat > 1:
         _render_repeat(folded, runs, latency_s)
     else:

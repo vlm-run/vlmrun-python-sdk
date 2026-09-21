@@ -18,7 +18,9 @@ from vlmrun.client.systemone import (
     SYSTEMONE_MODEL,
     SystemOne,
     build_content,
+    _timing_hooks,
     normalize_questions,
+    timings_of,
     typesafe_base_url,
 )
 
@@ -247,13 +249,19 @@ ANSWERS = {
 
 
 def resource(handler, **kwargs) -> SystemOne:
-    """A SystemOne whose TypeSafe client talks to ``handler`` instead of the network."""
+    """A SystemOne whose TypeSafe client talks to ``handler`` instead of the network.
+
+    The HTTP client carries the same timing hooks :attr:`SystemOne.client`
+    installs, so these tests cover the instrumented path.
+    """
     system_one = SystemOne(FakeClient(), gateway_url="http://gw.test/v1", **kwargs)
     system_one.__dict__["client"] = typesafe_sdk.TypeSafeClient(
         api_key="test-key",
         base_url=system_one.base_url,
         model=system_one.model,
-        transport=httpx2.MockTransport(handler),
+        http_client=httpx2.Client(
+            transport=httpx2.MockTransport(handler), event_hooks=_timing_hooks()
+        ),
     )
     return system_one
 
@@ -394,6 +402,23 @@ class TestDecide:
             "questions": {"a": {"type": "noul"}},
             "samples": 2,
         }
+
+    def test_attaches_timings(self):
+        system_one = resource(capture([]))
+        response = system_one.decide("x", [{"id": "a", "type": "noul"}])
+        t = timings_of(response)
+        assert t is not None
+        assert t.ttfb_ms is not None and t.ttfb_ms >= 0
+        assert t.api_ms is not None and t.api_ms >= t.ttfb_ms
+        assert t.prep_ms >= 0
+        assert t.total_ms >= t.prep_ms
+
+    def test_timings_are_per_response(self):
+        """Concurrent calls must not read each other's numbers."""
+        system_one = resource(capture([]))
+        first = system_one.decide("x", [{"id": "a", "type": "noul"}])
+        second = system_one.decide("y", [{"id": "a", "type": "noul"}])
+        assert timings_of(first) is not timings_of(second)
 
     def test_models_listing(self):
         payload = {

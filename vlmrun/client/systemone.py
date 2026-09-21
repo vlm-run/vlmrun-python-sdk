@@ -37,9 +37,12 @@ Example:
 from __future__ import annotations
 
 import os
+import time
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+
+from pydantic import BaseModel
 
 from vlmrun.client.exceptions import InputError
 from vlmrun.common.dependencies import require_typesafe
@@ -69,6 +72,8 @@ MAX_IMAGES = 8
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 # Only a PDF's first pages are read — enough to classify, route or gate one.
 MAX_PDF_PAGES = 8
+
+DEFAULT_READ_TIMEOUT = 120.0
 
 MAX_CHOICE_OPTIONS = 128
 MAX_SCORE_LEVELS = 10
@@ -432,6 +437,51 @@ def build_content(
     return parts or None
 
 
+class RequestTimings(BaseModel):
+    """Where a read's wall-clock time went.
+
+    ``api_ms`` is measured around the HTTP call itself, so it excludes the
+    local work of encoding media and normalizing questions (``prep_ms``).
+    ``ttfb_ms`` is the wait for the response headers — the read's own latency,
+    since a decision is not streamed and its body is a few hundred bytes.
+    """
+
+    prep_ms: float = 0.0
+    ttfb_ms: float | None = None
+    api_ms: float | None = None
+    total_ms: float = 0.0
+
+    @property
+    def transfer_ms(self) -> float | None:
+        """Time spent reading the body after the headers arrived."""
+        if self.api_ms is None or self.ttfb_ms is None:
+            return None
+        return max(0.0, self.api_ms - self.ttfb_ms)
+
+
+def timings_of(response: Any) -> RequestTimings | None:
+    """The :class:`RequestTimings` attached to a response by :meth:`SystemOne.decide`."""
+    return getattr(response, "__dict__", {}).get("_vlmrun_timings")
+
+
+def _timing_hooks() -> dict[str, list[Any]]:
+    """httpx event hooks that stamp each request with its own timings.
+
+    Stamps live on the request/response extensions rather than on the resource,
+    so concurrent calls cannot read each other's numbers.
+    """
+
+    def on_request(request: Any) -> None:
+        request.extensions["vlmrun_t0"] = time.perf_counter()
+
+    def on_response(response: Any) -> None:
+        started = response.request.extensions.get("vlmrun_t0")
+        if started is not None:
+            response.extensions["vlmrun_ttfb"] = (time.perf_counter() - started) * 1000
+
+    return {"request": [on_request], "response": [on_response]}
+
+
 class SystemOne:
     """Typed decisions on ``POST {gateway}/typesafe/v1/systemone``.
 
@@ -496,11 +546,16 @@ class SystemOne:
             A TypeSafeClient pointed at this gateway's ``/typesafe`` prefix.
         """
         typesafe = require_typesafe()
+        import httpx2
+
         return typesafe.TypeSafeClient(
             api_key=self._api_key(),
             base_url=self.base_url,
             model=self._model,
-            timeout=self._timeout,
+            http_client=httpx2.Client(
+                timeout=self._timeout or DEFAULT_READ_TIMEOUT,
+                event_hooks=_timing_hooks(),
+            ),
         )
 
     def _request_parts(
@@ -634,6 +689,7 @@ class SystemOne:
             InputError: If the questions or media are malformed.
             TypeSafeAPIError: If the gateway returns an unsuccessful response.
         """
+        started = time.perf_counter()
         state, questions, model_id, extra = self._request_parts(
             state,
             questions,
@@ -647,7 +703,14 @@ class SystemOne:
             timeout=timeout,
             extra_body=extra_body,
         )
-        return self.client.system_one(
+        prep_ms = (time.perf_counter() - started) * 1000
+
+        # Build the HTTP client outside the timed window: it is constructed
+        # once per resource, and folding that into the first read's latency
+        # would misreport it by ~100ms.
+        client = self.client
+        api_started = time.perf_counter()
+        response = client.system_one(
             state,
             questions,
             model=model_id,
@@ -655,6 +718,18 @@ class SystemOne:
             extra_body=extra or None,
             extra_headers=extra_headers,
         )
+        api_ms = (time.perf_counter() - api_started) * 1000
+        raw = getattr(response, "__dict__", {}).get("_raw")
+
+        # Runtime state, kept out of the response schema the same way the
+        # TypeSafe SDK stashes its own raw response and request id.
+        response.__dict__["_vlmrun_timings"] = RequestTimings(
+            prep_ms=prep_ms,
+            ttfb_ms=(raw.extensions.get("vlmrun_ttfb") if raw is not None else None),
+            api_ms=api_ms,
+            total_ms=(time.perf_counter() - started) * 1000,
+        )
+        return response
 
     def models(self) -> "ListModelsResponse":
         """List the models this route serves.
