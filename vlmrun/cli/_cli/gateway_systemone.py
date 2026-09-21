@@ -95,8 +95,8 @@ STATE AND MEDIA:
   Positionals are resolved by what they are:
 
 \b
-    an image path or URL     -> image input (up to 8; remote ones are inlined)
-    a .pdf path or URL       -> document input (one per read; first pages)
+    an image path or URL     -> image content part (up to 8; remote ones inlined)
+    a .pdf path or URL       -> file content part (one per read; first pages)
     .txt .md .json .yaml     -> the state (.json parsed into an object)
     anything else            -> literal state text (several are joined)
 

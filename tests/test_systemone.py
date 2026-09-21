@@ -17,7 +17,7 @@ from vlmrun.client.exceptions import InputError
 from vlmrun.client.systemone import (
     SYSTEMONE_MODEL,
     SystemOne,
-    build_message,
+    build_content,
     normalize_questions,
     typesafe_base_url,
 )
@@ -152,15 +152,14 @@ class TestNormalizeQuestions:
             normalize_questions([])
 
 
-class TestBuildMessage:
+class TestBuildContent:
     def test_no_media_returns_none(self):
-        assert build_message() is None
+        assert build_content() is None
 
     def test_local_image_is_inlined(self, tmp_path):
         image = tmp_path / "a.png"
         image.write_bytes(PNG_BYTES)
-        messages = build_message(images=[image], detail="high")
-        part = messages[0]["content"][0]
+        part = build_content(images=[image], detail="high")[0]
         assert part["type"] == "image_url"
         assert part["image_url"]["url"].startswith("data:image/png;base64,")
         assert part["image_url"]["detail"] == "high"
@@ -169,24 +168,24 @@ class TestBuildMessage:
         bogus = tmp_path / "a.png"
         bogus.write_bytes(b"not an image at all")
         with pytest.raises(InputError, match="is not a recognized image"):
-            build_message(images=[bogus])
+            build_content(images=[bogus])
 
     def test_unsupported_image_type_is_rejected(self, tmp_path):
         bitmap = tmp_path / "a.bmp"
         bitmap.write_bytes(b"BM" + b"\x00" * 32)
         with pytest.raises(InputError, match="is not supported"):
-            build_message(images=[bitmap])
+            build_content(images=[bitmap])
 
     def test_local_pdf_is_inlined_with_filename(self, tmp_path):
         pdf = tmp_path / "invoice.pdf"
         pdf.write_bytes(PDF_BYTES)
-        part = build_message(document=pdf)[0]["content"][0]
+        part = build_content(document=pdf)[0]
         assert part["type"] == "file"
         assert part["file"]["filename"] == "invoice.pdf"
         assert part["file"]["file_data"].startswith("data:application/pdf;base64,")
 
     def test_remote_pdf_rides_as_url(self):
-        part = build_message(document="https://example.com/a.pdf")[0]["content"][0]
+        part = build_content(document="https://example.com/a.pdf")[0]
         assert part["file"]["file_data"] == "https://example.com/a.pdf"
         assert "filename" not in part["file"]
 
@@ -194,20 +193,20 @@ class TestBuildMessage:
         doc = tmp_path / "a.pdf"
         doc.write_bytes(b"still not a pdf")
         with pytest.raises(InputError, match="is not a PDF"):
-            build_message(document=doc)
+            build_content(document=doc)
 
     def test_too_many_images(self, tmp_path):
         image = tmp_path / "a.png"
         image.write_bytes(PNG_BYTES)
         with pytest.raises(InputError, match="the limit is 8"):
-            build_message(images=[image] * 9)
+            build_content(images=[image] * 9)
 
     def test_document_leads_then_images_then_text(self, tmp_path):
         image = tmp_path / "a.png"
         image.write_bytes(PNG_BYTES)
         pdf = tmp_path / "a.pdf"
         pdf.write_bytes(PDF_BYTES)
-        parts = build_message(images=[image], document=pdf, text="extra")[0]["content"]
+        parts = build_content(images=[image], document=pdf, text="extra")
         assert [part["type"] for part in parts] == ["file", "image_url", "text"]
 
 
@@ -305,10 +304,10 @@ class TestDecide:
         assert response.scores["mood"].score == 0.9
         assert response.usage.input_tokens == 149
 
-    def test_no_messages_key_without_media(self):
+    def test_no_content_key_without_media(self):
         sent: list = []
         resource(capture(sent)).decide("x", [{"id": "a", "type": "noul"}])
-        assert "messages" not in sent[0]["body"]
+        assert "content" not in sent[0]["body"]
 
     def test_media_and_extensions_ride_extra_body(self, tmp_path):
         image = tmp_path / "a.png"
@@ -324,8 +323,8 @@ class TestDecide:
         )
         body = sent[0]["body"]
         assert body["steps"] == 2 and body["samples"] == 4
-        assert body["messages"][0]["role"] == "user"
-        assert body["messages"][0]["content"][0]["image_url"]["detail"] == "high"
+        assert body["content"][0]["type"] == "image_url"
+        assert body["content"][0]["image_url"]["detail"] == "high"
 
     def test_extra_body_wins(self):
         sent: list = []

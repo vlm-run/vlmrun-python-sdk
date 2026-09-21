@@ -13,8 +13,9 @@ OpenAI SDK for chat completions. ``typesafe-sdk`` is an optional dependency::
     pip install vlmrun[typesafe]
 
 Media, ``steps`` and ``samples`` are gateway extensions the TypeSafe SDK does
-not model, so they ride its ``extra_body`` passthrough in the OpenAI content-part
-shape the gateway expects.
+not model, so they ride its ``extra_body`` passthrough as ``content`` — the
+OpenAI content parts a caller already sends to chat completions, read after the
+state.
 
 Example:
     ```python
@@ -387,7 +388,7 @@ def _file_part(source: str | Path, detail: ImageDetail) -> dict[str, Any]:
     }
 
 
-def build_message(
+def build_content(
     *,
     images: Sequence[str | Path] | None = None,
     document: str | Path | None = None,
@@ -395,7 +396,11 @@ def build_message(
     detail: ImageDetail = "auto",
     timeout: float = 30.0,
 ) -> list[dict[str, Any]] | None:
-    """Assemble the single OpenAI user turn that carries a read's media.
+    """Assemble the ``content`` parts that carry a read's media.
+
+    These are the OpenAI content parts a caller already sends to
+    ``/v1/openai/chat/completions`` — no role and no turn, because a read
+    denoises one canvas over one state. Media leads, the state follows.
 
     Args:
         images: Image paths, http(s) URLs or data URLs (at most 8).
@@ -405,7 +410,7 @@ def build_message(
         timeout: Seconds allowed for fetching a remote image.
 
     Returns:
-        A one-element ``messages`` list, or None when there is no media.
+        The ``content`` list, or None when there is no media.
 
     Raises:
         InputError: Too many images, an unsupported type, or a missing file.
@@ -424,9 +429,7 @@ def build_message(
         text = [text]
     parts.extend({"type": "text", "text": item} for item in (text or []) if item)
 
-    if not parts:
-        return None
-    return [{"role": "user", "content": parts}]
+    return parts or None
 
 
 class SystemOne:
@@ -542,15 +545,15 @@ class SystemOne:
             TypeSafeAPIError: If the gateway returns an unsuccessful response.
         """
         body: dict[str, Any] = {}
-        messages = build_message(
+        content = build_content(
             images=images,
             document=document,
             text=text,
             detail=detail,
             timeout=timeout or self._timeout or 30.0,
         )
-        if messages is not None:
-            body["messages"] = messages
+        if content is not None:
+            body["content"] = content
         if steps is not None:
             body["steps"] = steps
         if samples is not None:
