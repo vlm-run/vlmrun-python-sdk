@@ -29,6 +29,8 @@ console = Console()
 
 SYSTEMONE_HELP = """Typed, calibrated decisions over text, JSON, images and PDFs.
 
+`vlmrun gw s1` is a shorthand for this command.
+
 Answers are read off the model in a single denoise step: nothing is generated and
 nothing is parsed, so an answer can never be off-schema, and the probabilities are
 the model's own. A read costs one forward pass — use it to classify, route, gate or
@@ -137,6 +139,7 @@ LIMITS:
 \b
 EXAMPLES:
   vlmrun gw systemone "Invoice #44 was charged twice" --noul is_urgent
+  vlmrun gw s1 "Invoice #44 was charged twice" --noul is_urgent
 
 \b
   vlmrun gw systemone ticket.txt \\

@@ -317,6 +317,17 @@ class TestCommand:
         assert result.exit_code == 1
         assert "valid JSON" in strip_ansi(result.stdout)
 
+    def test_s1_is_the_same_command(self, runner, decide, config_file):
+        result = runner.invoke(app, ["gw", "s1", "x", "--noul", "a"])
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["questions"] == [{"id": "a", "type": "noul"}]
+
+    def test_s1_is_hidden_from_the_group_help(self, runner):
+        result = runner.invoke(app, ["gw", "--help"])
+        out = strip_ansi(result.stdout)
+        assert "systemone" in out
+        assert "\n│ s1 " not in out
+
     def test_help_documents_both_dialects(self, runner):
         result = runner.invoke(app, ["gw", "systemone", "--help"])
         assert result.exit_code == 0

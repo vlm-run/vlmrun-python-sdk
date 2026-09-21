@@ -103,6 +103,7 @@ Start here:
   vlmrun gw models              See what is available (task + methods per model)
   vlmrun gw models <model>      Methods, params and copy-pasteable examples
   vlmrun gw systemone --help    Typed, calibrated decisions over text and media
+                                (`vlmrun gw s1` is the same command)
 """
 
 app = typer.Typer(
@@ -1500,4 +1501,13 @@ app.command(
     name="systemone",
     help=SYSTEMONE_HELP,
     context_settings={"max_content_width": 120},
+)(systemone)
+
+# `s1` is the same command under a shorter name, hidden so `gw --help` lists it
+# once; the alias is documented in SYSTEMONE_HELP.
+app.command(
+    name="s1",
+    help=SYSTEMONE_HELP,
+    context_settings={"max_content_width": 120},
+    hidden=True,
 )(systemone)
