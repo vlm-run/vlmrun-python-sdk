@@ -40,6 +40,7 @@ The SDK uses a resource-based pattern where `VLMRun` is the main client that exp
 - **Resource Classes** - Each API domain has its own resource class:
   - `ImagePredictions`, `DocumentPredictions`, `VideoPredictions`, `AudioPredictions` (`predictions.py`)
   - `Agent` (`agent.py`) - Also provides OpenAI-compatible completions interface via `client.agent.completions`
+  - `Gateway` (`gateway.py`) - OpenAI-compatible gateway passthrough; `client.gateway.systemone` (`systemone.py`) wraps the official `typesafe-sdk` client for the non-OpenAI `/typesafe` decision route
   - `Files`, `Hub`, `Models`, `Datasets`, `Finetuning`, `Feedback`, `Executions`, `Artifacts`
 
 ### Predictions Pattern
@@ -81,6 +82,7 @@ Environment variables:
 Install based on needed functionality:
 - `pip install vlmrun[video]` - Video processing (numpy, opencv-python)
 - `pip install vlmrun[doc]` - PDF processing (pypdfium2)
+- `pip install vlmrun[typesafe]` - System One typed decisions (`typesafe-sdk`, used by `vlmrun gw systemone`)
 - `pip install vlmrun[all]` - All optional dependencies (video, doc, pandas, IPython)
 
 The CLI, OpenAI SDK, and gateway chat commands are included in the base `pip install vlmrun` install.

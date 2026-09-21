@@ -73,3 +73,17 @@ def require_pypdfium2():
     except ImportError as e:
         raise _dependency_error("pypdfium2", extra="doc") from e
     return pdfium
+
+
+def require_typesafe():
+    """Import the TypeSafe SDK or raise :class:`DependencyError`.
+
+    The System One route speaks TypeSafe's Jev contract, so the official
+    ``typesafe-sdk`` client is what talks to it. It is an optional extra
+    because nothing else in this SDK needs it.
+    """
+    try:
+        import typesafe_sdk
+    except ImportError as e:
+        raise _dependency_error("typesafe-sdk", extra="typesafe") from e
+    return typesafe_sdk

@@ -186,6 +186,40 @@ class Gateway:
         """
         return self._openai.audio.transcriptions
 
+    @cached_property
+    def systemone(self):
+        """System One decisions served beside this gateway's OpenAI routes.
+
+        The route speaks TypeSafe's Jev contract rather than OpenAI's, so it is
+        driven by the official ``typesafe-sdk`` client instead of the OpenAI
+        SDK used by :attr:`completions`.
+
+        Example:
+            ```python
+            from vlmrun import VLMRun
+
+            client = VLMRun()
+            result = client.gateway.systemone.decide(
+                state="I was charged twice",
+                questions=[{"id": "billing", "type": "noul"}],
+            )
+            ```
+
+        Raises:
+            DependencyError: If the ``typesafe-sdk`` package is not installed
+                (``pip install vlmrun[typesafe]``), raised on first use.
+
+        Returns:
+            SystemOne resource pointed at this gateway's ``/typesafe`` prefix.
+        """
+        from vlmrun.client.systemone import SystemOne
+
+        return SystemOne(
+            self._client,
+            gateway_url=self.base_url,
+            timeout=self._client.timeout,
+        )
+
     def models(self) -> List[Any]:
         """List models available on the gateway.
 
