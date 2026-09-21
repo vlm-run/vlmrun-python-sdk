@@ -8,9 +8,11 @@ Typer app from :mod:`vlmrun.cli._cli.gateway`.
 from __future__ import annotations
 
 import json
+import statistics
 import sys
 import textwrap
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -161,10 +163,54 @@ EXAMPLES:
   vlmrun gw systemone --body '{"state": "...", "questions": [...], "samples": 4}'
 
 \b
+GATES, REPEATS AND DRY RUNS:
+  --gate asserts a condition and sets the exit code, so a read can guard a
+  script. Repeatable; all must pass. Selectors:
+
+\b
+    id                      P(yes) for a noul, the score for a score,
+                            the chosen label for a choice
+    id.noul  id.score       the number, explicitly
+    id.choice               the chosen label
+    id.confidence           1 - H(p)/ln K
+    id.probabilities.LABEL  one option's probability
+
+\b
+    vlmrun gw s1 report.pdf --noul is_safe --gate 'is_safe>0.9'
+    vlmrun gw s1 ticket.txt --choice dept="billing|technical" --gate 'dept==billing' \\
+      --gate 'dept.confidence>=0.6'
+
+\b
+  Exit codes: 0 every gate passed · 1 a gate failed · 2 the request failed.
+  With --json the verdicts go to stderr so stdout stays a clean response body.
+
+\b
+  --repeat N sends the same request N times and reports mean, spread and every
+  read — identical requests are not guaranteed to be identical reads, so this is
+  how you see how much to trust one number. Gates then apply to the mean.
+  (Distinct from --samples, which averages noise draws inside one read.)
+
+\b
+    vlmrun gw s1 ticket.txt --noul is_urgent --repeat 5
+
+\b
+  --dry-run prints the request body and exits without sending it. Piped output
+  is the verbatim body; on a terminal, base64 payloads are abbreviated.
+
+\b
+    vlmrun gw s1 scan.jpg --noul signed --dry-run
+    vlmrun gw s1 ticket.txt --noul a --dry-run | curl -sd @- \\
+      "$VLMRUN_GATEWAY_URL/../typesafe/v1/systemone" -H "authorization: Bearer $VLMRUN_API_KEY"
+
+\b
 NOTES:
   Requires the typesafe extra: pip install vlmrun[typesafe]
   --detail is applied per request: one `high` input lifts the whole read.
 """
+
+# grep/diff convention: 1 means "the check did not pass", 2 means "it broke".
+EXIT_GATE_FAILED = 1
+EXIT_ERROR = 2
 
 # Extensions read as the state rather than as media.
 TEXT_SUFFIXES = frozenset(
@@ -181,7 +227,7 @@ def _fail(message: str, suggestion: str | None = None) -> "typer.Exit":
     console.print(f"[red]Error:[/] {escape(message)}")
     if suggestion:
         console.print(f"[dim]{escape(suggestion)}[/dim]")
-    return typer.Exit(1)
+    return typer.Exit(EXIT_ERROR)
 
 
 def _read_arg(value: str) -> str:
@@ -417,6 +463,229 @@ def _answer_row(answer: Any) -> Tuple[str, float, str, str]:
     return (str(answer), 0.0, "", "")
 
 
+# Longest first, so ">=" is matched before ">".
+GATE_OPERATORS = ("<=", ">=", "==", "!=", "<", ">")
+
+
+def _aggregate(runs: List[Any]) -> Dict[str, Dict[str, Any]]:
+    """Fold one or more responses into per-question statistics.
+
+    A single run aggregates to itself, so gates and rendering work off one
+    shape whether ``--repeat`` was used or not.
+    """
+    folded: Dict[str, Dict[str, Any]] = {}
+    for response in runs:
+        for name, answer in response.answers.items():
+            kind = getattr(answer, "type", None)
+            entry = folded.setdefault(
+                name,
+                {
+                    "kind": kind,
+                    "values": [],
+                    "labels": [],
+                    "confidences": [],
+                    "legend": {},
+                },
+            )
+            if kind == "noul":
+                entry["values"].append(float(answer.noul))
+            elif kind == "choice":
+                entry["labels"].append(str(answer.choice))
+                entry["confidences"].append(float(answer.confidence))
+                entry.setdefault("probabilities", []).append(dict(answer.probabilities))
+            elif kind == "score":
+                entry["values"].append(float(answer.score))
+                entry["confidences"].append(float(answer.confidence))
+                entry["legend"] = {int(k): v for k, v in dict(answer.legend).items()}
+                entry.setdefault("probabilities", []).append(
+                    {int(k): v for k, v in dict(answer.probabilities).items()}
+                )
+    for entry in folded.values():
+        entry["mean"] = statistics.fmean(entry["values"]) if entry["values"] else None
+        entry["stdev"] = (
+            statistics.pstdev(entry["values"]) if len(entry["values"]) > 1 else 0.0
+        )
+        entry["confidence"] = (
+            statistics.fmean(entry["confidences"]) if entry["confidences"] else None
+        )
+        entry["label"] = (
+            Counter(entry["labels"]).most_common(1)[0][0] if entry["labels"] else None
+        )
+        probabilities = entry.get("probabilities") or []
+        keys = {k for run in probabilities for k in run}
+        entry["mean_probabilities"] = {
+            key: statistics.fmean([run.get(key, 0.0) for run in probabilities])
+            for key in keys
+        }
+    return folded
+
+
+def _parse_gate(expression: str) -> Tuple[str, str, Any]:
+    """Split ``dept.confidence>=0.7`` into its selector, operator and value."""
+    for operator in GATE_OPERATORS:
+        left, found, right = expression.partition(operator)
+        if not found:
+            continue
+        selector, raw = left.strip(), right.strip()
+        if not selector or not raw:
+            break
+        try:
+            return selector, operator, float(raw)
+        except ValueError:
+            if operator not in ("==", "!="):
+                raise _fail(
+                    f"--gate {expression!r}: {raw!r} is not a number",
+                    f"{operator} compares numbers; use == or != to compare a label.",
+                )
+            return selector, operator, raw.strip("\"'")
+    raise _fail(
+        f"--gate {expression!r} is not a comparison",
+        "Write it as id>0.8, id.confidence>=0.5, id==label or "
+        "id.probabilities.label>0.3.",
+    )
+
+
+def _gate_value(folded: Dict[str, Dict[str, Any]], selector: str) -> Any:
+    """Resolve a gate selector against the aggregated answers."""
+    name, _, field = selector.partition(".")
+    entry = folded.get(name)
+    if entry is None:
+        raise _fail(
+            f"--gate refers to {name!r}, which is not one of the questions asked",
+            f"Questions in this request: {', '.join(folded) or 'none'}.",
+        )
+    if not field:
+        # The primary value of each type: P(yes), the chosen label, the score.
+        return entry["label"] if entry["kind"] == "choice" else entry["mean"]
+    if field in ("noul", "score"):
+        return entry["mean"]
+    if field == "choice":
+        return entry["label"]
+    if field == "confidence":
+        return entry["confidence"]
+    prefix, _, label = field.partition(".")
+    if prefix == "probabilities" and label:
+        key = int(label) if entry["kind"] == "score" and label.isdigit() else label
+        if key not in entry["mean_probabilities"]:
+            raise _fail(
+                f"--gate refers to {selector!r}, but {name!r} has no option {label!r}",
+                f"Options: {', '.join(str(k) for k in entry['mean_probabilities'])}.",
+            )
+        return entry["mean_probabilities"][key]
+    raise _fail(
+        f"--gate selector {selector!r} is not understood",
+        "Use id, id.noul, id.score, id.choice, id.confidence or "
+        "id.probabilities.label.",
+    )
+
+
+def _compare(left: Any, operator: str, right: Any) -> bool:
+    """Apply one gate operator, comparing labels as strings."""
+    if isinstance(left, str) or isinstance(right, str):
+        if operator == "==":
+            return str(left) == str(right)
+        if operator == "!=":
+            return str(left) != str(right)
+        raise _fail(
+            f"cannot apply {operator} to the label {left!r}",
+            "Numeric operators work on noul, score, confidence and probabilities.",
+        )
+    if left is None:
+        return False
+    return {
+        ">": lambda a, b: a > b,
+        ">=": lambda a, b: a >= b,
+        "<": lambda a, b: a < b,
+        "<=": lambda a, b: a <= b,
+        "==": lambda a, b: a == b,
+        "!=": lambda a, b: a != b,
+    }[operator](left, right)
+
+
+def _evaluate_gates(
+    gates: List[Tuple[str, str, Any]], folded: Dict[str, Dict[str, Any]]
+) -> List[Tuple[bool, str, Any]]:
+    """``(passed, expression, observed value)`` for each gate."""
+    results = []
+    for selector, operator, expected in gates:
+        observed = _gate_value(folded, selector)
+        shown = f"{observed:.2f}" if isinstance(observed, float) else str(observed)
+        results.append(
+            (
+                _compare(observed, operator, expected),
+                f"{selector}{operator}{expected}",
+                shown,
+            )
+        )
+    return results
+
+
+def _render_gates(results: List[Tuple[bool, str, Any]], *, err: bool = False) -> None:
+    """Print each gate's verdict, to stderr when stdout carries JSON."""
+    out = Console(stderr=True) if err else console
+    width = max(len(expression) for _, expression, _ in results)
+    for index, (passed, expression, observed) in enumerate(results):
+        mark = "[green]PASS[/green]" if passed else "[red]FAIL[/red]"
+        label = "gates" if index == 0 else "     "
+        out.print(
+            f"[dim]{label}[/dim]  {mark}  {escape(expression):<{width}}  [dim]{observed}[/dim]"
+        )
+
+
+def _render_repeat(
+    folded: Dict[str, Dict[str, Any]], runs: List[Any], latency_s: float
+) -> None:
+    """Print mean, spread and the individual reads across repeated requests."""
+    name_width = max(len(name) for name in folded)
+    lines: List[Text] = []
+    for name, entry in folded.items():
+        line = Text()
+        line.append(f"{name:<{name_width}}  ", style="bold")
+        if entry["kind"] == "choice":
+            counts = Counter(entry["labels"])
+            top, hits = counts.most_common(1)[0]
+            line.append(f"{top} {hits}/{len(entry['labels'])}  ", style="cyan")
+            line.append(f"confidence {entry['confidence']:.2f}", style="dim")
+            detail = " · ".join(f"{label} x{n}" for label, n in counts.most_common())
+        else:
+            line.append(f"{entry['mean']:.3f} ± {entry['stdev']:.3f}  ", style="cyan")
+            line.append("P(yes)" if entry["kind"] == "noul" else "score", style="dim")
+            detail = " ".join(f"{value:.3f}" for value in entry["values"])
+        lines.append(line)
+        lines.append(Text(" " * (name_width + 2) + detail, style="dim", no_wrap=True))
+
+    tokens = sum(getattr(run.usage, "input_tokens", 0) or 0 for run in runs)
+    console.print(
+        Panel(
+            Group(*lines),
+            title=f"Decisions [dim]({runs[0].model}, {len(runs)} reads)[/dim]",
+            title_align="left",
+            subtitle=f"[dim]{tokens} input tokens · {latency_s * 1000 / len(runs):.0f} ms/read[/dim]",
+            border_style="dim",
+        )
+    )
+
+
+def _elide(value: Any) -> Any:
+    """Shorten base64 payloads so a dry-run body stays readable on a terminal."""
+    if isinstance(value, str) and value.startswith("data:") and len(value) > 96:
+        header, _, payload = value.partition(",")
+        return f"{header},<{len(payload)} base64 chars>"
+    if isinstance(value, dict):
+        return {k: _elide(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_elide(v) for v in value]
+    return value
+
+
+def _print_body(body: Dict[str, Any]) -> None:
+    """Print the request body: verbatim when piped, abbreviated on a terminal."""
+    if console.is_terminal:
+        console.print_json(json.dumps(_elide(body)))
+    else:
+        print(json.dumps(body))
+
+
 def _render(response: Any, latency_s: float) -> None:
     """Print the decisions, one line each, with a wrapped probabilities line below."""
     rows = [(name, *_answer_row(answer)) for name, answer in response.answers.items()]
@@ -458,11 +727,19 @@ def _render(response: Any, latency_s: float) -> None:
 
 
 def _print_json(response: Any) -> None:
-    """Print the server's response body verbatim."""
+    """Print the server's response body verbatim (a JSON array when repeated)."""
+    if isinstance(response, list):
+        console.print_json(json.dumps([_raw_body(run) for run in response]))
+        return
+    console.print_json(json.dumps(_raw_body(response)))
+
+
+def _raw_body(response: Any) -> Any:
+    """The response exactly as the server sent it, falling back to the model."""
     try:
-        console.print_json(response.raw_http_response.text)
+        return json.loads(response.raw_http_response.text)
     except Exception:
-        console.print_json(response.model_dump_json())
+        return json.loads(response.model_dump_json())
 
 
 def _render_api_error(exc: Any) -> None:
@@ -555,6 +832,28 @@ def systemone(
         max=32,
         help="Noise draws to average (1-32). Every draw is billed.",
     ),
+    gate: Optional[List[str]] = typer.Option(
+        None,
+        "--gate",
+        "-g",
+        help=(
+            "Assert a condition, e.g. 'is_urgent>0.8', 'dept==billing', "
+            "'dept.confidence>=0.5'. Repeatable. Exit 1 if any fails."
+        ),
+    ),
+    repeat: int = typer.Option(
+        1,
+        "--repeat",
+        "-r",
+        min=1,
+        max=64,
+        help="Send the request N times and report mean and spread.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print the request body and exit without sending it.",
+    ),
     output_json: bool = typer.Option(
         False, "--json", "-j", help="Print the raw response JSON."
     ),
@@ -607,36 +906,70 @@ def systemone(
         resolved_state = ""
 
     extra_body = {k: v for k, v in request_body.items() if k not in ("model",)}
+    gates = [_parse_gate(expression) for expression in (gate or [])]
+    system_one = client.gateway.systemone
+
+    if dry_run:
+        try:
+            _print_body(
+                system_one.build_request(
+                    resolved_state,
+                    question_spec,
+                    model=model or request_body.get("model"),
+                    images=images,
+                    document=document,
+                    detail=detail,  # type: ignore[arg-type]
+                    steps=steps,
+                    samples=samples,
+                    extra_body=extra_body or None,
+                )
+            )
+        except InputError as e:
+            raise _fail(str(e.message), e.suggestion)
+        return
+
+    runs = []
     start = time.time()
     try:
-        response = client.gateway.systemone.decide(
-            resolved_state,
-            question_spec,
-            model=model or request_body.get("model"),
-            images=images,
-            document=document,
-            detail=detail,  # type: ignore[arg-type]
-            steps=steps,
-            samples=samples,
-            timeout=timeout,
-            extra_body=extra_body or None,
-        )
+        for _ in range(repeat):
+            runs.append(
+                system_one.decide(
+                    resolved_state,
+                    question_spec,
+                    model=model or request_body.get("model"),
+                    images=images,
+                    document=document,
+                    detail=detail,  # type: ignore[arg-type]
+                    steps=steps,
+                    samples=samples,
+                    timeout=timeout,
+                    extra_body=extra_body or None,
+                )
+            )
     except DependencyError as e:
         raise _fail(str(e.message), e.suggestion)
     except InputError as e:
         raise _fail(str(e.message), e.suggestion)
     except Exception as e:  # noqa: BLE001 - rendered below, re-raised when unknown
-        typesafe_error = type(e).__name__.startswith("TypeSafe")
-        if not typesafe_error:
+        if not type(e).__name__.startswith("TypeSafe"):
             raise
         if hasattr(e, "status"):
             _render_api_error(e)
         else:
-            console.print(f"[red]Error:[/] {e}")
-        raise typer.Exit(1)
+            console.print(f"[red]Error:[/] {escape(str(e))}")
+        raise typer.Exit(EXIT_ERROR)
     latency_s = time.time() - start
 
+    folded = _aggregate(runs)
     if output_json:
-        _print_json(response)
+        _print_json(runs if repeat > 1 else runs[0])
+    elif repeat > 1:
+        _render_repeat(folded, runs, latency_s)
     else:
-        _render(response, latency_s)
+        _render(runs[0], latency_s)
+
+    if gates:
+        results = _evaluate_gates(gates, folded)
+        _render_gates(results, err=output_json)
+        if not all(passed for passed, _, _ in results):
+            raise typer.Exit(EXIT_GATE_FAILED)

@@ -365,6 +365,36 @@ class TestDecide:
             )
         assert excinfo.value.body["detail"][0]["msg"] == "bad"
 
+    def test_build_request_matches_what_is_sent(self, tmp_path):
+        """--dry-run is only useful if it prints the body that would go out."""
+        image = tmp_path / "a.png"
+        image.write_bytes(PNG_BYTES)
+        kwargs = dict(
+            model="jev-latest",
+            images=[image],
+            detail="high",
+            steps=2,
+            samples=4,
+            extra_body={"content": [{"type": "text", "text": "note"}]},
+        )
+        sent: list = []
+        system_one = resource(capture(sent))
+        built = system_one.build_request("x", [{"id": "a", "type": "noul"}], **kwargs)
+        system_one.decide("x", [{"id": "a", "type": "noul"}], **kwargs)
+        assert built == sent[0]["body"]
+        assert list(built) == list(sent[0]["body"])
+
+    def test_build_request_needs_no_client(self):
+        body = SystemOne(FakeClient(), gateway_url="http://gw.test/v1").build_request(
+            "x", [{"id": "a", "type": "noul"}], samples=2
+        )
+        assert body == {
+            "state": "x",
+            "model": SYSTEMONE_MODEL,
+            "questions": {"a": {"type": "noul"}},
+            "samples": 2,
+        }
+
     def test_models_listing(self):
         payload = {
             "models": [

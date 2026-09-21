@@ -99,7 +99,22 @@ result.choices["department"].choice      # "billing"
 result.choices["department"].confidence  # 0.71
 ```
 
-See `vlmrun gw systemone --help` for both question dialects, media rules and limits.
+Three flags make a read scriptable:
+
+```bash
+# --gate sets the exit code: 0 all passed, 1 a gate failed, 2 the request failed
+vlmrun gw s1 invoice.pdf --choice kind="invoice|receipt|contract" \
+  --gate 'kind==invoice' --gate 'kind.confidence>0.9'
+
+# --repeat sends the same request N times and reports mean and spread
+vlmrun gw s1 ticket.txt --noul is_urgent --repeat 5
+
+# --dry-run prints the request body without sending it (pipe it to curl)
+vlmrun gw s1 scan.jpg --noul signed --dry-run
+```
+
+`vlmrun gw s1` is a shorthand for `vlmrun gw systemone`. See
+`vlmrun gw systemone --help` for both question dialects, media rules and limits.
 
 ### Basic Usage
 

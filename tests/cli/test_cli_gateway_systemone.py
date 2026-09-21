@@ -14,9 +14,13 @@ import pytest
 
 from tests.conftest import strip_ansi
 from vlmrun.cli._cli.gateway_systemone import (
+    EXIT_ERROR,
+    EXIT_GATE_FAILED,
+    _aggregate,
     _answer_row,
     _bar,
     _classify,
+    _parse_gate,
     _questions_from_flags,
     _resolve_inputs,
 )
@@ -292,29 +296,29 @@ class TestCommand:
 
     def test_no_questions_is_an_error(self, runner, decide, config_file):
         result = runner.invoke(app, ["gw", "systemone", "x"])
-        assert result.exit_code == 1
+        assert result.exit_code == EXIT_ERROR
         assert "no questions" in strip_ansi(result.stdout)
 
     def test_no_state_is_an_error(self, runner, decide, config_file):
         result = runner.invoke(app, ["gw", "systemone", "--noul", "a"])
-        assert result.exit_code == 1
+        assert result.exit_code == EXIT_ERROR
         assert "no state" in strip_ansi(result.stdout)
 
     def test_bad_detail_is_an_error(self, runner, decide, config_file):
         result = runner.invoke(
             app, ["gw", "systemone", "x", "--noul", "a", "--detail", "medium"]
         )
-        assert result.exit_code == 1
+        assert result.exit_code == EXIT_ERROR
         assert "--detail must be" in strip_ansi(result.stdout)
 
     def test_choice_needs_options(self, runner, decide, config_file):
         result = runner.invoke(app, ["gw", "systemone", "x", "--choice", "dept"])
-        assert result.exit_code == 1
+        assert result.exit_code == EXIT_ERROR
         assert "needs options" in strip_ansi(result.stdout)
 
     def test_bad_questions_json(self, runner, decide, config_file):
         result = runner.invoke(app, ["gw", "systemone", "x", "-Q", "{not json"])
-        assert result.exit_code == 1
+        assert result.exit_code == EXIT_ERROR
         assert "valid JSON" in strip_ansi(result.stdout)
 
     def test_s1_is_the_same_command(self, runner, decide, config_file):
@@ -334,3 +338,160 @@ class TestCommand:
         out = strip_ansi(result.stdout)
         assert "List form" in out and "Map form" in out
         assert "options" in out and "levels" in out
+
+
+class TestGates:
+    def test_parses_each_operator(self):
+        assert _parse_gate("a>0.8") == ("a", ">", 0.8)
+        assert _parse_gate("a.confidence>=0.5") == ("a.confidence", ">=", 0.5)
+        assert _parse_gate("dept==billing") == ("dept", "==", "billing")
+        assert _parse_gate("mood<1.5") == ("mood", "<", 1.5)
+
+    def test_rejects_a_non_comparison(self, runner):
+        with pytest.raises(Exception):
+            _parse_gate("is_urgent")
+
+    def test_passing_gates_exit_zero(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "-g",
+                "is_urgent>0.8",
+                "-g",
+                "dept==billing",
+                "-g",
+                "dept.confidence>=0.5",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        out = strip_ansi(result.stdout)
+        assert "PASS" in out and "FAIL" not in out
+
+    def test_failing_gate_exits_one(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-g", "is_urgent<0.5"]
+        )
+        assert result.exit_code == EXIT_GATE_FAILED
+        assert "FAIL" in strip_ansi(result.stdout)
+
+    def test_label_gate_on_choice(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-g", "dept==sales"]
+        )
+        assert result.exit_code == EXIT_GATE_FAILED
+
+    def test_probabilities_selector(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "a",
+                "-g",
+                "dept.probabilities.billing>0.8",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+
+    def test_unknown_question_is_an_error(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-g", "nope>0.5"]
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert "not one of the questions asked" in strip_ansi(result.stdout)
+
+    def test_numeric_operator_on_a_label_is_an_error(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-g", "dept>billing"]
+        )
+        assert result.exit_code == EXIT_ERROR
+
+
+class TestRepeat:
+    def test_sends_n_requests_and_reports_spread(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "--repeat", "3"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert len(decide) == 3
+        out = strip_ansi(result.stdout)
+        assert "3 reads" in out and "±" in out
+
+    def test_json_repeat_is_an_array(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "--repeat", "2", "--json"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert strip_ansi(result.stdout).lstrip().startswith("[")
+
+    def test_gates_use_the_mean(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "a",
+                "--repeat",
+                "3",
+                "-g",
+                "is_urgent>0.9",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+
+    def test_aggregate_of_one_run_is_the_answer(self):
+        folded = _aggregate([Recorded([])])
+        assert folded["is_urgent"]["mean"] == 0.91
+        assert folded["is_urgent"]["stdev"] == 0.0
+        assert folded["dept"]["label"] == "billing"
+        assert folded["mood"]["mean"] == 0.9
+
+
+class TestDryRun:
+    def test_prints_the_body_and_sends_nothing(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "the state",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--samples",
+                "4",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert decide == []
+        body = json.loads(strip_ansi(result.stdout))
+        assert body == {
+            "state": "the state",
+            "model": "google/diffusiongemma-26b-a4b-it",
+            "questions": {
+                "is_urgent": {"type": "noul"},
+                "dept": {
+                    "type": "choice",
+                    "criteria": {"billing": None, "sales": None},
+                },
+            },
+            "samples": 4,
+        }
+
+    def test_bad_questions_still_fail(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            ["gw", "systemone", "x", "-Q", '[{"id":"a","type":"nope"}]', "--dry-run"],
+        )
+        assert result.exit_code == EXIT_ERROR

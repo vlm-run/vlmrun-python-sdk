@@ -503,6 +503,96 @@ class SystemOne:
             timeout=self._timeout,
         )
 
+    def _request_parts(
+        self,
+        state: Any,
+        questions: Any,
+        *,
+        model: str | None,
+        images: Sequence[str | Path] | None,
+        document: str | Path | None,
+        text: str | Sequence[str] | None,
+        detail: ImageDetail,
+        steps: int | None,
+        samples: int | None,
+        timeout: float | None,
+        extra_body: Mapping[str, Any] | None,
+    ) -> tuple[Any, dict[str, Any], str, dict[str, Any]]:
+        """``(state, questions, model, extra)`` — the pieces of one request."""
+        extra: dict[str, Any] = {}
+        content = build_content(
+            images=images,
+            document=document,
+            text=text,
+            detail=detail,
+            timeout=timeout or self._timeout or 30.0,
+        )
+        if content is not None:
+            extra["content"] = content
+        if steps is not None:
+            extra["steps"] = steps
+        if samples is not None:
+            extra["samples"] = samples
+        if extra_body:
+            extra.update(extra_body)
+        return state, normalize_questions(questions), model or self._model, extra
+
+    def build_request(
+        self,
+        state: Any,
+        questions: Any,
+        *,
+        model: str | None = None,
+        images: Sequence[str | Path] | None = None,
+        document: str | Path | None = None,
+        text: str | Sequence[str] | None = None,
+        detail: ImageDetail = "auto",
+        steps: int | None = None,
+        samples: int | None = None,
+        timeout: float | None = None,
+        extra_body: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """The request body :meth:`decide` would send, without sending it.
+
+        Fields are ordered and merged exactly as the TypeSafe SDK does — state,
+        model and questions first, then everything else last-write-wins — so the
+        returned dict is what actually goes over the wire. Requires no network
+        and no ``typesafe-sdk``.
+
+        Args:
+            state: Text, a JSON object or an array the questions are about.
+            questions: Questions in either dialect.
+            model: Model override.
+            images: Up to 8 images.
+            document: One PDF path or http(s) URL.
+            text: Extra text parts.
+            detail: Vision budget for this request.
+            steps: Denoise steps per read.
+            samples: Noise draws to average.
+            timeout: Seconds allowed for fetching a remote image.
+            extra_body: Extra top-level body fields, merged last.
+
+        Returns:
+            The JSON-serializable request body.
+
+        Raises:
+            InputError: If the questions or media are malformed.
+        """
+        state, questions, model_id, extra = self._request_parts(
+            state,
+            questions,
+            model=model,
+            images=images,
+            document=document,
+            text=text,
+            detail=detail,
+            steps=steps,
+            samples=samples,
+            timeout=timeout,
+            extra_body=extra_body,
+        )
+        return {"state": state, "model": model_id, "questions": questions, **extra}
+
     def decide(
         self,
         state: Any,
@@ -544,29 +634,25 @@ class SystemOne:
             InputError: If the questions or media are malformed.
             TypeSafeAPIError: If the gateway returns an unsuccessful response.
         """
-        body: dict[str, Any] = {}
-        content = build_content(
+        state, questions, model_id, extra = self._request_parts(
+            state,
+            questions,
+            model=model,
             images=images,
             document=document,
             text=text,
             detail=detail,
-            timeout=timeout or self._timeout or 30.0,
+            steps=steps,
+            samples=samples,
+            timeout=timeout,
+            extra_body=extra_body,
         )
-        if content is not None:
-            body["content"] = content
-        if steps is not None:
-            body["steps"] = steps
-        if samples is not None:
-            body["samples"] = samples
-        if extra_body:
-            body.update(extra_body)
-
         return self.client.system_one(
             state,
-            normalize_questions(questions),
-            model=model or self._model,
+            questions,
+            model=model_id,
             timeout=timeout,
-            extra_body=body or None,
+            extra_body=extra or None,
             extra_headers=extra_headers,
         )
 
