@@ -24,7 +24,12 @@ from rich.text import Text
 
 from vlmrun.client import VLMRun
 from vlmrun.client.exceptions import DependencyError, InputError
-from vlmrun.client.systemone import MAX_IMAGES, normalize_questions, timings_of
+from vlmrun.client.systemone import (
+    MAX_IMAGES,
+    normalize_questions,
+    timings_of,
+    usage_of,
+)
 from vlmrun.common.mime import guess_mime, is_http_url, mime_from_url, suffix_from_url
 
 console = Console()
@@ -674,8 +679,21 @@ def _stats_parts(runs: List[Any], wall_s: float) -> List[str]:
     encoding, `wall` is everything this process did.
     """
     timings = [t for t in (timings_of(run) for run in runs) if t is not None]
-    tokens = sum(getattr(run.usage, "input_tokens", 0) or 0 for run in runs)
-    parts = [f"{tokens} tok"] if tokens else []
+    usages = [usage_of(run) for run in runs]
+    tokens = sum(u.get("input_tokens") or 0 for u in usages)
+    cached = sum(
+        (u.get("input_tokens_details") or {}).get("cached_tokens") or 0 for u in usages
+    )
+    reads = sum(u.get("reads") or 0 for u in usages)
+    cost = sum(u.get("cost") or 0.0 for u in usages)
+
+    parts = []
+    if tokens:
+        parts.append(f"{tokens} tok" + (f" ({cached} cached)" if cached else ""))
+    # `reads` only earns a column when it is not one per request — grouping or
+    # `samples` multiplied the bill and nothing else in the footer would say so.
+    if reads > len(runs):
+        parts.append(f"{reads} reads")
 
     def summarize(values: List[float], label: str) -> str | None:
         if not values:
@@ -704,6 +722,8 @@ def _stats_parts(runs: List[Any], wall_s: float) -> List[str]:
         if value:
             parts.append(value)
     parts.append(f"wall {wall_s * 1000 / max(1, len(runs)):.0f} ms")
+    if cost:
+        parts.append(f"${cost:.6f}")
     if len(runs) > 1:
         parts.append("p50/p95")
     return parts
@@ -720,7 +740,7 @@ def _timings_json(runs: List[Any], wall_s: float) -> str:
                 "ttfb_ms": round(t.ttfb_ms, 1) if t and t.ttfb_ms is not None else None,
                 "api_ms": round(t.api_ms, 1) if t and t.api_ms is not None else None,
                 "total_ms": round(t.total_ms, 1) if t else None,
-                "input_tokens": getattr(run.usage, "input_tokens", None),
+                "usage": usage_of(run),
             }
         )
     return json.dumps({"wall_ms": round(wall_s * 1000, 1), "reads": rows})

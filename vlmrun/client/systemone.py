@@ -36,6 +36,7 @@ Example:
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from functools import cached_property
@@ -457,6 +458,32 @@ class RequestTimings(BaseModel):
         if self.api_ms is None or self.ttfb_ms is None:
             return None
         return max(0.0, self.api_ms - self.ttfb_ms)
+
+
+def usage_of(response: Any) -> dict[str, Any]:
+    """The response's ``usage`` object, including fields the SDK does not model.
+
+    ``typesafe_sdk.Usage`` carries only Jev's ``input_tokens``/``output_tokens``
+    and ignores the rest, so the gateway's additions — ``cost``, ``reads`` and
+    the ``input_tokens_details`` split — are read back off the raw body.
+
+    Args:
+        response: A response returned by :meth:`SystemOne.decide`.
+
+    Returns:
+        The usage mapping, or the typed fields alone when the raw body is gone.
+    """
+    raw = getattr(response, "__dict__", {}).get("_raw")
+    if raw is not None:
+        try:
+            return json.loads(raw.text).get("usage") or {}
+        except (ValueError, AttributeError):
+            pass
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+    dump = getattr(usage, "model_dump", None)
+    return dump() if dump is not None else dict(vars(usage))
 
 
 def timings_of(response: Any) -> RequestTimings | None:

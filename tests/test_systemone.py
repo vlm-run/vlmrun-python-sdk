@@ -21,6 +21,7 @@ from vlmrun.client.systemone import (
     _timing_hooks,
     normalize_questions,
     timings_of,
+    usage_of,
     typesafe_base_url,
 )
 
@@ -419,6 +420,38 @@ class TestDecide:
         first = system_one.decide("x", [{"id": "a", "type": "noul"}])
         second = system_one.decide("y", [{"id": "a", "type": "noul"}])
         assert timings_of(first) is not timings_of(second)
+
+    def test_usage_keeps_fields_the_sdk_drops(self):
+        """cost/reads/details are not in typesafe_sdk's Usage model, but are billed."""
+        payload = {
+            **ANSWERS,
+            "usage": {
+                "input_tokens": 368,
+                "output_tokens": 0,
+                "input_tokens_details": {
+                    "cached_tokens": 256,
+                    "image_tokens": 280,
+                    "text_tokens": 88,
+                },
+                "reads": 4,
+                "cost": 5.2e-05,
+            },
+        }
+        response = resource(capture([], payload)).decide(
+            "x", [{"id": "a", "type": "noul"}]
+        )
+        # The SDK's typed model keeps only Jev's two fields ...
+        assert response.usage.model_dump() == {"input_tokens": 368, "output_tokens": 0}
+        # ... while the gateway's additions stay reachable.
+        usage = usage_of(response)
+        assert usage["cost"] == 5.2e-05
+        assert usage["reads"] == 4
+        assert usage["input_tokens_details"]["cached_tokens"] == 256
+
+    def test_usage_falls_back_to_the_typed_model(self):
+        response = resource(capture([])).decide("x", [{"id": "a", "type": "noul"}])
+        response.__dict__.pop("_raw")
+        assert usage_of(response) == {"input_tokens": 149, "output_tokens": 0}
 
     def test_models_listing(self):
         payload = {

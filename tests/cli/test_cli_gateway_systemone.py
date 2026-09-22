@@ -456,6 +456,27 @@ class TestRepeat:
         assert folded["mood"]["mean"] == 0.9
 
 
+class TestUsageFooter:
+    def test_cost_and_cached_tokens_are_shown(
+        self, runner, decide, config_file, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway_systemone.usage_of",
+            lambda run: {
+                "input_tokens": 368,
+                "input_tokens_details": {"cached_tokens": 256},
+                "reads": 4,
+                "cost": 5.2e-05,
+            },
+        )
+        result = runner.invoke(app, ["gw", "systemone", "x", "--noul", "a"])
+        assert result.exit_code == 0, result.stdout
+        out = strip_ansi(result.stdout)
+        assert "368 tok (256 cached)" in out
+        assert "4 reads" in out
+        assert "$0.000052" in out
+
+
 class TestDryRun:
     def test_prints_the_body_and_sends_nothing(self, runner, decide, config_file):
         result = runner.invoke(
