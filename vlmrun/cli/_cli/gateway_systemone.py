@@ -211,6 +211,11 @@ GATES, REPEATS AND DRY RUNS:
 NOTES:
   Requires the typesafe extra: pip install vlmrun[typesafe]
   --detail is applied per request: one `high` input lifts the whole read.
+  A gate is checked against the question spec before the request is sent, so a
+  selector that cannot apply costs nothing.
+  Remote images are fetched by this CLI (the route takes images only as data
+  URLs) and must resolve to a public address; set VLMRUN_ALLOW_PRIVATE_URLS=1
+  for an internal image host.
 """
 
 # grep/diff convention: 1 means "the check did not pass", 2 means "it broke".
@@ -550,42 +555,96 @@ def _parse_gate(expression: str) -> Tuple[str, str, Any]:
     )
 
 
-def _gate_value(folded: Dict[str, Dict[str, Any]], selector: str) -> Any:
-    """Resolve a gate selector against the aggregated answers."""
-    name, _, field = selector.partition(".")
-    entry = folded.get(name)
-    if entry is None:
+# Which selectors mean anything for each answer type. A noul has no
+# confidence and no options, so `approved.choice` is a malformed gate, not a
+# gate that happens to be false.
+GATE_FIELDS: Dict[str, frozenset] = {
+    "noul": frozenset({"noul"}),
+    "choice": frozenset({"choice", "confidence", "probabilities"}),
+    "score": frozenset({"score", "confidence", "probabilities"}),
+}
+
+
+def _check_gate_selector(
+    selector: str, kind: str | None, name: str, known: List[str]
+) -> None:
+    """Reject a selector the answer type cannot carry.
+
+    Raises:
+        typer.Exit: The question is absent, or the field does not apply to it.
+    """
+    if kind is None:
         raise _fail(
             f"--gate refers to {name!r}, which is not one of the questions asked",
-            f"Questions in this request: {', '.join(folded) or 'none'}.",
+            f"Questions in this request: {', '.join(known) or 'none'}.",
         )
+    field = selector.partition(".")[2]
+    if not field:
+        return
+    allowed = GATE_FIELDS.get(kind, frozenset())
+    if field.partition(".")[0] not in allowed:
+        raise _fail(
+            f"--gate selector {selector!r} is not valid for a {kind} question",
+            f"A {kind} question supports: {name}, "
+            + ", ".join(f"{name}.{f}" for f in sorted(allowed))
+            + ("." if kind == "noul" else " (probabilities takes a label)."),
+        )
+
+
+def _validate_gates(gates: List[Tuple[str, str, Any]], questions: Any) -> None:
+    """Check every gate against the question spec, before a read is paid for.
+
+    The types are known from the request, so a broken gate should cost nothing.
+    :func:`_gate_value` repeats the check against the answers as a backstop.
+    """
+    types = {name: q.get("type") for name, q in normalize_questions(questions).items()}
+    for selector, _, _ in gates:
+        name = selector.partition(".")[0]
+        _check_gate_selector(selector, types.get(name), name, list(types))
+
+
+def _gate_value(folded: Dict[str, Dict[str, Any]], selector: str) -> Any:
+    """Resolve a gate selector against the aggregated answers.
+
+    Raises:
+        typer.Exit: The question is absent, or the field is not one this answer
+            type carries — a mismatch is a broken gate, and silently resolving
+            it to None would let it pass.
+    """
+    name, _, field = selector.partition(".")
+    entry = folded.get(name)
+    _check_gate_selector(selector, entry and entry["kind"], name, list(folded))
+    kind = entry["kind"]
     if not field:
         # The primary value of each type: P(yes), the chosen label, the score.
-        return entry["label"] if entry["kind"] == "choice" else entry["mean"]
+        return entry["label"] if kind == "choice" else entry["mean"]
     if field in ("noul", "score"):
         return entry["mean"]
     if field == "choice":
         return entry["label"]
     if field == "confidence":
         return entry["confidence"]
-    prefix, _, label = field.partition(".")
-    if prefix == "probabilities" and label:
-        key = int(label) if entry["kind"] == "score" and label.isdigit() else label
-        if key not in entry["mean_probabilities"]:
-            raise _fail(
-                f"--gate refers to {selector!r}, but {name!r} has no option {label!r}",
-                f"Options: {', '.join(str(k) for k in entry['mean_probabilities'])}.",
-            )
-        return entry["mean_probabilities"][key]
-    raise _fail(
-        f"--gate selector {selector!r} is not understood",
-        "Use id, id.noul, id.score, id.choice, id.confidence or "
-        "id.probabilities.label.",
-    )
+    _, _, label = field.partition(".")
+    if not label:
+        raise _fail(
+            f"--gate selector {selector!r} needs an option",
+            f"e.g. {name}.probabilities.<label>.",
+        )
+    key = int(label) if kind == "score" and label.isdigit() else label
+    if key not in entry["mean_probabilities"]:
+        raise _fail(
+            f"--gate refers to {selector!r}, but {name!r} has no option {label!r}",
+            f"Options: {', '.join(str(k) for k in entry['mean_probabilities'])}.",
+        )
+    return entry["mean_probabilities"][key]
 
 
 def _compare(left: Any, operator: str, right: Any) -> bool:
     """Apply one gate operator, comparing labels as strings."""
+    if left is None:
+        # Unreachable once _gate_value validates the selector; a gate must
+        # never pass because its left-hand side was missing.
+        return False
     if isinstance(left, str) or isinstance(right, str):
         if operator == "==":
             return str(left) == str(right)
@@ -595,8 +654,6 @@ def _compare(left: Any, operator: str, right: Any) -> bool:
             f"cannot apply {operator} to the label {left!r}",
             "Numeric operators work on noul, score, confidence and probabilities.",
         )
-    if left is None:
-        return False
     return {
         ">": lambda a, b: a > b,
         ">=": lambda a, b: a >= b,
@@ -982,8 +1039,20 @@ def systemone(
             )
         resolved_state = ""
 
-    extra_body = {k: v for k, v in request_body.items() if k not in ("model",)}
+    # Documented precedence is --body < -Q < flags, but extra_body is merged
+    # last, so any field with a dedicated flag must be dropped from the body
+    # once that flag is given — otherwise `--body '{"samples":32}' --samples 1`
+    # silently bills 32 draws.
+    overridden = {
+        "model": True,
+        "steps": steps is not None,
+        "samples": samples is not None,
+        "content": bool(images or document),
+    }
+    extra_body = {k: v for k, v in request_body.items() if not overridden.get(k, False)}
     gates = [_parse_gate(expression) for expression in (gate or [])]
+    if gates:
+        _validate_gates(gates, question_spec)
     system_one = client.gateway.systemone
 
     if dry_run:

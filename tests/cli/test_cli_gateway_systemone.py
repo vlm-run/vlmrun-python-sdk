@@ -360,6 +360,10 @@ class TestGates:
                 "x",
                 "--noul",
                 "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
                 "-g",
                 "is_urgent>0.8",
                 "-g",
@@ -374,14 +378,40 @@ class TestGates:
 
     def test_failing_gate_exits_one(self, runner, decide, config_file):
         result = runner.invoke(
-            app, ["gw", "systemone", "x", "--noul", "a", "-g", "is_urgent<0.5"]
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "is_urgent<0.5",
+            ],
         )
         assert result.exit_code == EXIT_GATE_FAILED
         assert "FAIL" in strip_ansi(result.stdout)
 
     def test_label_gate_on_choice(self, runner, decide, config_file):
         result = runner.invoke(
-            app, ["gw", "systemone", "x", "--noul", "a", "-g", "dept==sales"]
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "dept==sales",
+            ],
         )
         assert result.exit_code == EXIT_GATE_FAILED
 
@@ -393,7 +423,11 @@ class TestGates:
                 "systemone",
                 "x",
                 "--noul",
-                "a",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
                 "-g",
                 "dept.probabilities.billing>0.8",
             ],
@@ -402,16 +436,224 @@ class TestGates:
 
     def test_unknown_question_is_an_error(self, runner, decide, config_file):
         result = runner.invoke(
-            app, ["gw", "systemone", "x", "--noul", "a", "-g", "nope>0.5"]
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "nope>0.5",
+            ],
         )
         assert result.exit_code == EXIT_ERROR
         assert "not one of the questions asked" in strip_ansi(result.stdout)
 
     def test_numeric_operator_on_a_label_is_an_error(self, runner, decide, config_file):
         result = runner.invoke(
-            app, ["gw", "systemone", "x", "--noul", "a", "-g", "dept>billing"]
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "dept>billing",
+            ],
         )
         assert result.exit_code == EXIT_ERROR
+
+
+class TestGateSelectorValidation:
+    """A selector that cannot apply is a broken gate, not a passing one."""
+
+    def test_choice_selector_on_a_noul_is_rejected(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "-g",
+                "is_urgent.choice!=yes",
+            ],
+        )
+        assert result.exit_code == EXIT_ERROR
+        out = strip_ansi(result.stdout)
+        assert "not valid for a noul question" in out
+
+    def test_confidence_selector_on_a_noul_is_rejected(
+        self, runner, decide, config_file
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "is_urgent.confidence>0.5",
+            ],
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert "not valid for a noul question" in strip_ansi(result.stdout)
+
+    def test_noul_selector_on_a_choice_is_rejected(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "dept.noul>0.5",
+            ],
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert "not valid for a choice question" in strip_ansi(result.stdout)
+
+    def test_valid_selectors_still_work(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "is_urgent",
+                "--choice",
+                "dept=billing|sales",
+                "--score",
+                "mood=calm|angry",
+                "-g",
+                "is_urgent>0.5",
+                "-g",
+                "dept.confidence>0.5",
+                "-g",
+                "mood.score<2",
+                "-g",
+                "dept==billing",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+
+
+class TestGatePreflight:
+    def test_a_broken_gate_costs_no_request(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "approved",
+                "-g",
+                "approved.choice!=yes",
+            ],
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert (
+            decide == []
+        ), "a malformed gate must be caught before the read is paid for"
+
+    def test_unknown_question_is_caught_before_the_read(
+        self, runner, decide, config_file
+    ):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-g", "nope>0.5"]
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert decide == []
+
+    def test_dry_run_still_validates_gates(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "systemone",
+                "x",
+                "--noul",
+                "a",
+                "-g",
+                "a.confidence>0.5",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == EXIT_ERROR
+
+
+class TestBodyPrecedence:
+    """Documented precedence is --body < -Q < flags."""
+
+    def test_samples_flag_beats_body(self, runner, decide, config_file):
+        body = json.dumps(
+            {"state": "x", "questions": [{"id": "a", "type": "noul"}], "samples": 32}
+        )
+        result = runner.invoke(
+            app, ["gw", "systemone", "--body", body, "--samples", "1"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["samples"] == 1
+        assert "samples" not in (decide[0]["extra_body"] or {})
+
+    def test_steps_flag_beats_body(self, runner, decide, config_file):
+        body = json.dumps(
+            {"state": "x", "questions": [{"id": "a", "type": "noul"}], "steps": 8}
+        )
+        result = runner.invoke(app, ["gw", "systemone", "--body", body, "--steps", "2"])
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["steps"] == 2
+        assert "steps" not in (decide[0]["extra_body"] or {})
+
+    def test_body_value_survives_without_the_flag(self, runner, decide, config_file):
+        body = json.dumps(
+            {"state": "x", "questions": [{"id": "a", "type": "noul"}], "samples": 32}
+        )
+        result = runner.invoke(app, ["gw", "systemone", "--body", body])
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["extra_body"]["samples"] == 32
+
+    def test_media_positionals_beat_body_content(
+        self, runner, decide, config_file, tmp_path
+    ):
+        image = tmp_path / "a.png"
+        image.write_bytes(PNG_BYTES)
+        body = json.dumps(
+            {
+                "state": "x",
+                "questions": [{"id": "a", "type": "noul"}],
+                "content": [{"type": "text", "text": "from the body"}],
+            }
+        )
+        result = runner.invoke(app, ["gw", "systemone", str(image), "--body", body])
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["images"] == [str(image)]
+        assert "content" not in (decide[0]["extra_body"] or {})
 
 
 class TestRepeat:
@@ -439,7 +681,7 @@ class TestRepeat:
                 "systemone",
                 "x",
                 "--noul",
-                "a",
+                "is_urgent",
                 "--repeat",
                 "3",
                 "-g",

@@ -14,10 +14,14 @@ import json
 import pytest
 
 from vlmrun.client.exceptions import InputError
+from types import SimpleNamespace
+
 from vlmrun.client.systemone import (
+    MAX_IMAGE_BYTES,
     SYSTEMONE_MODEL,
     SystemOne,
     build_content,
+    _guard_fetchable,
     _timing_hooks,
     normalize_questions,
     timings_of,
@@ -155,6 +159,41 @@ class TestNormalizeQuestions:
             normalize_questions([])
 
 
+class TestFetchGuards:
+    """The SDK fetches image URLs itself, so it owns that request's blast radius."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://127.0.0.1/x.png",
+            "http://localhost/x.png",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::1]/x.png",
+        ],
+    )
+    def test_non_public_addresses_are_refused(self, url, monkeypatch):
+        monkeypatch.delenv("VLMRUN_ALLOW_PRIVATE_URLS", raising=False)
+        with pytest.raises(InputError, match="non-public address"):
+            _guard_fetchable(url)
+
+    def test_public_address_passes(self, monkeypatch):
+        monkeypatch.delenv("VLMRUN_ALLOW_PRIVATE_URLS", raising=False)
+        monkeypatch.setattr(
+            "vlmrun.client.systemone.socket.getaddrinfo",
+            lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+        )
+        _guard_fetchable("https://example.com/a.png")
+
+    def test_guard_can_be_disabled_for_internal_hosts(self, monkeypatch):
+        monkeypatch.setenv("VLMRUN_ALLOW_PRIVATE_URLS", "1")
+        _guard_fetchable("http://127.0.0.1/x.png")
+
+    def test_unresolvable_host_is_an_input_error(self, monkeypatch):
+        monkeypatch.delenv("VLMRUN_ALLOW_PRIVATE_URLS", raising=False)
+        with pytest.raises(InputError, match="cannot resolve"):
+            _guard_fetchable("https://no-such-host.invalid/a.png")
+
+
 class TestBuildContent:
     def test_no_media_returns_none(self):
         assert build_content() is None
@@ -178,6 +217,52 @@ class TestBuildContent:
         bitmap.write_bytes(b"BM" + b"\x00" * 32)
         with pytest.raises(InputError, match="is not supported"):
             build_content(images=[bitmap])
+
+    def test_oversized_local_image_is_refused_before_reading(self, monkeypatch):
+        """The cap must bound the read, not describe it after the fact.
+
+        The stub goes into `build_content`'s own globals: patching
+        `pathlib.Path` would break pytest's own source reading, and a
+        string target would miss when another test has purged and reimported
+        `vlmrun.*` from `sys.modules`.
+        """
+
+        class NeverRead:
+            def __init__(self, size):
+                self._size = size
+
+            def expanduser(self):
+                return self
+
+            def is_file(self):
+                return True
+
+            def stat(self):
+                return SimpleNamespace(st_size=self._size)
+
+            def read_bytes(self):  # pragma: no cover - must not be reached
+                raise AssertionError("read_bytes called on an oversized image")
+
+        monkeypatch.setitem(
+            build_content.__globals__, "Path", lambda _: NeverRead(MAX_IMAGE_BYTES + 1)
+        )
+        with pytest.raises(InputError, match="the limit is"):
+            build_content(images=["/tmp/huge.png"])
+
+    def test_data_url_is_measured_and_sniffed_after_decoding(self, tmp_path):
+        """A data URL must get the same capacity and checks as a path."""
+        encoded = "data:image/jpeg;base64," + base64.b64encode(PNG_BYTES).decode()
+        part = build_content(images=[encoded])[0]
+        # Declared jpeg, actually png: magic bytes win, as for every other source.
+        assert part["image_url"]["url"].startswith("data:image/png;base64,")
+
+    def test_data_url_rejects_bad_base64(self):
+        with pytest.raises(InputError, match="not valid base64"):
+            build_content(images=["data:image/png;base64,!!!not base64!!!"])
+
+    def test_data_url_must_be_base64(self):
+        with pytest.raises(InputError, match="must be base64-encoded"):
+            build_content(images=["data:image/png,rawbytes"])
 
     def test_local_pdf_is_inlined_with_filename(self, tmp_path):
         pdf = tmp_path / "invoice.pdf"

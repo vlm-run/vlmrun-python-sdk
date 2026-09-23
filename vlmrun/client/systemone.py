@@ -36,12 +36,18 @@ Example:
 
 from __future__ import annotations
 
+import base64
+import binascii
+import ipaddress
 import json
 import os
+import re
+import socket
 import time
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -309,55 +315,198 @@ def normalize_questions(spec: Any) -> dict[str, Any]:
     return questions
 
 
+MAX_REDIRECTS = 5
+
+# Opt out of the private-address guard for a deployment whose images live on an
+# internal host. Named for the SDK, not the route, because it governs our fetch.
+ALLOW_PRIVATE_URLS_ENV = "VLMRUN_ALLOW_PRIVATE_URLS"
+
+
+def _guard_fetchable(url: str) -> None:
+    """Refuse to fetch a URL that resolves to a non-public address.
+
+    We fetch image URLs ourselves, so a caller who does not control the URL —
+    an agent acting on model output, a service taking one from a request — can
+    otherwise aim this process at loopback, a private range, or a cloud
+    metadata endpoint. Every resolved address must be public; set
+    ``VLMRUN_ALLOW_PRIVATE_URLS=1`` for an internal image host.
+
+    Args:
+        url: The http(s) URL about to be fetched.
+
+    Raises:
+        InputError: The host is missing, does not resolve, or resolves to a
+            loopback, link-local, private, reserved or multicast address.
+    """
+    if os.getenv(ALLOW_PRIVATE_URLS_ENV):
+        return
+    host = urlparse(url).hostname
+    if not host:
+        raise InputError(
+            message=f"{url!r} has no host to fetch from",
+            suggestion="Pass an absolute http(s) URL.",
+        )
+    try:
+        resolved = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise InputError(
+            message=f"cannot resolve {host!r}",
+            suggestion="Check the URL, or pass the image as a local path.",
+        ) from e
+    for info in resolved:
+        address = ipaddress.ip_address(info[4][0])
+        if (
+            address.is_loopback
+            or address.is_link_local
+            or address.is_private
+            or address.is_reserved
+            or address.is_multicast
+            or address.is_unspecified
+        ):
+            raise InputError(
+                message=f"refusing to fetch {url!r}: {host} resolves to the non-public address {address}",
+                suggestion=f"Set {ALLOW_PRIVATE_URLS_ENV}=1 to allow internal hosts, "
+                "or pass the image as a local path.",
+            )
+
+
+def _fetch_image(url: str, timeout: float) -> bytes:
+    """Fetch an image, bounded in size, guarding every redirect hop.
+
+    Redirects are followed by hand so each hop is guarded: a public URL that
+    redirects to a metadata address would otherwise slip past a check made only
+    on the URL the caller passed. The body is read in chunks and abandoned the
+    moment it exceeds the cap, so an oversized response costs a few chunks
+    rather than its full length in memory.
+
+    Args:
+        url: Image URL to fetch.
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        The image bytes.
+
+    Raises:
+        InputError: The URL is not fetchable, redirects too many times, or the
+            body exceeds :data:`MAX_IMAGE_BYTES`.
+    """
+    import requests
+
+    def too_large() -> InputError:
+        return InputError(
+            message=f"image at {url!r} is larger than the {MAX_IMAGE_BYTES} byte limit",
+            suggestion="Downscale the image before sending it.",
+        )
+
+    target = url
+    for _ in range(MAX_REDIRECTS + 1):
+        _guard_fetchable(target)
+        response = requests.get(
+            target, timeout=timeout, stream=True, allow_redirects=False
+        )
+        with response:
+            if response.is_redirect or response.is_permanent_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    raise InputError(
+                        message=f"{target!r} redirected without a location",
+                        suggestion="Pass the image as a local path.",
+                    )
+                target = requests.compat.urljoin(target, location)
+                continue
+            response.raise_for_status()
+            # Content-Length is optional and untrusted; it only lets us refuse early.
+            declared = response.headers.get("content-length")
+            if declared and declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
+                raise too_large()
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_content(64 * 1024):
+                total += len(chunk)
+                if total > MAX_IMAGE_BYTES:
+                    raise too_large()
+                chunks.append(chunk)
+            return b"".join(chunks)
+    raise InputError(
+        message=f"{url!r} redirected more than {MAX_REDIRECTS} times",
+        suggestion="Pass the image as a local path.",
+    )
+
+
+def _decode_data_url(raw: str) -> bytes:
+    """The bytes carried by a base64 ``data:`` URL."""
+    header, _, payload = raw.partition(",")
+    if ";base64" not in header:
+        raise InputError(
+            message="an image data URL must be base64-encoded",
+            suggestion="Use data:image/...;base64,<payload>.",
+        )
+    try:
+        return base64.b64decode(re.sub(r"\s+", "", payload), validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise InputError(
+            message="image data is not valid base64",
+            suggestion="Re-encode the image, or pass it as a local path.",
+        ) from e
+
+
+def _read_image(source: str, timeout: float) -> bytes:
+    """The bytes of one image, from a data URL, an http(s) URL or a local path."""
+    if source.startswith("data:"):
+        return _decode_data_url(source)
+    if is_http_url(source):
+        return _fetch_image(source, timeout)
+    path = Path(source).expanduser()
+    if not path.is_file():
+        raise InputError(
+            message=f"image {source!r} is not a file",
+            suggestion="Pass a local path, an http(s) URL, or a data: URL.",
+        )
+    # Size first: reading a multi-gigabyte file to measure it is the failure
+    # mode the limit exists to prevent.
+    if path.stat().st_size > MAX_IMAGE_BYTES:
+        raise InputError(
+            message=f"image {source!r} is {path.stat().st_size} bytes; "
+            f"the limit is {MAX_IMAGE_BYTES}",
+            suggestion="Downscale the image before sending it.",
+        )
+    return path.read_bytes()
+
+
 def _image_part(
     source: str | Path, detail: ImageDetail, *, timeout: float
 ) -> dict[str, Any]:
     """One ``image_url`` content part, always inlined as a data URL.
 
     The route accepts images only as ``data:image/...;base64,``, so a remote
-    image is fetched here rather than handed to the gateway.
+    image is fetched here rather than handed to the gateway. Every source —
+    data URL, http(s) URL or path — is validated the same way: decoded bytes
+    against the size cap, and magic bytes against the supported types, since the
+    route trusts the media type we declare.
     """
     raw_source = str(source)
-    if raw_source.startswith("data:"):
-        url, mime = raw_source, normalize_mime(raw_source[5:].split(";", 1)[0])
-        size = len(raw_source)
-    else:
-        if is_http_url(raw_source):
-            import requests
-
-            response = requests.get(raw_source, timeout=timeout)
-            response.raise_for_status()
-            content = response.content
-        else:
-            path = Path(raw_source).expanduser()
-            if not path.is_file():
-                raise InputError(
-                    message=f"image {raw_source!r} is not a file",
-                    suggestion="Pass a local path, an http(s) URL, or a data: URL.",
-                )
-            content = path.read_bytes()
-        # Magic bytes decide, not the extension or the server's content-type:
-        # the route trusts the media type we declare in the data URL.
-        sniffed = sniff_mime(content[:16])
-        if sniffed is None:
-            raise InputError(
-                message=f"{raw_source} is not a recognized image",
-                suggestion="This route reads JPEG, PNG, WebP and GIF.",
-            )
-        mime = normalize_mime(sniffed)
-        url, size = data_url(content, mime), len(content)
-
+    content = _read_image(raw_source, timeout)
+    if len(content) > MAX_IMAGE_BYTES:
+        raise InputError(
+            message=f"image {raw_source!r} is {len(content)} bytes; the limit is {MAX_IMAGE_BYTES}",
+            suggestion="Downscale the image before sending it.",
+        )
+    sniffed = sniff_mime(content[:16])
+    if sniffed is None:
+        raise InputError(
+            message=f"{raw_source} is not a recognized image",
+            suggestion="This route reads JPEG, PNG, WebP and GIF.",
+        )
+    mime = normalize_mime(sniffed)
     if mime not in IMAGE_MIME_TYPES:
         raise InputError(
             message=f"image type {mime!r} is not supported ({raw_source})",
             suggestion="This route reads JPEG, PNG, WebP and GIF.",
         )
-    if size > MAX_IMAGE_BYTES:
-        raise InputError(
-            message=f"image {raw_source!r} is {size} bytes; the limit is {MAX_IMAGE_BYTES}",
-            suggestion="Downscale the image before sending it.",
-        )
-    return {"type": "image_url", "image_url": {"url": url, "detail": detail}}
+    return {
+        "type": "image_url",
+        "image_url": {"url": data_url(content, mime), "detail": detail},
+    }
 
 
 def _file_part(source: str | Path, detail: ImageDetail) -> dict[str, Any]:

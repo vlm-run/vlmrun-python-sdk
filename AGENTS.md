@@ -73,6 +73,7 @@ All API responses are typed with Pydantic models. Key types:
 ## Configuration
 
 Environment variables:
+- `VLMRUN_ALLOW_PRIVATE_URLS` - Allow `gw systemone` to fetch remote images from non-public addresses (off by default)
 - `VLMRUN_API_KEY` - API key (required)
 - `VLMRUN_BASE_URL` - Override default API URL (default: `https://api.vlm.run/v1`)
 - `VLMRUN_CACHE_DIR` - Override cache directory (default: `~/.vlmrun/cache`)
