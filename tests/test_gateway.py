@@ -668,6 +668,26 @@ class TestHelpers:
         assert out["pages_per_sec"] == 2.0
         assert "pages" not in gw._build_chat_json("glm-ocr", "plain", 1.0, FakeUsage())
 
+    def test_chat_cli_json_payload_json_mode_parses_model_output(self):
+        payload = '{"items": [{"text": "a"}], "count": 1}'
+        out = gw._chat_cli_json_payload(
+            "pp-ocrv6", payload, 1.0, FakeUsage(), json_mode=True
+        )
+        assert out == {"items": [{"text": "a"}], "count": 1}
+
+    def test_chat_cli_json_payload_json_mode_falls_back_when_not_json(self):
+        out = gw._chat_cli_json_payload(
+            "glm-ocr", "not json", 1.0, FakeUsage(), json_mode=True
+        )
+        assert out["content"] == "not json"
+        assert out["model"] == "glm-ocr"
+
+    def test_chat_cli_json_payload_without_json_mode_wraps(self):
+        out = gw._chat_cli_json_payload(
+            "glm-ocr", '{"a": 1}', 1.0, FakeUsage(), json_mode=False
+        )
+        assert out["content"] == '{"a": 1}'
+
     def test_format_pages_per_sec(self):
         assert gw._format_pages_per_sec(10, 5.0) == "2.00 pages/s"
         assert gw._format_pages_per_sec(1, 3.0) == "0.33 pages/s"
@@ -1367,6 +1387,53 @@ class TestGatewayTranscribe:
         call = patched_cli["client"].gateway.completions.calls[-1]
         assert call["response_format"] == {"type": "json_object"}
         assert "response_format" not in call.get("extra_body", {})
+
+    def test_chat_json_mode_with_json_emits_parsed_model_object(
+        self, runner, patched_cli, tmp_path
+    ):
+        patched_cli["content"] = '{"lines": ["DLN B58471293"], "lang": "en"}'
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "chat",
+                str(f),
+                "-m",
+                "pp-ocrv6",
+                "--json-mode",
+                "--no-stream",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        out = json.loads(result.stdout)
+        assert out == {"lines": ["DLN B58471293"], "lang": "en"}
+        assert "content" not in out
+        assert "model" not in out
+
+    def test_chat_json_mode_with_json_error_payload_emits_parsed_object(
+        self, runner, patched_cli, tmp_path
+    ):
+        patched_cli["content"] = '{"error": "boom"}'
+        f = tmp_path / "img.png"
+        f.write_bytes(b"fakepng")
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "chat",
+                str(f),
+                "-m",
+                "pp-ocrv6",
+                "--json-mode",
+                "--no-stream",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 1
+        assert json.loads(result.stdout) == {"error": "boom"}
 
     def test_chat_json_mode_and_response_format_mutually_exclusive(
         self, runner, patched_cli, tmp_path
