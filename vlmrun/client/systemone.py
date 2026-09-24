@@ -66,7 +66,9 @@ from vlmrun.types.abstract import VLMRunProtocol
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from typesafe_sdk import ListModelsResponse, SystemOneResponse
 
-# The model served on this route. ``jev-latest`` is accepted as an alias.
+# The route's default engine. Several models are served — ``models()`` lists the
+# set this gateway actually has, and there is no catch-all alias (``jev-latest``
+# was removed when the route gained a second read strategy).
 SYSTEMONE_MODEL = "google/diffusiongemma-26b-a4b-it"
 
 # The gateway mounts TypeSafe's paths under this prefix, so the SDK's own
@@ -91,6 +93,12 @@ QUESTION_TYPES = ("noul", "choice", "score")
 
 # OpenAI's three values. `high` reads at 280 vision tokens, `auto` and `low` at
 # 70. The budget is per request: one `high` input lifts them all.
+# OpenAI's knob, as this route spells it. Only a generative engine can think
+# before it answers; a diffusion engine seeds the answer template into a canvas
+# and refuses the field.
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high"]
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high")
+
 ImageDetail = Literal["auto", "low", "high"]
 
 # Friendly spellings accepted in place of the wire's ``criteria``.
@@ -746,6 +754,7 @@ class SystemOne:
         detail: ImageDetail,
         steps: int | None,
         samples: int | None,
+        reasoning_effort: str | None,
         timeout: float | None,
         extra_body: Mapping[str, Any] | None,
     ) -> tuple[Any, dict[str, Any], str, dict[str, Any]]:
@@ -764,6 +773,14 @@ class SystemOne:
             extra["steps"] = steps
         if samples is not None:
             extra["samples"] = samples
+        if reasoning_effort is not None:
+            if reasoning_effort not in REASONING_EFFORTS:
+                raise InputError(
+                    message=f"reasoning_effort {reasoning_effort!r} is not one of "
+                    f"{', '.join(REASONING_EFFORTS)}",
+                    suggestion="Only a generative engine reasons; see SystemOne.models().",
+                )
+            extra["reasoning_effort"] = reasoning_effort
         if extra_body:
             extra.update(extra_body)
         return state, normalize_questions(questions), model or self._model, extra
@@ -780,6 +797,7 @@ class SystemOne:
         detail: ImageDetail = "auto",
         steps: int | None = None,
         samples: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         timeout: float | None = None,
         extra_body: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -800,6 +818,7 @@ class SystemOne:
             detail: Vision budget for this request.
             steps: Denoise steps per read.
             samples: Noise draws to average.
+            reasoning_effort: Thinking budget before the answer (generative engines).
             timeout: Seconds allowed for fetching a remote image.
             extra_body: Extra top-level body fields, merged last.
 
@@ -819,6 +838,7 @@ class SystemOne:
             detail=detail,
             steps=steps,
             samples=samples,
+            reasoning_effort=reasoning_effort,
             timeout=timeout,
             extra_body=extra_body,
         )
@@ -836,6 +856,7 @@ class SystemOne:
         detail: ImageDetail = "auto",
         steps: int | None = None,
         samples: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         timeout: float | None = None,
         extra_body: Mapping[str, Any] | None = None,
         extra_headers: Mapping[str, str] | None = None,
@@ -852,6 +873,9 @@ class SystemOne:
             detail: Vision budget for this request: auto, low or high.
             steps: Denoise steps per read (1-8); the contract's default is 1.
             samples: Noise draws to average (1-32). Every draw is billed.
+            reasoning_effort: Thinking budget before the answer — none, minimal,
+                low, medium or high. Generative engines only; a diffusion engine
+                rejects the field with a 422.
             timeout: Per-call timeout in seconds.
             extra_body: Extra top-level body fields, merged last (wins).
             extra_headers: Extra request headers.
@@ -876,6 +900,7 @@ class SystemOne:
             detail=detail,
             steps=steps,
             samples=samples,
+            reasoning_effort=reasoning_effort,
             timeout=timeout,
             extra_body=extra_body,
         )

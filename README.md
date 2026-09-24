@@ -113,6 +113,16 @@ vlmrun gw s1 ticket.txt --noul is_urgent --repeat 5
 vlmrun gw s1 scan.jpg --noul signed --dry-run
 ```
 
+Several engines serve the route and there is no catch-all alias — `vlmrun gw s1 models`
+lists what your gateway serves. Generative engines can think before answering:
+
+```bash
+vlmrun gw s1 models
+
+vlmrun gw s1 ticket.txt -m google/gemma-4-26b-a4b-it \
+  --reasoning-effort medium --choice dept="billing|tax|technical"
+```
+
 `vlmrun gw s1` is a shorthand for `vlmrun gw systemone`. See
 `vlmrun gw systemone --help` for both question dialects, media rules and limits.
 

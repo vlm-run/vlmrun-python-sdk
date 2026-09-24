@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 from vlmrun.client.systemone import (
     MAX_IMAGE_BYTES,
+    REASONING_EFFORTS,
     SYSTEMONE_MODEL,
     SystemOne,
     build_content,
@@ -420,6 +421,32 @@ class TestDecide:
         assert body["content"][0]["type"] == "image_url"
         assert body["content"][0]["image_url"]["detail"] == "high"
 
+    def test_reasoning_effort_rides_the_body(self):
+        sent: list = []
+        resource(capture(sent)).decide(
+            "x", [{"id": "a", "type": "noul"}], reasoning_effort="medium"
+        )
+        assert sent[0]["body"]["reasoning_effort"] == "medium"
+
+    def test_reasoning_effort_absent_by_default(self):
+        sent: list = []
+        resource(capture(sent)).decide("x", [{"id": "a", "type": "noul"}])
+        assert "reasoning_effort" not in sent[0]["body"]
+
+    def test_bad_reasoning_effort_never_reaches_the_wire(self):
+        sent: list = []
+        with pytest.raises(InputError, match="is not one of"):
+            resource(capture(sent)).decide(
+                "x", [{"id": "a", "type": "noul"}], reasoning_effort="ultra"
+            )
+        assert sent == []
+
+    def test_build_request_carries_reasoning_effort(self):
+        body = SystemOne(FakeClient(), gateway_url="http://gw.test/v1").build_request(
+            "x", [{"id": "a", "type": "noul"}], reasoning_effort="high"
+        )
+        assert body["reasoning_effort"] == "high"
+
     def test_extra_body_wins(self):
         sent: list = []
         resource(capture(sent)).decide(
@@ -552,6 +579,11 @@ class TestDecide:
         models = resource(capture(sent, payload)).models()
         assert sent[0]["url"] == "http://gw.test/typesafe/v1/models"
         assert models.models[0].name == SYSTEMONE_MODEL
+
+
+class TestReasoningEfforts:
+    def test_levels_match_the_route(self):
+        assert REASONING_EFFORTS == ("none", "minimal", "low", "medium", "high")
 
 
 class TestResourceWiring:

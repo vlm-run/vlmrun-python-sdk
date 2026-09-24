@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import typer
 from rich.console import Console, Group
+from rich import box
 from rich.markup import escape
+from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 
@@ -26,6 +28,8 @@ from vlmrun.client import VLMRun
 from vlmrun.client.exceptions import DependencyError, InputError
 from vlmrun.client.systemone import (
     MAX_IMAGES,
+    REASONING_EFFORTS,
+    SYSTEMONE_MODEL,
     normalize_questions,
     timings_of,
     usage_of,
@@ -133,7 +137,8 @@ ANSWERS:
 
 \b
   confidence = 1 - H(p)/ln K: 1.0 is certain, 0.0 is uniform over the options.
-  output_tokens is always 0 — nothing is generated.
+  output_tokens is 0 on a diffusion engine, which emits the template it was
+  seeded with, and non-zero on a generative one, which writes it.
 
 \b
 LIMITS:
@@ -166,6 +171,30 @@ EXAMPLES:
 
 \b
   vlmrun gw systemone --body '{"state": "...", "questions": [...], "samples": 4}'
+
+\b
+  vlmrun gw s1 models
+
+\b
+MODELS AND REASONING:
+  Several engines serve this route and there is no catch-all alias — name one
+  with -m, or take the default. `vlmrun gw s1 models` lists what this gateway
+  actually serves:
+
+\b
+    google/diffusiongemma-26b-a4b-it   default; one denoise step over a seeded canvas
+    google/gemma-4-26b-a4b-it          generative; 4B active, cheap for its size
+    qwen/qwen3.5-0.8b                  generative; smallest, less peaked answers
+    qwen/qwen3.8-27b                   generative; the chat engine the OpenAI routes serve
+
+\b
+  --reasoning-effort lets a generative engine think first: none (default),
+  minimal, low, medium or high — 0/32/64/128/256 tokens before the answer, all
+  billed as output tokens. A diffusion engine refuses the field.
+
+\b
+    vlmrun gw s1 ticket.txt -m google/gemma-4-26b-a4b-it \\
+      --reasoning-effort medium --choice dept="billing|tax|technical"
 
 \b
 GATES, REPEATS AND DRY RUNS:
@@ -226,6 +255,40 @@ EXIT_ERROR = 2
 TEXT_SUFFIXES = frozenset(
     {".txt", ".md", ".markdown", ".json", ".jsonl", ".yaml", ".yml", ".csv", ".log"}
 )
+
+
+def _render_models(client: VLMRun, output_json: bool) -> None:
+    """Print the models this gateway actually serves on the route."""
+    listing = client.gateway.systemone.models()
+    models = list(listing.models)
+    if output_json:
+        console.print_json(
+            json.dumps(
+                [
+                    m.model_dump() if hasattr(m, "model_dump") else dict(m)
+                    for m in models
+                ]
+            )
+        )
+        return
+    table = Table(
+        box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, header_style="dim"
+    )
+    table.add_column("model", style="bold", no_wrap=True)
+    table.add_column("released", style="dim", no_wrap=True)
+    table.add_column("description")
+    for m in models:
+        name = m.name + (" [dim](default)[/dim]" if m.name == SYSTEMONE_MODEL else "")
+        table.add_row(name, m.release_date, m.description)
+    console.print(
+        Panel(
+            table,
+            title=f"System One models [dim]({client.gateway.systemone.base_url})[/dim]",
+            title_align="left",
+            subtitle="[dim]there is no catch-all alias — name one of these with -m[/dim]",
+            border_style="dim",
+        )
+    )
 
 
 def _fail(message: str, suggestion: str | None = None) -> "typer.Exit":
@@ -738,6 +801,7 @@ def _stats_parts(runs: List[Any], wall_s: float) -> List[str]:
     timings = [t for t in (timings_of(run) for run in runs) if t is not None]
     usages = [usage_of(run) for run in runs]
     tokens = sum(u.get("input_tokens") or 0 for u in usages)
+    out_tokens = sum(u.get("output_tokens") or 0 for u in usages)
     cached = sum(
         (u.get("input_tokens_details") or {}).get("cached_tokens") or 0 for u in usages
     )
@@ -746,7 +810,14 @@ def _stats_parts(runs: List[Any], wall_s: float) -> List[str]:
 
     parts = []
     if tokens:
-        parts.append(f"{tokens} tok" + (f" ({cached} cached)" if cached else ""))
+        # A generative engine writes the answer template (and any thought), so
+        # output tokens are only worth a column when they are not zero.
+        shown = f"{tokens} tok"
+        if out_tokens:
+            shown += f" +{out_tokens} out"
+        if cached:
+            shown += f" ({cached} cached)"
+        parts.append(shown)
     # `reads` only earns a column when it is not one per request — grouping or
     # `samples` multiplied the bill and nothing else in the footer would say so.
     if reads > len(runs):
@@ -894,15 +965,31 @@ def _render_api_error(exc: Any) -> None:
             console.print(
                 f"  [yellow]{escape(location or 'body')}[/yellow]  {escape(str(item.get('msg', '')))}"
             )
-        console.print(
-            "[dim]Unknown fields are rejected outright — check for typos in question keys.[/dim]"
-        )
+        # Only an extra_forbidden is a typo; a value_error is a field that
+        # exists but does not apply, and the typo hint misdirects there.
+        if any(
+            isinstance(item, dict) and item.get("type") == "extra_forbidden"
+            for item in detail
+        ):
+            console.print(
+                "[dim]Unknown fields are rejected outright — check for typos in question keys.[/dim]"
+            )
     elif isinstance(detail, dict):
         console.print(f"  {escape(str(detail.get('message', detail)))}")
     elif detail:
         console.print(f"  {escape(str(detail))}")
     else:
         console.print(f"  {escape(str(exc))}")
+
+    if isinstance(detail, list) and any(
+        "reasoning_effort" in str(item.get("loc", ""))
+        for item in detail
+        if isinstance(item, dict)
+    ):
+        console.print(
+            "[dim]Only generative engines reason; the default model is a diffusion "
+            "engine. Run `vlmrun gw s1 models` and pick one with -m.[/dim]"
+        )
 
     request_id = getattr(exc, "request_id", None)
     if request_id:
@@ -988,6 +1075,15 @@ def systemone(
         "--dry-run",
         help="Print the request body and exit without sending it.",
     ),
+    reasoning_effort: Optional[str] = typer.Option(
+        None,
+        "--reasoning-effort",
+        "-R",
+        help=(
+            "Think before answering: none, minimal, low, medium or high. "
+            "Generative engines only — the default model is a diffusion engine."
+        ),
+    ),
     output_json: bool = typer.Option(
         False, "--json", "-j", help="Print the raw response JSON."
     ),
@@ -997,6 +1093,32 @@ def systemone(
 ) -> None:
     """Read typed decisions off the gateway's System One route."""
     client: VLMRun = ctx.obj
+
+    # `gw s1 models` lists the served set. To classify the literal word, use -s.
+    if list(inputs or []) == ["models"] and not (
+        questions or noul or choice or score or body
+    ):
+        try:
+            _render_models(client, output_json)
+        except DependencyError as e:
+            raise _fail(str(e.message), e.suggestion)
+        except Exception as e:  # noqa: BLE001 - rendered below, re-raised when unknown
+            if not type(e).__name__.startswith("TypeSafe"):
+                raise
+            (
+                _render_api_error(e)
+                if hasattr(e, "status")
+                else console.print(f"[red]Error:[/] {escape(str(e))}")
+            )
+            raise typer.Exit(EXIT_ERROR)
+        return
+
+    if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+        raise _fail(
+            f"--reasoning-effort must be one of {', '.join(REASONING_EFFORTS)}; "
+            f"got {reasoning_effort!r}",
+            "Only generative engines reason; run `vlmrun gw s1 models` to see them.",
+        )
 
     if detail not in ("auto", "low", "high"):
         raise _fail(f"--detail must be auto, low or high; got {detail!r}")
@@ -1048,6 +1170,7 @@ def systemone(
         "steps": steps is not None,
         "samples": samples is not None,
         "content": bool(images or document),
+        "reasoning_effort": reasoning_effort is not None,
     }
     extra_body = {k: v for k, v in request_body.items() if not overridden.get(k, False)}
     gates = [_parse_gate(expression) for expression in (gate or [])]
@@ -1067,6 +1190,7 @@ def systemone(
                     detail=detail,  # type: ignore[arg-type]
                     steps=steps,
                     samples=samples,
+                    reasoning_effort=reasoning_effort,
                     extra_body=extra_body or None,
                 )
             )
@@ -1088,6 +1212,7 @@ def systemone(
                     detail=detail,  # type: ignore[arg-type]
                     steps=steps,
                     samples=samples,
+                    reasoning_effort=reasoning_effort,
                     timeout=timeout,
                     extra_body=extra_body or None,
                 )

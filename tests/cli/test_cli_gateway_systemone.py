@@ -719,6 +719,91 @@ class TestUsageFooter:
         assert "$0.000052" in out
 
 
+class TestReasoningEffort:
+    def test_passed_through(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "--reasoning-effort", "medium"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["reasoning_effort"] == "medium"
+
+    def test_short_flag(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-R", "high"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["reasoning_effort"] == "high"
+
+    def test_bad_level_is_caught_before_the_request(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "systemone", "x", "--noul", "a", "-R", "ultra"]
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert "must be one of none, minimal, low, medium, high" in strip_ansi(
+            result.stdout
+        )
+        assert decide == []
+
+    def test_flag_beats_body(self, runner, decide, config_file):
+        body = json.dumps(
+            {
+                "state": "x",
+                "questions": [{"id": "a", "type": "noul"}],
+                "reasoning_effort": "high",
+            }
+        )
+        result = runner.invoke(
+            app, ["gw", "systemone", "--body", body, "--reasoning-effort", "low"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["reasoning_effort"] == "low"
+        assert "reasoning_effort" not in (decide[0]["extra_body"] or {})
+
+
+class TestModelsListing:
+    def test_lists_the_served_models(self, runner, config_file, monkeypatch):
+        class Model:
+            def __init__(self, name):
+                self.name = name
+                self.description = f"about {name}"
+                self.release_date = "2026-09-23"
+
+            def model_dump(self):
+                return {
+                    "name": self.name,
+                    "description": self.description,
+                    "release_date": self.release_date,
+                }
+
+        class Listing:
+            models = (
+                Model("google/diffusiongemma-26b-a4b-it"),
+                Model("qwen/qwen3.5-0.8b"),
+            )
+
+        monkeypatch.setattr(SystemOne, "models", lambda self: Listing())
+        result = runner.invoke(app, ["gw", "s1", "models"])
+        assert result.exit_code == 0, result.stdout
+        out = strip_ansi(result.stdout)
+        assert "google/diffusiongemma-26b-a4b-it" in out and "qwen/qwen3.5-0.8b" in out
+        assert "no catch-all alias" in out
+
+    def test_json_listing(self, runner, config_file, monkeypatch):
+        class Listing:
+            models = ()
+
+        monkeypatch.setattr(SystemOne, "models", lambda self: Listing())
+        result = runner.invoke(app, ["gw", "s1", "models", "--json"])
+        assert result.exit_code == 0, result.stdout
+
+    def test_the_word_models_with_questions_is_still_a_state(
+        self, runner, decide, config_file
+    ):
+        result = runner.invoke(app, ["gw", "systemone", "models", "--noul", "a"])
+        assert result.exit_code == 0, result.stdout
+        assert decide[0]["state"] == "models"
+
+
 class TestDryRun:
     def test_prints_the_body_and_sends_nothing(self, runner, decide, config_file):
         result = runner.invoke(
