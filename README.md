@@ -45,12 +45,76 @@ The package provides optional features that can be installed based on your needs
   pip install "vlmrun[all]"
   ```
 
+- System One typed decisions (`typesafe-sdk`):
+  ```bash
+  pip install "vlmrun[typesafe]"
+  ```
+
 - All optional features:
   ```bash
   pip install "vlmrun[all]"
   ```
 
 The CLI and OpenAI-compatible gateway (`vlmrun gw chat`, `vlmrun chat`) work out of the box with `pip install vlmrun`.
+
+### System One — typed decisions
+
+`vlmrun gw systemone` answers named questions about text, JSON, images and PDFs with
+calibrated probabilities. Answers are read off the model in one denoise step, so nothing
+is generated and nothing is parsed — an answer can never be off-schema. The route speaks
+TypeSafe's contract, so it is driven by the official `typesafe-sdk` client
+(`pip install "vlmrun[typesafe]"`).
+
+```bash
+vlmrun gw systemone "Invoice #44 was charged twice, I need this fixed today" \
+  --noul is_urgent="Is the customer asking for something time-sensitive?" \
+  --choice department="billing|technical|sales" \
+  --score frustration="Calm|Frustrated|Very angry"
+
+# questions as inline JSON (or @file.json, or - for stdin)
+vlmrun gw systemone ticket.txt --json -Q '[
+  {"id": "is_urgent", "type": "noul"},
+  {"id": "department", "type": "choice", "options": ["billing", "technical", "sales"]}
+]'
+
+# images and one PDF ride along; --detail sets the vision budget
+vlmrun gw systemone invoice.pdf --detail high --choice kind="invoice|receipt|contract"
+```
+
+From Python:
+
+```python
+from vlmrun.client import VLMRun
+
+client = VLMRun()
+result = client.gateway.systemone.decide(
+    state="Invoice #44 was charged twice, I need this fixed today",
+    questions=[
+        {"id": "is_urgent", "type": "noul", "instructions": "Is this time-sensitive?"},
+        {"id": "department", "type": "choice", "options": ["billing", "technical", "sales"]},
+    ],
+)
+result.nouls["is_urgent"].noul           # 0.91
+result.choices["department"].choice      # "billing"
+result.choices["department"].confidence  # 0.71
+```
+
+Three flags make a read scriptable:
+
+```bash
+# --gate sets the exit code: 0 all passed, 1 a gate failed, 2 the request failed
+vlmrun gw s1 invoice.pdf --choice kind="invoice|receipt|contract" \
+  --gate 'kind==invoice' --gate 'kind.confidence>0.9'
+
+# --repeat sends the same request N times and reports mean and spread
+vlmrun gw s1 ticket.txt --noul is_urgent --repeat 5
+
+# --dry-run prints the request body without sending it (pipe it to curl)
+vlmrun gw s1 scan.jpg --noul signed --dry-run
+```
+
+`vlmrun gw s1` is a shorthand for `vlmrun gw systemone`. See
+`vlmrun gw systemone --help` for both question dialects, media rules and limits.
 
 ### Basic Usage
 

@@ -52,12 +52,16 @@ video = [
 doc = [
     "pypdfium2>=4.30.0",
 ]
+typesafe = [
+    "typesafe-sdk>=0.7.1",
+]
 all = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
     "pypdfium2>=4.30.0",
     "pandas",
     "ipython",
+    "typesafe-sdk>=0.7.1",
 ]
 
 [tool.setuptools.dynamic]
