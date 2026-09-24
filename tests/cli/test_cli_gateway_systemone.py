@@ -142,6 +142,51 @@ class TestClassifyInputs:
         assert _classify("https://example.com/a.pdf") == "document"
         assert _classify("https://example.com/a.jpg") == "image"
 
+    def test_data_urls_are_media(self):
+        png = "data:image/png;base64," + base64.b64encode(PNG_BYTES).decode()
+        pdf = "data:application/pdf;base64," + base64.b64encode(PDF_BYTES).decode()
+        assert _classify(png) == "image"
+        assert _classify(pdf) == "document"
+
+    def test_unsupported_data_url_is_an_error(self):
+        with pytest.raises(Exception):
+            _classify("data:video/mp4;base64,AAAA")
+
+    def test_extensionless_url_is_probed(self, monkeypatch):
+        """A signed link or object-store key carries no type; ask the server."""
+        probed = []
+
+        def fake(url, timeout=15.0):
+            probed.append(url)
+            return "image/jpeg"
+
+        monkeypatch.setattr("vlmrun.cli._cli.gateway_systemone.probe_url_mime", fake)
+        assert _classify("https://example.com/object?id=1") == "image"
+        assert probed == ["https://example.com/object?id=1"]
+
+    def test_probe_finds_a_pdf(self, monkeypatch):
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway_systemone.probe_url_mime",
+            lambda u, timeout=15.0: "application/pdf",
+        )
+        assert _classify("https://example.com/download?doc=9") == "document"
+
+    def test_probe_names_what_it_found_when_unsupported(self, monkeypatch):
+        monkeypatch.setattr(
+            "vlmrun.cli._cli.gateway_systemone.probe_url_mime",
+            lambda u, timeout=15.0: "video/mp4",
+        )
+        with pytest.raises(Exception):
+            _classify("https://example.com/clip?id=2")
+
+    def test_url_with_an_extension_is_not_probed(self, monkeypatch):
+        def explode(*a, **k):  # pragma: no cover - must not be reached
+            raise AssertionError("probed a URL whose extension already decided it")
+
+        monkeypatch.setattr("vlmrun.cli._cli.gateway_systemone.probe_url_mime", explode)
+        assert _classify("https://example.com/a.jpg") == "image"
+        assert _classify("https://example.com/a.pdf") == "document"
+
     def test_json_state_file_is_parsed(self, tmp_path):
         state_file = tmp_path / "s.json"
         state_file.write_text('{"message": "hi"}')

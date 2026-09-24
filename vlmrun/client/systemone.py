@@ -44,6 +44,7 @@ import os
 import re
 import socket
 import time
+from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
@@ -378,14 +379,86 @@ def _guard_fetchable(url: str) -> None:
             )
 
 
+@contextmanager
+def _guarded_get(url: str, timeout: float) -> Any:
+    """GET a URL with every redirect hop guarded; yields the streamed response.
+
+    Redirects are followed by hand because a public URL that redirects to a
+    metadata address would otherwise slip past a check made only on the URL the
+    caller passed.
+
+    Args:
+        url: The http(s) URL to fetch.
+        timeout: Per-request timeout in seconds.
+
+    Yields:
+        The streamed ``requests.Response`` for the final hop.
+
+    Raises:
+        InputError: The URL is not fetchable or redirects too many times.
+    """
+    import requests
+
+    target = url
+    for _ in range(MAX_REDIRECTS + 1):
+        _guard_fetchable(target)
+        response = requests.get(
+            target, timeout=timeout, stream=True, allow_redirects=False
+        )
+        if response.is_redirect or response.is_permanent_redirect:
+            location = response.headers.get("location")
+            response.close()
+            if not location:
+                raise InputError(
+                    message=f"{target!r} redirected without a location",
+                    suggestion="Pass the file as a local path.",
+                )
+            target = requests.compat.urljoin(target, location)
+            continue
+        try:
+            response.raise_for_status()
+            yield response
+        finally:
+            response.close()
+        return
+    raise InputError(
+        message=f"{url!r} redirected more than {MAX_REDIRECTS} times",
+        suggestion="Pass the file as a local path.",
+    )
+
+
+def probe_url_mime(url: str, timeout: float = 15.0) -> str | None:
+    """What a URL actually serves, from its first bytes.
+
+    A URL often carries no usable extension — a signed link, an object-store key,
+    an endpoint with the name in a query string — so the media type is read off
+    the response instead. Magic bytes decide; ``content-type`` is the fallback,
+    since servers mislabel freely.
+
+    Args:
+        url: The http(s) URL to probe.
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        A normalized MIME type, or None when neither source identifies it.
+
+    Raises:
+        InputError: The URL is not fetchable.
+    """
+    with _guarded_get(url, timeout) as response:
+        head = next(response.iter_content(64), b"")
+        sniffed = sniff_mime(head)
+        if sniffed:
+            return normalize_mime(sniffed)
+        declared = (response.headers.get("content-type") or "").split(";")[0].strip()
+    return normalize_mime(declared) if declared else None
+
+
 def _fetch_image(url: str, timeout: float) -> bytes:
     """Fetch an image, bounded in size, guarding every redirect hop.
 
-    Redirects are followed by hand so each hop is guarded: a public URL that
-    redirects to a metadata address would otherwise slip past a check made only
-    on the URL the caller passed. The body is read in chunks and abandoned the
-    moment it exceeds the cap, so an oversized response costs a few chunks
-    rather than its full length in memory.
+    The body is read in chunks and abandoned the moment it exceeds the cap, so an
+    oversized response costs a few chunks rather than its full length in memory.
 
     Args:
         url: Image URL to fetch.
@@ -395,10 +468,9 @@ def _fetch_image(url: str, timeout: float) -> bytes:
         The image bytes.
 
     Raises:
-        InputError: The URL is not fetchable, redirects too many times, or the
-            body exceeds :data:`MAX_IMAGE_BYTES`.
+        InputError: The URL is not fetchable or the body exceeds
+            :data:`MAX_IMAGE_BYTES`.
     """
-    import requests
 
     def too_large() -> InputError:
         return InputError(
@@ -406,39 +478,19 @@ def _fetch_image(url: str, timeout: float) -> bytes:
             suggestion="Downscale the image before sending it.",
         )
 
-    target = url
-    for _ in range(MAX_REDIRECTS + 1):
-        _guard_fetchable(target)
-        response = requests.get(
-            target, timeout=timeout, stream=True, allow_redirects=False
-        )
-        with response:
-            if response.is_redirect or response.is_permanent_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    raise InputError(
-                        message=f"{target!r} redirected without a location",
-                        suggestion="Pass the image as a local path.",
-                    )
-                target = requests.compat.urljoin(target, location)
-                continue
-            response.raise_for_status()
-            # Content-Length is optional and untrusted; it only lets us refuse early.
-            declared = response.headers.get("content-length")
-            if declared and declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
+    with _guarded_get(url, timeout) as response:
+        # Content-Length is optional and untrusted; it only lets us refuse early.
+        declared = response.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
+            raise too_large()
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in response.iter_content(64 * 1024):
+            total += len(chunk)
+            if total > MAX_IMAGE_BYTES:
                 raise too_large()
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in response.iter_content(64 * 1024):
-                total += len(chunk)
-                if total > MAX_IMAGE_BYTES:
-                    raise too_large()
-                chunks.append(chunk)
-            return b"".join(chunks)
-    raise InputError(
-        message=f"{url!r} redirected more than {MAX_REDIRECTS} times",
-        suggestion="Pass the image as a local path.",
-    )
+            chunks.append(chunk)
+        return b"".join(chunks)
 
 
 def _decode_data_url(raw: str) -> bytes:

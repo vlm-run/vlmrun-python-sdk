@@ -30,11 +30,18 @@ from vlmrun.client.systemone import (
     MAX_IMAGES,
     REASONING_EFFORTS,
     SYSTEMONE_MODEL,
+    probe_url_mime,
     normalize_questions,
     timings_of,
     usage_of,
 )
-from vlmrun.common.mime import guess_mime, is_http_url, mime_from_url, suffix_from_url
+from vlmrun.common.mime import (
+    guess_mime,
+    is_http_url,
+    mime_from_url,
+    normalize_mime,
+    suffix_from_url,
+)
 
 console = Console()
 
@@ -108,10 +115,15 @@ STATE AND MEDIA:
   Positionals are resolved by what they are:
 
 \b
-    an image path or URL     -> image content part (up to 8; remote ones inlined)
-    a .pdf path or URL       -> file content part (one per read; first pages)
+    an image path, URL or data: URL -> image part (up to 8; remote ones inlined)
+    a .pdf path, URL or data: URL   -> file part (one per read; first pages)
     .txt .md .json .yaml     -> the state (.json parsed into an object)
     anything else            -> literal state text (several are joined)
+
+\b
+  A URL that carries no usable extension — a signed link, an object-store key —
+  is probed for what it actually serves, so `gw s1 <url>` works the way
+  `gw chat <url>` does.
 
 \b
   Use -s/--state to be explicit; then every positional is media.
@@ -404,25 +416,46 @@ def _merge_questions(base: Any, overrides: List[Dict[str, Any]]) -> Any:
 
 def _classify(raw: str) -> str:
     """Classify one positional as ``image``, ``document``, ``state_file`` or ``text``."""
-    if is_http_url(raw):
-        suffix, mime = suffix_from_url(raw), mime_from_url(raw)
-        if suffix == ".pdf" or mime == "application/pdf":
+    if raw.startswith("data:"):
+        mime = normalize_mime(raw[5:].split(";", 1)[0])
+        if mime == "application/pdf":
             return "document"
         if mime.startswith("image/"):
             return "image"
         raise _fail(
-            f"cannot tell what {raw} is from its URL.",
-            "Use a URL ending in an image or .pdf extension, or download it first.",
+            f"data URL of type {mime!r} is not a supported input.",
+            "This route reads images (JPEG/PNG/WebP/GIF) and one PDF.",
+        )
+    if is_http_url(raw):
+        kind = _kind_for_mime(suffix_from_url(raw), mime_from_url(raw))
+        if kind:
+            return kind
+        # Nothing in the URL says what it is — a signed link, an object-store
+        # key, a name in a query string. Ask the server what it serves.
+        try:
+            probed = probe_url_mime(raw)
+        except InputError as e:
+            raise _fail(str(e.message), e.suggestion)
+        except Exception as e:  # noqa: BLE001 - a fetch failure is the user's to see
+            raise _fail(
+                f"could not reach {raw}: {e}",
+                "Check the URL, or download the file and pass the path.",
+            )
+        kind = _kind_for_mime("", probed or "")
+        if kind:
+            return kind
+        raise _fail(
+            f"{raw} serves {probed or 'an unidentifiable type'}, which this route does not read.",
+            "It reads images (JPEG/PNG/WebP/GIF, up to 8) and one PDF.",
         )
     path = Path(raw).expanduser()
     if not path.is_file():
         return "text"
     suffix = path.suffix.lower()
     mime = guess_mime(path)
-    if mime == "application/pdf":
-        return "document"
-    if mime.startswith("image/"):
-        return "image"
+    kind = _kind_for_mime(suffix, mime)
+    if kind:
+        return kind
     if suffix in TEXT_SUFFIXES or mime.startswith("text/"):
         return "state_file"
     raise _fail(
@@ -430,6 +463,15 @@ def _classify(raw: str) -> str:
         "This route reads images (JPEG/PNG/WebP/GIF, up to 8) and one PDF; "
         "pass text with -s @file.",
     )
+
+
+def _kind_for_mime(suffix: str, mime: str) -> str | None:
+    """``image``, ``document`` or None, from an extension and a MIME type."""
+    if suffix == ".pdf" or mime == "application/pdf":
+        return "document"
+    if mime.startswith("image/"):
+        return "image"
+    return None
 
 
 def _state_from_file(path: Path) -> Any:
