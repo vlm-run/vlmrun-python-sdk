@@ -197,27 +197,34 @@ class TestFetchGuards:
 
 
 class TestProbeUrlMime:
-    """A URL with no usable extension is identified by what it serves."""
+    """A URL with no usable extension is identified by what it serves.
+
+    The fake GET goes into `probe_url_mime`'s own globals rather than a string
+    target: another test purges and reimports `vlmrun.*`, after which a string
+    target patches a different module object than this function closes over.
+    """
 
     def test_magic_bytes_beat_a_wrong_content_type(self, monkeypatch):
         monkeypatch.setenv("VLMRUN_ALLOW_PRIVATE_URLS", "1")
-        monkeypatch.setattr(
-            "vlmrun.client.systemone._guarded_get",
+        monkeypatch.setitem(
+            probe_url_mime.__globals__,
+            "_guarded_get",
             _fake_get(PNG_BYTES, "application/octet-stream"),
         )
         assert probe_url_mime("https://example.com/x") == "image/png"
 
     def test_content_type_is_the_fallback(self, monkeypatch):
         monkeypatch.setenv("VLMRUN_ALLOW_PRIVATE_URLS", "1")
-        monkeypatch.setattr(
-            "vlmrun.client.systemone._guarded_get",
+        monkeypatch.setitem(
+            probe_url_mime.__globals__,
+            "_guarded_get",
             _fake_get(b"\x00\x01\x02", "image/webp; charset=binary"),
         )
         assert probe_url_mime("https://example.com/x") == "image/webp"
 
     def test_unidentifiable_is_none(self, monkeypatch):
-        monkeypatch.setattr(
-            "vlmrun.client.systemone._guarded_get", _fake_get(b"\x00\x01", "")
+        monkeypatch.setitem(
+            probe_url_mime.__globals__, "_guarded_get", _fake_get(b"\x00\x01", "")
         )
         assert probe_url_mime("https://example.com/x") is None
 

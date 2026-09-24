@@ -10,6 +10,24 @@ import pytest
 from vlmrun.client.types import SchemaResponse
 
 
+@pytest.fixture(autouse=True)
+def _restore_vlmrun_modules():
+    """Put back whatever these tests purge from ``sys.modules``.
+
+    Each test here reimports ``vlmrun.*`` from scratch to observe what gets
+    pulled in. Left unrestored, a later test that patches a vlmrun module by
+    string target patches the *new* module object while its already-imported
+    functions still close over the old one, and the patch silently does nothing.
+    """
+    saved = {
+        k: v for k, v in sys.modules.items() if k == "vlmrun" or k.startswith("vlmrun.")
+    }
+    yield
+    for key in [k for k in sys.modules if k == "vlmrun" or k.startswith("vlmrun.")]:
+        del sys.modules[key]
+    sys.modules.update(saved)
+
+
 def _purge_vlmrun_modules() -> None:
     for key in list(sys.modules):
         if key == "vlmrun" or key.startswith("vlmrun."):
