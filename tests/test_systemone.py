@@ -18,12 +18,14 @@ from types import SimpleNamespace
 
 from vlmrun.client.systemone import (
     MAX_IMAGE_BYTES,
+    REASONING_EFFORTS,
     SYSTEMONE_MODEL,
     SystemOne,
     build_content,
     _guard_fetchable,
     _timing_hooks,
     normalize_questions,
+    probe_url_mime,
     timings_of,
     usage_of,
     typesafe_base_url,
@@ -192,6 +194,56 @@ class TestFetchGuards:
         monkeypatch.delenv("VLMRUN_ALLOW_PRIVATE_URLS", raising=False)
         with pytest.raises(InputError, match="cannot resolve"):
             _guard_fetchable("https://no-such-host.invalid/a.png")
+
+
+class TestProbeUrlMime:
+    """A URL with no usable extension is identified by what it serves.
+
+    The fake GET goes into `probe_url_mime`'s own globals rather than a string
+    target: another test purges and reimports `vlmrun.*`, after which a string
+    target patches a different module object than this function closes over.
+    """
+
+    def test_magic_bytes_beat_a_wrong_content_type(self, monkeypatch):
+        monkeypatch.setenv("VLMRUN_ALLOW_PRIVATE_URLS", "1")
+        monkeypatch.setitem(
+            probe_url_mime.__globals__,
+            "_guarded_get",
+            _fake_get(PNG_BYTES, "application/octet-stream"),
+        )
+        assert probe_url_mime("https://example.com/x") == "image/png"
+
+    def test_content_type_is_the_fallback(self, monkeypatch):
+        monkeypatch.setenv("VLMRUN_ALLOW_PRIVATE_URLS", "1")
+        monkeypatch.setitem(
+            probe_url_mime.__globals__,
+            "_guarded_get",
+            _fake_get(b"\x00\x01\x02", "image/webp; charset=binary"),
+        )
+        assert probe_url_mime("https://example.com/x") == "image/webp"
+
+    def test_unidentifiable_is_none(self, monkeypatch):
+        monkeypatch.setitem(
+            probe_url_mime.__globals__, "_guarded_get", _fake_get(b"\x00\x01", "")
+        )
+        assert probe_url_mime("https://example.com/x") is None
+
+
+def _fake_get(body: bytes, content_type: str):
+    """A stand-in for the guarded GET, yielding one canned response."""
+    from contextlib import contextmanager
+
+    class Response:
+        headers = {"content-type": content_type}
+
+        def iter_content(self, n):
+            yield body[:n]
+
+    @contextmanager
+    def fake(url, timeout):
+        yield Response()
+
+    return fake
 
 
 class TestBuildContent:
@@ -420,6 +472,32 @@ class TestDecide:
         assert body["content"][0]["type"] == "image_url"
         assert body["content"][0]["image_url"]["detail"] == "high"
 
+    def test_reasoning_effort_rides_the_body(self):
+        sent: list = []
+        resource(capture(sent)).decide(
+            "x", [{"id": "a", "type": "noul"}], reasoning_effort="medium"
+        )
+        assert sent[0]["body"]["reasoning_effort"] == "medium"
+
+    def test_reasoning_effort_absent_by_default(self):
+        sent: list = []
+        resource(capture(sent)).decide("x", [{"id": "a", "type": "noul"}])
+        assert "reasoning_effort" not in sent[0]["body"]
+
+    def test_bad_reasoning_effort_never_reaches_the_wire(self):
+        sent: list = []
+        with pytest.raises(InputError, match="is not one of"):
+            resource(capture(sent)).decide(
+                "x", [{"id": "a", "type": "noul"}], reasoning_effort="ultra"
+            )
+        assert sent == []
+
+    def test_build_request_carries_reasoning_effort(self):
+        body = SystemOne(FakeClient(), gateway_url="http://gw.test/v1").build_request(
+            "x", [{"id": "a", "type": "noul"}], reasoning_effort="high"
+        )
+        assert body["reasoning_effort"] == "high"
+
     def test_extra_body_wins(self):
         sent: list = []
         resource(capture(sent)).decide(
@@ -552,6 +630,11 @@ class TestDecide:
         models = resource(capture(sent, payload)).models()
         assert sent[0]["url"] == "http://gw.test/typesafe/v1/models"
         assert models.models[0].name == SYSTEMONE_MODEL
+
+
+class TestReasoningEfforts:
+    def test_levels_match_the_route(self):
+        assert REASONING_EFFORTS == ("none", "minimal", "low", "medium", "high")
 
 
 class TestResourceWiring:

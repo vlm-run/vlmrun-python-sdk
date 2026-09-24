@@ -44,6 +44,7 @@ import os
 import re
 import socket
 import time
+from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
@@ -66,7 +67,9 @@ from vlmrun.types.abstract import VLMRunProtocol
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from typesafe_sdk import ListModelsResponse, SystemOneResponse
 
-# The model served on this route. ``jev-latest`` is accepted as an alias.
+# The route's default engine. Several models are served — ``models()`` lists the
+# set this gateway actually has, and there is no catch-all alias (``jev-latest``
+# was removed when the route gained a second read strategy).
 SYSTEMONE_MODEL = "google/diffusiongemma-26b-a4b-it"
 
 # The gateway mounts TypeSafe's paths under this prefix, so the SDK's own
@@ -91,6 +94,12 @@ QUESTION_TYPES = ("noul", "choice", "score")
 
 # OpenAI's three values. `high` reads at 280 vision tokens, `auto` and `low` at
 # 70. The budget is per request: one `high` input lifts them all.
+# OpenAI's knob, as this route spells it. Only a generative engine can think
+# before it answers; a diffusion engine seeds the answer template into a canvas
+# and refuses the field.
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high"]
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high")
+
 ImageDetail = Literal["auto", "low", "high"]
 
 # Friendly spellings accepted in place of the wire's ``criteria``.
@@ -370,14 +379,86 @@ def _guard_fetchable(url: str) -> None:
             )
 
 
+@contextmanager
+def _guarded_get(url: str, timeout: float) -> Any:
+    """GET a URL with every redirect hop guarded; yields the streamed response.
+
+    Redirects are followed by hand because a public URL that redirects to a
+    metadata address would otherwise slip past a check made only on the URL the
+    caller passed.
+
+    Args:
+        url: The http(s) URL to fetch.
+        timeout: Per-request timeout in seconds.
+
+    Yields:
+        The streamed ``requests.Response`` for the final hop.
+
+    Raises:
+        InputError: The URL is not fetchable or redirects too many times.
+    """
+    import requests
+
+    target = url
+    for _ in range(MAX_REDIRECTS + 1):
+        _guard_fetchable(target)
+        response = requests.get(
+            target, timeout=timeout, stream=True, allow_redirects=False
+        )
+        if response.is_redirect or response.is_permanent_redirect:
+            location = response.headers.get("location")
+            response.close()
+            if not location:
+                raise InputError(
+                    message=f"{target!r} redirected without a location",
+                    suggestion="Pass the file as a local path.",
+                )
+            target = requests.compat.urljoin(target, location)
+            continue
+        try:
+            response.raise_for_status()
+            yield response
+        finally:
+            response.close()
+        return
+    raise InputError(
+        message=f"{url!r} redirected more than {MAX_REDIRECTS} times",
+        suggestion="Pass the file as a local path.",
+    )
+
+
+def probe_url_mime(url: str, timeout: float = 15.0) -> str | None:
+    """What a URL actually serves, from its first bytes.
+
+    A URL often carries no usable extension — a signed link, an object-store key,
+    an endpoint with the name in a query string — so the media type is read off
+    the response instead. Magic bytes decide; ``content-type`` is the fallback,
+    since servers mislabel freely.
+
+    Args:
+        url: The http(s) URL to probe.
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        A normalized MIME type, or None when neither source identifies it.
+
+    Raises:
+        InputError: The URL is not fetchable.
+    """
+    with _guarded_get(url, timeout) as response:
+        head = next(response.iter_content(64), b"")
+        sniffed = sniff_mime(head)
+        if sniffed:
+            return normalize_mime(sniffed)
+        declared = (response.headers.get("content-type") or "").split(";")[0].strip()
+    return normalize_mime(declared) if declared else None
+
+
 def _fetch_image(url: str, timeout: float) -> bytes:
     """Fetch an image, bounded in size, guarding every redirect hop.
 
-    Redirects are followed by hand so each hop is guarded: a public URL that
-    redirects to a metadata address would otherwise slip past a check made only
-    on the URL the caller passed. The body is read in chunks and abandoned the
-    moment it exceeds the cap, so an oversized response costs a few chunks
-    rather than its full length in memory.
+    The body is read in chunks and abandoned the moment it exceeds the cap, so an
+    oversized response costs a few chunks rather than its full length in memory.
 
     Args:
         url: Image URL to fetch.
@@ -387,10 +468,9 @@ def _fetch_image(url: str, timeout: float) -> bytes:
         The image bytes.
 
     Raises:
-        InputError: The URL is not fetchable, redirects too many times, or the
-            body exceeds :data:`MAX_IMAGE_BYTES`.
+        InputError: The URL is not fetchable or the body exceeds
+            :data:`MAX_IMAGE_BYTES`.
     """
-    import requests
 
     def too_large() -> InputError:
         return InputError(
@@ -398,39 +478,19 @@ def _fetch_image(url: str, timeout: float) -> bytes:
             suggestion="Downscale the image before sending it.",
         )
 
-    target = url
-    for _ in range(MAX_REDIRECTS + 1):
-        _guard_fetchable(target)
-        response = requests.get(
-            target, timeout=timeout, stream=True, allow_redirects=False
-        )
-        with response:
-            if response.is_redirect or response.is_permanent_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    raise InputError(
-                        message=f"{target!r} redirected without a location",
-                        suggestion="Pass the image as a local path.",
-                    )
-                target = requests.compat.urljoin(target, location)
-                continue
-            response.raise_for_status()
-            # Content-Length is optional and untrusted; it only lets us refuse early.
-            declared = response.headers.get("content-length")
-            if declared and declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
+    with _guarded_get(url, timeout) as response:
+        # Content-Length is optional and untrusted; it only lets us refuse early.
+        declared = response.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
+            raise too_large()
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in response.iter_content(64 * 1024):
+            total += len(chunk)
+            if total > MAX_IMAGE_BYTES:
                 raise too_large()
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in response.iter_content(64 * 1024):
-                total += len(chunk)
-                if total > MAX_IMAGE_BYTES:
-                    raise too_large()
-                chunks.append(chunk)
-            return b"".join(chunks)
-    raise InputError(
-        message=f"{url!r} redirected more than {MAX_REDIRECTS} times",
-        suggestion="Pass the image as a local path.",
-    )
+            chunks.append(chunk)
+        return b"".join(chunks)
 
 
 def _decode_data_url(raw: str) -> bytes:
@@ -746,6 +806,7 @@ class SystemOne:
         detail: ImageDetail,
         steps: int | None,
         samples: int | None,
+        reasoning_effort: str | None,
         timeout: float | None,
         extra_body: Mapping[str, Any] | None,
     ) -> tuple[Any, dict[str, Any], str, dict[str, Any]]:
@@ -764,6 +825,14 @@ class SystemOne:
             extra["steps"] = steps
         if samples is not None:
             extra["samples"] = samples
+        if reasoning_effort is not None:
+            if reasoning_effort not in REASONING_EFFORTS:
+                raise InputError(
+                    message=f"reasoning_effort {reasoning_effort!r} is not one of "
+                    f"{', '.join(REASONING_EFFORTS)}",
+                    suggestion="Only a generative engine reasons; see SystemOne.models().",
+                )
+            extra["reasoning_effort"] = reasoning_effort
         if extra_body:
             extra.update(extra_body)
         return state, normalize_questions(questions), model or self._model, extra
@@ -780,6 +849,7 @@ class SystemOne:
         detail: ImageDetail = "auto",
         steps: int | None = None,
         samples: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         timeout: float | None = None,
         extra_body: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -800,6 +870,7 @@ class SystemOne:
             detail: Vision budget for this request.
             steps: Denoise steps per read.
             samples: Noise draws to average.
+            reasoning_effort: Thinking budget before the answer (generative engines).
             timeout: Seconds allowed for fetching a remote image.
             extra_body: Extra top-level body fields, merged last.
 
@@ -819,6 +890,7 @@ class SystemOne:
             detail=detail,
             steps=steps,
             samples=samples,
+            reasoning_effort=reasoning_effort,
             timeout=timeout,
             extra_body=extra_body,
         )
@@ -836,6 +908,7 @@ class SystemOne:
         detail: ImageDetail = "auto",
         steps: int | None = None,
         samples: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         timeout: float | None = None,
         extra_body: Mapping[str, Any] | None = None,
         extra_headers: Mapping[str, str] | None = None,
@@ -852,6 +925,9 @@ class SystemOne:
             detail: Vision budget for this request: auto, low or high.
             steps: Denoise steps per read (1-8); the contract's default is 1.
             samples: Noise draws to average (1-32). Every draw is billed.
+            reasoning_effort: Thinking budget before the answer — none, minimal,
+                low, medium or high. Generative engines only; a diffusion engine
+                rejects the field with a 422.
             timeout: Per-call timeout in seconds.
             extra_body: Extra top-level body fields, merged last (wins).
             extra_headers: Extra request headers.
@@ -876,6 +952,7 @@ class SystemOne:
             detail=detail,
             steps=steps,
             samples=samples,
+            reasoning_effort=reasoning_effort,
             timeout=timeout,
             extra_body=extra_body,
         )
