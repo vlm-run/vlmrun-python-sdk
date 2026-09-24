@@ -712,7 +712,16 @@ def chat(
     no_stream: bool = typer.Option(
         False, "--no-stream", "-ns", help="Disable streaming."
     ),
-    output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
+    output_json: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help=(
+            "Output raw JSON. With --json-mode, prints the model's JSON object "
+            "(parsed) for piping to tools like jq; otherwise wraps content with "
+            "model, latency, and usage metadata."
+        ),
+    ),
     timeout: Optional[float] = typer.Option(
         None, "--timeout", help="Request timeout in seconds."
     ),
@@ -884,7 +893,9 @@ def chat(
     if output_json:
         print(
             json.dumps(
-                _build_chat_json(model, content, latency_s, usage),
+                _chat_cli_json_payload(
+                    model, content, latency_s, usage, json_mode=json_mode
+                ),
                 indent=2,
                 default=str,
             )
@@ -1095,6 +1106,30 @@ def _build_chat_json(
         if rate is not None:
             out["pages_per_sec"] = rate
     return out
+
+
+def _chat_cli_json_payload(
+    model: str,
+    content: str,
+    latency_s: float,
+    usage: Any,
+    *,
+    json_mode: bool,
+) -> Any:
+    """Payload printed for ``gw chat --json``.
+
+    With ``--json-mode``, the model is asked for a JSON object; parse and emit
+    that object directly so callers can pipe to ``jq``. Otherwise wrap metadata
+    around the raw ``content`` string via :func:`_build_chat_json`.
+    """
+    if json_mode:
+        stripped = content.strip()
+        if stripped:
+            try:
+                return json.loads(stripped)
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return _build_chat_json(model, content, latency_s, usage)
 
 
 def _format_pages_per_sec(pages: int, latency_s: float) -> Optional[str]:
