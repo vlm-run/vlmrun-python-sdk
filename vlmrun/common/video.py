@@ -431,8 +431,24 @@ class VideoReader(BaseVideoReader):
 
             timestamp_s = position_ms / 1000.0
             if timestamp_s <= 0.0 and index > 0:
-                # No usable clock — fall back to counting frames.
-                timestamp_s = index / native if native > 0 else 0.0
+                if native > 0:
+                    # No presentation clock, but the rate maps index to time.
+                    timestamp_s = index / native
+                else:
+                    # Neither a rate nor a clock: every frame would sit at 0.0,
+                    # the mark would never advance, and only the first frame
+                    # would ever be emitted. Say so rather than return a
+                    # one-frame timeline for a decodable video.
+                    raise InputError(
+                        message=(
+                            f"{self.filename} reports neither a frame rate nor "
+                            f"presentation timestamps, so frames cannot be placed in time"
+                        ),
+                        suggestion=(
+                            "Re-encode the file (e.g. `ffmpeg -i in.mp4 -r 30 out.mp4`) "
+                            "so it carries a frame rate."
+                        ),
+                    )
 
             if timestamp_s + tolerance_s < next_at:
                 continue

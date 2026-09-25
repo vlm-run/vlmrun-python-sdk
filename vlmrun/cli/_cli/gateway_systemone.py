@@ -8,6 +8,7 @@ Typer app from :mod:`vlmrun.cli._cli.gateway`.
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import sys
 import textwrap
@@ -698,10 +699,16 @@ def _video_scope(source: str, fps: float, max_frames: int) -> Tuple[float, float
         duration_s, native_fps = reader.duration_s, reader.fps
 
     if duration_s > 0:
-        estimate = max(1, int(duration_s * fps))
+        # Marks fall at 0, 1/fps, 2/fps …, so the count is the last mark plus
+        # one — flooring the product alone undercounts a partial final second and
+        # lets a clip past the ceiling only to truncate it. The last frame sits a
+        # frame-interval short of the duration, so that is the real last instant;
+        # without it, a whole-second clip would be over-counted and refused.
+        last_instant = duration_s - (1.0 / native_fps if native_fps > 0 else 0.0)
+        estimate = max(1, math.floor(max(0.0, last_instant) * fps) + 1)
         if estimate > max_frames:
             raise _fail(
-                f"{fps:g} fps over {duration_s:.1f}s is about {estimate} frames, "
+                f"{fps:g} fps over {duration_s:.1f}s is up to {estimate} frames, "
                 f"past the {max_frames}-frame ceiling.",
                 f"Each frame is a billed read. Lower --fps, or raise "
                 f"--max-frames to {estimate}.",
@@ -1891,9 +1898,11 @@ def systemone(
                     "The file may be empty or its codec unsupported by this "
                     "OpenCV build.",
                 )
-            if duration_s <= 0 and len(runs) >= max_frames:
-                # No duration to estimate from, so the ceiling was hit mid-read
-                # rather than predicted. The tail was never looked at.
+            if len(runs) >= max_frames:
+                # Reaching the ceiling means the tail was never looked at, and a
+                # partial timeline must not be presented as a whole one. Said
+                # whether or not the duration was known, because the estimate is
+                # an estimate.
                 console.print(
                     f"[yellow]Stopped at the {max_frames}-frame ceiling; the rest "
                     f"of the video was not read.[/yellow] "

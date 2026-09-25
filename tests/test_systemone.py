@@ -1136,3 +1136,46 @@ class TestPublicUrlConstants:
             [{"id": "a", "type": "noul"}], transport="ws"
         )
         assert stream.url == "wss://gw.test/typesafe/ws"
+
+
+class TestClosedHttpStream:
+    def test_send_on_a_closed_stream_issues_no_read(self):
+        """Closing has to stop billed reads, not only reject the iterator."""
+        sent: list = []
+        stream = resource(capture(sent)).stream([{"id": "a", "type": "noul"}])
+        with stream:
+            pass
+        with pytest.raises(InputError):
+            stream.send(PNG_DATA_URL)
+        assert sent == [], "a closed stream must not reach the network"
+
+
+class TestCapsUrlConstants:
+    """Module-level constants for callers who want a value, not a call."""
+
+    def test_the_urls_are_exposed_in_caps(self):
+        from vlmrun.client.systemone import (
+            VLMRUN_TYPESAFE_BASE_URL,
+            VLMRUN_TYPESAFE_WEBSOCKET_URL,
+        )
+        from vlmrun.constants import DEFAULT_GATEWAY_URL, VLMRUN_GATEWAY_BASE_URL
+
+        assert VLMRUN_GATEWAY_BASE_URL == DEFAULT_GATEWAY_URL
+        assert VLMRUN_TYPESAFE_BASE_URL == "https://gateway.vlm.run/typesafe"
+        assert VLMRUN_TYPESAFE_WEBSOCKET_URL == "wss://gateway.vlm.run/typesafe/ws"
+
+    def test_the_websocket_constant_matches_its_function(self):
+        from vlmrun.client.systemone import (
+            VLMRUN_TYPESAFE_WEBSOCKET_URL,
+            typesafe_websocket_url,
+        )
+
+        assert VLMRUN_TYPESAFE_WEBSOCKET_URL == typesafe_websocket_url()
+
+    def test_the_constants_are_fixed_at_import(self, monkeypatch):
+        """They cannot follow the environment; the functions are for that."""
+        from vlmrun.constants import VLMRUN_GATEWAY_BASE_URL, gateway_base_url
+
+        monkeypatch.setenv("VLMRUN_GATEWAY_BASE_URL", "https://later.test/v1")
+        assert gateway_base_url() == "https://later.test/v1"
+        assert VLMRUN_GATEWAY_BASE_URL != "https://later.test/v1"

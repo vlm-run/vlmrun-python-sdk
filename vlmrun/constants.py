@@ -40,6 +40,13 @@ def gateway_base_url(base_url: str | None = None) -> str:
     ).rstrip("/")
 
 
+#: The gateway base URL this process will use, resolved at import.
+#: Read this when a module-level constant is what you want; call
+#: :func:`gateway_base_url` instead if the environment may change after import,
+#: since this is fixed once and does not follow it.
+VLMRUN_GATEWAY_BASE_URL = gateway_base_url()
+
+
 # Cache directories - use VLMRUN_CACHE_DIR env var if set, otherwise default to ~/.vlmrun/cache
 VLMRUN_HOME = Path.home() / ".vlmrun"
 VLMRUN_HOME.mkdir(parents=True, exist_ok=True)

@@ -81,7 +81,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from vlmrun.client.exceptions import APIError, InputError
+from vlmrun.client.exceptions import APIError, InputError, RequestTimeoutError
 from vlmrun.common.dependencies import require_typesafe, require_websockets
 from vlmrun.common.mime import (
     IMAGE_MIME_TYPES,
@@ -193,6 +193,17 @@ def typesafe_websocket_url(
     if not separator:  # a bare host, with no scheme to swap
         return f"wss://{root}{TYPESAFE_WEBSOCKET_PATH}"
     return f"{'wss' if scheme == 'https' else 'ws'}://{rest}{TYPESAFE_WEBSOCKET_PATH}"
+
+
+#: The ``/typesafe`` root this process will use, resolved at import.
+#: Call :func:`typesafe_base_url` instead if the environment may change after
+#: import, since this is fixed once and does not follow it.
+VLMRUN_TYPESAFE_BASE_URL = typesafe_base_url()
+
+#: The websocket session URL this process will use, resolved at import.
+#: Call :func:`typesafe_websocket_url` instead if the environment may change
+#: after import.
+VLMRUN_TYPESAFE_WEBSOCKET_URL = typesafe_websocket_url()
 
 
 def _spec_error(message: str, *, suggestion: str) -> InputError:
@@ -1035,9 +1046,10 @@ class DecisionStream:
             The read.
 
         Raises:
-            InputError: If the image cannot be read or encoded.
+            InputError: If the stream is not open, or the image cannot be read.
             TypeSafeAPIError: If the gateway returns an unsuccessful response.
         """
+        self._check_open()
         return self._read(self._as_image(image), state)
 
     def _read(self, image: str | Path, state: Any = None) -> "SystemOneResponse":
@@ -1169,6 +1181,13 @@ class WebSocketStream(DecisionStream):
             InputError: If the questions are malformed or concurrency is < 1.
         """
         super().__init__(resource, questions, **kwargs)
+        if self._options.get("extra_body"):
+            # session.create rejects unknown fields outright, so there is nowhere
+            # to put these. Failing here beats discarding them silently.
+            raise InputError(
+                message="extra_body is not supported on the websocket transport",
+                suggestion="The session route rejects unknown fields; use transport='http'.",
+            )
         self._ws: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -1176,6 +1195,7 @@ class WebSocketStream(DecisionStream):
         self._pending: dict[str, Any] = {}
         self._ids = itertools.count()
         self._inflight: Any = None
+        self._state_lock: Any = None
         self._limits: dict[str, Any] = {}
         self._stats: dict[str, Any] = {}
         self._sent_state: Any = None
@@ -1257,6 +1277,15 @@ class WebSocketStream(DecisionStream):
                     # Ask for the concurrency the caller wanted. The route's own
                     # default is 2, so not asking silently throttles the session.
                     "max_inflight": min(self._concurrency, WEBSOCKET_MAX_INFLIGHT),
+                    # These are session-scoped on this route: `decide` rejects
+                    # them outright, so they have to ride the handshake or they
+                    # are silently lost — `samples` most expensively, since the
+                    # server would bill its own default number of draws.
+                    **{
+                        field: self._options[field]
+                        for field in ("steps", "samples", "reasoning_effort")
+                        if self._options.get(field) is not None
+                    },
                 }
             )
         )
@@ -1272,6 +1301,9 @@ class WebSocketStream(DecisionStream):
         ceiling = ack.get("max_inflight") or self._concurrency
         self._window = max(1, min(self._concurrency, int(ceiling)))
         self._inflight = asyncio.Semaphore(self._window)
+        # Serializes state transitions. Two barriers draining permits at once
+        # would each hold part of the window and wait for the other's share.
+        self._state_lock = asyncio.Lock()
         self._reader = asyncio.create_task(self._pump())
         if self._state not in (None, ""):
             await self._send_state(self._state)
@@ -1339,34 +1371,66 @@ class WebSocketStream(DecisionStream):
         self, image: str | Path, state: Any = None
     ) -> "SystemOneResponse":
         """Send one ``decide`` and await the matching ``decision``."""
+        # Prepare the media off the loop and before taking a permit: a remote
+        # image is fetched synchronously, and doing that here would block the
+        # reply pump and stall decisions that have already come back.
+        loop = asyncio.get_running_loop()
+        content = await loop.run_in_executor(None, self._content_for, image)
+
         if state is not None and state != self._sent_state:
-            await self._barrier(state)
+            # One state transition at a time, and the check is repeated under
+            # the lock because another read may have just made the same change.
+            async with self._state_lock:
+                if state != self._sent_state:
+                    await self._barrier(state)
+        elif self._state_lock.locked():
+            # A transition is draining the window; queue behind it rather than
+            # taking a permit it is waiting for.
+            async with self._state_lock:
+                pass
+
         async with self._inflight:
             request_id = str(next(self._ids))
-            future = asyncio.get_running_loop().create_future()
+            future = loop.create_future()
             self._pending[request_id] = future
             message: dict[str, Any] = {"type": "decide", "id": request_id}
-            content = build_content(
-                images=[image],
-                detail=self._options["detail"],
-                timeout=self._options["timeout"] or 30.0,
-            )
             if content:
                 message["content"] = content
+            timeout = self._options["timeout"]
             try:
                 await self._ws.send(json.dumps(message))
-                payload = await future
+                payload = await (
+                    asyncio.wait_for(future, timeout) if timeout else future
+                )
+            except asyncio.TimeoutError as e:
+                raise RequestTimeoutError(
+                    message=f"no decision within {timeout}s on the websocket session",
+                    suggestion="Raise the stream's timeout, or check the gateway.",
+                ) from e
             finally:
+                # Dropped either way, so a late reply cannot revive this read.
                 self._pending.pop(request_id, None)
             self._count += 1
             return self._as_response(payload)
 
+    def _content_for(self, image: str | Path) -> list[dict[str, Any]] | None:
+        """The content parts for one image. Runs off the session's loop."""
+        return build_content(
+            images=[image],
+            detail=self._options["detail"],
+            timeout=self._options["timeout"] or 30.0,
+        )
+
     async def _barrier(self, state: Any) -> None:
         """Change the session state with no read in flight.
 
-        The state belongs to the session, not to a request, so a read that is
-        already out would otherwise pick up the new one. Draining first makes the
-        change apply from here forward and no earlier.
+        The state belongs to the session, not to a request, so a read already
+        out would otherwise pick up the new one. Draining first makes the change
+        apply from here forward and no earlier.
+
+        The caller must hold :attr:`_state_lock`. Two barriers draining at once
+        would each hold part of the window while waiting for the other's share,
+        and neither could finish.
         """
         for _ in range(self._window):
             await self._inflight.acquire()

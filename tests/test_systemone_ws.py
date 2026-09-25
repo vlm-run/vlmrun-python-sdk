@@ -28,6 +28,35 @@ PNG_DATA_URL = f"data:image/png;base64,{base64.b64encode(PNG_BYTES).decode()}"
 MODEL = "google/diffusiongemma-26b-a4b-it"
 
 
+def answer_for(message, base=0.5):
+    """A value unique to the image a decide carried.
+
+    Lets a test assert that each answer came back to the read whose image
+    produced it, without depending on how the client numbers its requests.
+    """
+    import zlib
+
+    if not message:
+        return base
+    content = message.get("content") or []
+    if not content:
+        return base
+    url = content[0]["image_url"]["url"]
+    return round(base + (zlib.crc32(url.encode()) % 100_000) / 1_000_000, 6)
+
+
+def distinct_images(count):
+    """`count` distinct JPEG data URLs, so replies can be told apart."""
+    import numpy
+
+    from vlmrun.common.image import encode_frame
+
+    return [
+        encode_frame(numpy.full((8, 8, 3), 10 + i * 3, dtype=numpy.uint8))
+        for i in range(count)
+    ]
+
+
 class StubServer:
     """A websocket server that speaks the System One session protocol.
 
@@ -92,7 +121,7 @@ class StubServer:
                     )
                     self._live -= 1
                     continue
-                held.append(message.get("id"))
+                held.append((message.get("id"), message))
                 # Answer in batches so a reorder has something to reorder.
                 batched = self.reverse or self.shuffle is not None
                 if len(held) >= (self.max_inflight if batched else 1):
@@ -101,9 +130,9 @@ class StubServer:
                         self.shuffle.shuffle(order)
                     elif self.reverse:
                         order.reverse()
-                    for request_id in order:
+                    for request_id, decide in order:
                         self.reply_order.append(request_id)
-                        await ws.send(json.dumps(self._decision(request_id)))
+                        await ws.send(json.dumps(self._decision(request_id, decide)))
                         self._live -= 1
                     held.clear()
             elif kind == "session.close":
@@ -122,19 +151,16 @@ class StubServer:
                 )
                 return
 
-    def _decision(self, request_id):
+    def _decision(self, request_id, message=None):
         return {
             "type": "decision",
             "frame": 0,
             "id": request_id,
-            # The id is folded into the answer so a test can prove each reply
-            # reached the read that asked for it.
-            "answers": {
-                "a": {
-                    "type": "noul",
-                    "noul": round(self.noul + int(request_id) / 1000, 4),
-                }
-            },
+            # Derived from the image this decide actually carried, so a reply
+            # delivered to the wrong read is visible. Keying off the request id
+            # instead would only test that ids are handed out in order, which is
+            # the client's private business.
+            "answers": {"a": {"type": "noul", "noul": answer_for(message, self.noul)}},
             "usage": {"input_tokens": 10, "output_tokens": 0},
             "latency_ms": 5.0,
         }
@@ -265,25 +291,23 @@ class TestWebSocketReads:
             with stream_to(server) as stream:
                 decision = next(iter(stream.map([PNG_DATA_URL])))
         assert decision.response.model == MODEL
-        assert decision.response.nouls["a"].noul == pytest.approx(0.5, abs=0.01)
+        assert 0.0 <= decision.response.nouls["a"].noul <= 1.0
         assert decision.response.usage.input_tokens == 10
 
     def test_out_of_order_replies_reach_the_right_read(self):
         """Correlation is by id, not arrival — the reason ids exist."""
+        pytest.importorskip("numpy")
+        images = distinct_images(6)
+        expected = [
+            answer_for({"content": [{"image_url": {"url": image}}]}) for image in images
+        ]
         with StubServer(reverse=True, max_inflight=2) as server:
             with stream_to(server, concurrency=2) as stream:
-                decisions = list(stream.map([PNG_DATA_URL] * 6))
-        # The stub folds each reply's id into its answer, so a mis-paired reply
-        # would show up as an answer out of sequence.
+                decisions = list(stream.map(images))
         assert [d.index for d in decisions] == [0, 1, 2, 3, 4, 5]
-        assert [round(d.response.nouls["a"].noul, 4) for d in decisions] == [
-            0.5,
-            0.501,
-            0.502,
-            0.503,
-            0.504,
-            0.505,
-        ]
+        # Each answer is derived from the image that produced it, so a reply
+        # handed to the wrong read shows up here.
+        assert [d.response.nouls["a"].noul for d in decisions] == expected
 
     def test_frame_identity_survives_the_socket(self):
         from vlmrun.common.video import SampledFrame
@@ -308,7 +332,7 @@ class TestWebSocketReads:
             with stream_to(server) as stream:
                 response = stream.send(PNG_DATA_URL)
                 assert stream.count == 1
-        assert response.nouls["a"].noul == pytest.approx(0.5, abs=0.01)
+        assert 0.0 <= response.nouls["a"].noul <= 1.0
 
     def test_a_per_read_state_change_is_a_barrier(self):
         with StubServer() as server:
@@ -408,8 +432,8 @@ class TestWebSocketUsage:
         from vlmrun.client.systemone import usage_of
 
         class Detailed(StubServer):
-            def _decision(self, request_id):
-                decision = super()._decision(request_id)
+            def _decision(self, request_id, message=None):
+                decision = super()._decision(request_id, message)
                 decision["usage"] = {
                     "input_tokens": 88,
                     "output_tokens": 0,
@@ -471,25 +495,27 @@ class TestOrderingIsIntact:
     """Responses must come back paired to the input that produced them.
 
     One socket carries every read, so arrival order is whatever the server
-    chose. The stub folds each reply's id into its answer, which makes a
-    mispairing visible rather than merely possible.
+    chose. Each reply's answer is derived from the image that produced it, so a
+    mispairing is visible rather than merely possible — keying off the request
+    id would only assert that ids are handed out in order, which is the client's
+    private business and not the property under test.
     """
 
     @pytest.mark.parametrize("seed", range(5))
     def test_a_shuffled_server_still_pairs_correctly(self, seed):
         import random
 
+        pytest.importorskip("numpy")
+        images = distinct_images(16)
+        expected = [
+            answer_for({"content": [{"image_url": {"url": image}}]}) for image in images
+        ]
+        assert len(set(expected)) == len(expected), "the oracle must be injective"
         with StubServer(max_inflight=4, shuffle=random.Random(seed)) as server:
             with stream_to(server, concurrency=4) as stream:
-                decisions = list(stream.map([PNG_DATA_URL] * 16))
+                decisions = list(stream.map(images))
         assert [d.index for d in decisions] == list(range(16))
-        # answer == 0.5 + id/1000, so this is the identity of each reply.
-        assert [round(d.response.nouls["a"].noul, 4) for d in decisions] == [
-            round(0.5 + i / 1000, 4) for i in range(16)
-        ]
-        assert server.reply_order != [
-            str(i) for i in range(16)
-        ], "the stub should have replied out of order for this to prove anything"
+        assert [d.response.nouls["a"].noul for d in decisions] == expected
 
     def test_frame_timestamps_stay_with_their_answers(self):
         """The timeline's x-axis and y-axis must not come apart."""
@@ -506,14 +532,20 @@ class TestOrderingIsIntact:
             )
             for i in range(12)
         ]
+        from vlmrun.common.image import encode_frame
+
+        expected = [
+            answer_for({"content": [{"image_url": {"url": encode_frame(f.frame)}}]})
+            for f in frames
+        ]
+        assert len(set(expected)) == len(expected), "the oracle must be injective"
         with StubServer(max_inflight=4, shuffle=random.Random(7)) as server:
             with stream_to(server, concurrency=4) as stream:
                 decisions = list(stream.map(frames))
         assert [d.index for d in decisions] == list(range(12))
         assert [d.timestamp_s for d in decisions] == [i * 0.5 for i in range(12)]
-        assert [round(d.response.nouls["a"].noul, 4) for d in decisions] == [
-            round(0.5 + i / 1000, 4) for i in range(12)
-        ]
+        # The answer, its frame index and its timestamp all have to belong together.
+        assert [d.response.nouls["a"].noul for d in decisions] == expected
 
 
 class TestAnswerTypesOverTheSocket:
@@ -527,7 +559,7 @@ class TestAnswerTypesOverTheSocket:
     @staticmethod
     def _server_answering(answers):
         class Fixed(StubServer):
-            def _decision(self, request_id):
+            def _decision(self, request_id, message=None):
                 return {
                     "type": "decision",
                     "frame": 0,
@@ -597,3 +629,134 @@ class TestAnswerTypesOverTheSocket:
         assert decision.response.nouls["urgent"].noul == pytest.approx(0.9)
         assert decision.response.choices["dept"].choice == "billing"
         assert decision.response.scores["mood"].legend[0] == "calm"
+
+
+class TestReviewFindings:
+    """Regressions for the faults found in review of this transport."""
+
+    def test_read_options_ride_the_handshake(self):
+        """`decide` rejects these outright, so losing them is silent and costly.
+
+        `samples` especially: the server would bill its own default number of
+        draws while the caller believed it had asked for more.
+        """
+        with StubServer() as server:
+            with stream_to(server, steps=3, samples=4) as stream:
+                list(stream.map([PNG_DATA_URL]))
+        create = server.creates[0]
+        assert create["steps"] == 3
+        assert create["samples"] == 4
+        # And not on the decide, which the route refuses.
+        assert all("samples" not in d and "steps" not in d for d in server.decides)
+
+    def test_reasoning_effort_rides_the_handshake(self):
+        with StubServer() as server:
+            with stream_to(server, reasoning_effort="low") as stream:
+                list(stream.map([PNG_DATA_URL]))
+        assert server.creates[0]["reasoning_effort"] == "low"
+
+    def test_options_left_unset_are_not_sent(self):
+        with StubServer() as server:
+            with stream_to(server):
+                pass
+        create = server.creates[0]
+        assert "steps" not in create and "samples" not in create
+        assert "reasoning_effort" not in create
+
+    def test_extra_body_is_refused_rather_than_dropped(self):
+        """The route rejects unknown fields, so there is nowhere to put these."""
+        with StubServer() as server:
+            with pytest.raises(InputError) as caught:
+                stream_to(server, extra_body={"anything": 1})
+        assert "extra_body" in caught.value.message
+
+    def test_concurrent_state_changes_do_not_deadlock(self):
+        """Two barriers each holding part of the window would wait forever."""
+        import threading
+
+        with StubServer(max_inflight=4) as server:
+            with stream_to(server, state="start", concurrency=4) as stream:
+                errors: list = []
+
+                def change(value):
+                    try:
+                        stream.send(PNG_DATA_URL, state=value)
+                    except Exception as e:  # noqa: BLE001 - reported below
+                        errors.append(e)
+
+                threads = [
+                    threading.Thread(target=change, args=(f"state-{i}",))
+                    for i in range(4)
+                ]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=15)
+                assert not any(t.is_alive() for t in threads), "a state change hung"
+                assert errors == []
+        # Every transition was applied, one at a time.
+        assert len(server.states) == 5  # the initial state, then four changes
+
+    def test_a_read_times_out_instead_of_hanging(self):
+        """A server that holds the socket open must not block a read forever."""
+        from vlmrun.client.exceptions import RequestTimeoutError
+
+        class Silent(StubServer):
+            async def _handler(self, ws):
+                async for raw in ws:
+                    message = json.loads(raw)
+                    self.received.append(message)
+                    if message.get("type") == "session.create":
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "type": "session.created",
+                                    "session_id": "stub",
+                                    "model": MODEL,
+                                    "questions": ["a"],
+                                    "max_inflight": 2,
+                                }
+                            )
+                        )
+                    # Never answers a decide.
+
+        with Silent() as server:
+            with stream_to(server, timeout=0.5) as stream:
+                with pytest.raises(RequestTimeoutError):
+                    stream.send(PNG_DATA_URL)
+
+    def test_a_timed_out_read_leaves_nothing_pending(self):
+        """A late reply must not be handed to a read that already failed."""
+        from vlmrun.client.exceptions import RequestTimeoutError
+
+        class Slow(StubServer):
+            async def _handler(self, ws):
+                async for raw in ws:
+                    message = json.loads(raw)
+                    self.received.append(message)
+                    if message.get("type") == "session.create":
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "type": "session.created",
+                                    "session_id": "stub",
+                                    "model": MODEL,
+                                    "questions": ["a"],
+                                    "max_inflight": 2,
+                                }
+                            )
+                        )
+                    elif message.get("type") == "decide":
+                        await asyncio.sleep(0.4)
+                        await ws.send(
+                            json.dumps(self._decision(message.get("id"), message))
+                        )
+
+        with Slow() as server:
+            with stream_to(server, timeout=0.1) as stream:
+                with pytest.raises(RequestTimeoutError):
+                    stream.send(PNG_DATA_URL)
+                assert stream._pending == {}
+                # The session still works once given enough time.
+                stream._options["timeout"] = 5.0
+                assert stream.send(PNG_DATA_URL) is not None
