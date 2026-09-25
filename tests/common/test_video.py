@@ -250,6 +250,44 @@ class TestFrames:
             second = [frame.index for frame in reader.frames(1.0)]
         assert first == second
 
+    def test_reading_inside_a_with_block(self, sample_video):
+        """The documented form: `with VideoReader(..) as video:`."""
+        with VideoReader(sample_video) as video:
+            assert [frame.index for frame in video.frames(fps=1)] == [
+                0,
+                25,
+                50,
+                75,
+                100,
+                125,
+                150,
+            ]
+        assert video._video is None, "the block should release the decoder"
+
+    def test_a_reader_can_be_entered_again(self):
+        """`with` has to mean the same thing the second time.
+
+        A reader opens on construction and closes on exit, so entering a closed
+        one has to reopen it rather than hand back something that cannot read.
+        """
+        video = VideoReader(Path(__file__).parent.parent / "test_data" / "test.mp4")
+        with video:
+            first = [frame.index for frame in video.frames(fps=1)]
+        with video:
+            second = [frame.index for frame in video.frames(fps=1)]
+        assert first == second != []
+
+    def test_a_closed_reader_says_so(self, sample_video):
+        """Not a bare RuntimeError: the fix is to read inside the block."""
+        from vlmrun.client.exceptions import InputError
+
+        video = VideoReader(sample_video)
+        video.close()
+        with pytest.raises(InputError) as caught:
+            next(video.frames(fps=1))
+        assert "closed" in caught.value.message
+        assert "with VideoReader" in caught.value.suggestion
+
     @pytest.mark.parametrize("rate", [0, -1, -0.5])
     def test_a_non_positive_rate_is_rejected(self, sample_video, rate):
         from vlmrun.client.exceptions import InputError

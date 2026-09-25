@@ -147,7 +147,21 @@ class BaseVideoReader(ABC):
         self.seek(0)
 
     def __enter__(self):
-        """Enter the context manager."""
+        """Enter the context manager, opening the video if it is not open.
+
+        A reader opens on construction, so entering is usually a no-op. It
+        reopens a closed one so that ``with reader:`` means the same thing every
+        time rather than only the first — a reader closed once would otherwise
+        advertise the protocol and then refuse to read.
+
+        Returns:
+            This reader.
+
+        Raises:
+            RuntimeError: If the video cannot be opened.
+        """
+        if self._video is None:
+            self._video = self.open()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -369,8 +383,7 @@ class VideoReader(BaseVideoReader):
             SampledFrame: The frame, its index and its timestamp.
 
         Raises:
-            InputError: If ``fps`` is not positive.
-            RuntimeError: If the video is not opened.
+            InputError: If ``fps`` is not positive, or the reader is closed.
 
         Example:
             ```python
@@ -388,7 +401,10 @@ class VideoReader(BaseVideoReader):
                 suggestion="Pass a rate like 1 (one frame a second) or 0.5 (one every two).",
             )
         if self._video is None:
-            raise RuntimeError("Video is not opened")
+            raise InputError(
+                message=f"{self.filename} is closed, so it has no frames to read",
+                suggestion="Read inside the reader's block: `with VideoReader(path) as video:`.",
+            )
 
         interval_s = 1.0 / fps
         native = self.fps
