@@ -60,6 +60,7 @@ def test_optional_dependency_errors(require_fn, module_name, extra, monkeypatch)
 
 def test_markdown_table_to_dataframe_requires_pandas(monkeypatch):
     """MarkdownTable.to_dataframe should lazy-load pandas."""
+
     def _raise_pandas():
         raise DependencyError(
             message="pandas is not installed",
@@ -75,3 +76,74 @@ def test_markdown_table_to_dataframe_requires_pandas(monkeypatch):
     )
     with pytest.raises(DependencyError):
         table.to_dataframe()
+
+
+def test_require_websockets_returns_the_module():
+    """The ws transport's guard, which only a websocket session should trip."""
+    from vlmrun.common.dependencies import require_websockets
+
+    assert require_websockets().__name__ == "websockets"
+
+
+def test_require_websockets_names_the_ws_extra(monkeypatch):
+    """A missing install points at the extra that provides it."""
+    import builtins
+
+    from vlmrun.client.exceptions import DependencyError
+    from vlmrun.common.dependencies import require_websockets
+
+    real_import = builtins.__import__
+
+    def fail_websockets(name, *args, **kwargs):
+        if name == "websockets":
+            raise ImportError("no websockets")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_websockets)
+    with pytest.raises(DependencyError) as caught:
+        require_websockets()
+    assert "vlmrun[ws]" in caught.value.suggestion
+
+
+def test_websockets_is_not_imported_at_module_scope():
+    """An install without the ws extra must not break importing the SDK.
+
+    Asserted structurally rather than by uninstalling: no module under vlmrun
+    may import websockets except through the guard.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[2] / "vlmrun"
+    offenders = []
+    for path in root.rglob("*.py"):
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if re.match(r"\s*(import websockets|from websockets)", line):
+                # The guard itself is the one place allowed to import it.
+                if path.name != "dependencies.py":
+                    offenders.append(f"{path.relative_to(root)}:{number}")
+    assert not offenders, f"websockets imported outside the guard: {offenders}"
+
+
+@pytest.mark.parametrize(
+    "first_import",
+    ["vlmrun.common.dependencies", "vlmrun.common.video", "vlmrun.common.image"],
+)
+def test_common_modules_import_standalone(first_import):
+    """Each module must import without a sibling having been imported first.
+
+    ``_dependency_error`` needs ``vlmrun.client.exceptions``, and importing that
+    runs ``vlmrun.client.__init__``, which comes back here for its own guards. A
+    module-scope import therefore breaks whichever of these is the first
+    ``vlmrun`` import in a process — which a test inside this suite cannot see,
+    because pytest has already imported the package. Hence the subprocess.
+    """
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-c", f"import {first_import}"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

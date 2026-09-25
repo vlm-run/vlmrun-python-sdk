@@ -1,11 +1,51 @@
+from __future__ import annotations
+
 from pathlib import Path
 import os
 
 DEFAULT_BASE_URL = "https://api.vlm.run/v1"
 
 # OpenAI-compatible model gateway (third-party OCR / VLM models).
-# Override with the VLMRUN_GATEWAY_URL environment variable.
 DEFAULT_GATEWAY_URL = "https://gateway.vlm.run/v1"
+
+# The environment variables that override the URLs above, named so downstream
+# code can read or set them without hardcoding the strings.
+VLMRUN_BASE_URL_ENV = "VLMRUN_BASE_URL"
+VLMRUN_GATEWAY_BASE_URL_ENV = "VLMRUN_GATEWAY_BASE_URL"
+#: The gateway's original variable name. Still honoured, after
+#: :data:`VLMRUN_GATEWAY_BASE_URL_ENV`, so existing setups keep working.
+VLMRUN_GATEWAY_URL_ENV = "VLMRUN_GATEWAY_URL"
+TYPESAFE_BASE_URL_ENV = "TYPESAFE_BASE_URL"
+
+
+def gateway_base_url(base_url: str | None = None) -> str:
+    """Resolve the gateway's base URL.
+
+    The one place the precedence lives, so every resource that talks to the
+    gateway agrees on it: an explicit argument, then
+    ``VLMRUN_GATEWAY_BASE_URL``, then the older ``VLMRUN_GATEWAY_URL``, then
+    :data:`DEFAULT_GATEWAY_URL`.
+
+    Args:
+        base_url (str | None, optional): An explicit override, which wins.
+
+    Returns:
+        str: The gateway base URL, without a trailing slash.
+    """
+    return (
+        base_url
+        or os.getenv(VLMRUN_GATEWAY_BASE_URL_ENV)
+        or os.getenv(VLMRUN_GATEWAY_URL_ENV)
+        or DEFAULT_GATEWAY_URL
+    ).rstrip("/")
+
+
+#: The gateway base URL this process will use, resolved at import.
+#: Read this when a module-level constant is what you want; call
+#: :func:`gateway_base_url` instead if the environment may change after import,
+#: since this is fixed once and does not follow it.
+VLMRUN_GATEWAY_BASE_URL = gateway_base_url()
+
 
 # Cache directories - use VLMRUN_CACHE_DIR env var if set, otherwise default to ~/.vlmrun/cache
 VLMRUN_HOME = Path.home() / ".vlmrun"

@@ -8,6 +8,7 @@ Typer app from :mod:`vlmrun.cli._cli.gateway`.
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import sys
 import textwrap
@@ -20,6 +21,7 @@ import typer
 from rich.console import Console, Group
 from rich import box
 from rich.markup import escape
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
@@ -30,6 +32,7 @@ from vlmrun.client.systemone import (
     MAX_IMAGES,
     REASONING_EFFORTS,
     SYSTEMONE_MODEL,
+    FrameDecision,
     probe_url_mime,
     normalize_questions,
     timings_of,
@@ -42,6 +45,7 @@ from vlmrun.common.mime import (
     normalize_mime,
     suffix_from_url,
 )
+from vlmrun.constants import SUPPORTED_VIDEO_FILETYPES
 
 console = Console()
 
@@ -117,6 +121,7 @@ STATE AND MEDIA:
 \b
     an image path, URL or data: URL -> image part (up to 8; remote ones inlined)
     a .pdf path, URL or data: URL   -> file part (one per read; first pages)
+    a video path (.mp4 .mov .avi .mkv .webm) -> sampled into frames, one read each
     .txt .md .json .yaml     -> the state (.json parsed into an object)
     anything else            -> literal state text (several are joined)
 
@@ -156,6 +161,7 @@ ANSWERS:
 LIMITS:
   1+ questions · choice 2-128 options · score 2-10 levels
   images <= 8 (JPEG/PNG/WebP/GIF, 5 MB each) · one PDF, first pages read
+  one video per command, sampled to <= --max-frames frames (default 60)
   steps 1-8 · samples 1-32 (every draw is billed)
   Unknown fields are rejected (422), so a typo fails loudly rather than being
   ignored.
@@ -180,6 +186,9 @@ EXAMPLES:
 \b
   vlmrun gw systemone -s "Does the scan match the claim?" scan.jpg claim.pdf \\
     --noul matches
+
+\b
+  vlmrun gw systemone door.mp4 --fps 2 --noul is_open
 
 \b
   vlmrun gw systemone --body '{"state": "...", "questions": [...], "samples": 4}'
@@ -249,6 +258,89 @@ GATES, REPEATS AND DRY RUNS:
       "$VLMRUN_GATEWAY_URL/../typesafe/v1/systemone" -H "authorization: Bearer $VLMRUN_API_KEY"
 
 \b
+VIDEO:
+  Pass a video and it is sampled into frames, each frame its own read.
+  There is no video model here and no streaming: the timeline is built
+  client-side out of single-frame decisions, which is what makes every
+  frame's answer independent and comparable.
+
+\b
+    --fps N          frames read per second of video (default 1)
+    --max-frames N   refuse to sample past N frames (default 60)
+    --concurrency N  reads in flight at once (default 4)
+    --ws             read the clip over one websocket session
+
+\b
+  --fps is a request, not a promise: it cannot exceed the video's own
+  rate, and nothing is interpolated. Sampling follows the presentation
+  clock, so a variable-rate video is read at the times asked for rather
+  than every Nth frame.
+
+\b
+    vlmrun gw s1 door.mp4 --noul is_open --fps 2
+
+\b
+  Every frame is a billed read, so --fps and the clip's length set the
+  bill: 2 fps over 30s is 60 reads. --max-frames is checked against the
+  duration before anything is sent, so an expensive ask fails for free.
+
+\b
+  Answers render as a series over time, not as a mean: a sparkline per
+  numeric question with its true peak and low, and a choice as the
+  segments it held. A series longer than the terminal is averaged into
+  the columns available — the peak and low beside it stay the real ones.
+
+\b
+    vlmrun gw s1 door.mp4 --choice state="open|closed|blocked" --fps 1
+      state  closed 0.0s-3.0s · open 4.0s-11.0s · blocked 12.0s-14.0s
+
+\b
+  --json gives every frame, each read tagged with where it came from:
+
+\b
+    {"video": {"fps": 1.0, "frames": 15, "duration_s": 15.0,
+               "native_fps": 30.0},
+     "reads": [{"frame": 0, "timestamp_s": 0.0, "response": {...}}, ...]}
+
+\b
+  --gate-mode says how a gate reads the timeline:
+
+\b
+    any (default)  the condition held on at least one frame
+    all            it held on every frame
+    sustained:N    it held on N frames in a row
+    mean           it holds of the average across frames
+
+\b
+  any is the default because a gate over footage is usually asking
+  whether something ever happened. sustained:N is the debounced form —
+  it ignores a single frame's misread, which any by construction cannot.
+
+\b
+    vlmrun gw s1 door.mp4 --noul is_open --fps 2 --gate 'is_open>0.9'
+    vlmrun gw s1 door.mp4 --noul is_open --fps 4 --gate 'is_open>0.9' \\
+      --gate-mode sustained:8     # two seconds open, not one bad frame
+
+\b
+  --ws reads the clip over one session on /typesafe/ws instead of a request
+  per frame. The questions are sent once with the handshake and cached
+  server-side, and the reads are pipelined over a single socket, which is
+  faster than a request each: 60 frames of a 60s clip read in 0.9s against
+  2.0s at --concurrency 8, for the same tokens and cost. --concurrency is
+  requested as the session's in-flight limit, which the route caps at 8; the
+  server's answer wins.
+  Needs the ws extra: pip install vlmrun[ws]
+
+\b
+    vlmrun gw s1 door.mp4 --ws --fps 2 --noul is_open
+
+\b
+  --dry-run prints the first frame's body: every frame's request is that
+  one with a different image. --repeat does not combine with a video —
+  it measures the spread of repeated reads of one fixed input, and each
+  frame here is a different input.
+
+\b
 NOTES:
   Requires the typesafe extra: pip install vlmrun[typesafe]
   --detail is applied per request: one `high` input lifts the whole read.
@@ -257,6 +349,9 @@ NOTES:
   Remote images are fetched by this CLI (the route takes images only as data
   URLs) and must resolve to a public address; set VLMRUN_ALLOW_PRIVATE_URLS=1
   for an internal image host.
+  Video needs the video extra: pip install vlmrun[video]
+  A video has to be a local file — frames are sampled here, not by the gateway,
+  so a URL or data: URL has to be downloaded first.
 """
 
 # grep/diff convention: 1 means "the check did not pass", 2 means "it broke".
@@ -267,6 +362,22 @@ EXIT_ERROR = 2
 TEXT_SUFFIXES = frozenset(
     {".txt", ".md", ".markdown", ".json", ".jsonl", ".yaml", ".yml", ".csv", ".log"}
 )
+
+VIDEO_SUFFIXES = frozenset(SUPPORTED_VIDEO_FILETYPES)
+
+# One frame a second reads a clip at a useful resolution without turning a
+# minute of footage into thousands of billed reads.
+DEFAULT_VIDEO_FPS = 1.0
+
+# A ceiling on what one command can spend. Every frame is a separate read, so
+# an unbounded --fps on a long clip is an unbounded bill; this makes the user
+# say out loud that they meant it.
+DEFAULT_MAX_FRAMES = 60
+
+# How a gate reads a timeline. `mean` matches --repeat, and is the odd one out:
+# averaging across time hides the moment a condition held, which is usually the
+# thing being asked about.
+GATE_MODES = ("any", "all", "mean", "sustained")
 
 
 def _render_models(client: VLMRun, output_json: bool) -> None:
@@ -422,12 +533,22 @@ def _classify(raw: str) -> str:
             return "document"
         if mime.startswith("image/"):
             return "image"
+        if mime.startswith("video/"):
+            raise _fail(
+                "a video has to be a file on disk, not a data URL.",
+                "Frames are sampled locally; write it out and pass the path.",
+            )
         raise _fail(
             f"data URL of type {mime!r} is not a supported input.",
             "This route reads images (JPEG/PNG/WebP/GIF) and one PDF.",
         )
     if is_http_url(raw):
         kind = _kind_for_mime(suffix_from_url(raw), mime_from_url(raw))
+        if kind == "video":
+            raise _fail(
+                f"{raw} is a video, and frames are sampled locally.",
+                "Download it and pass the path.",
+            )
         if kind:
             return kind
         # Nothing in the URL says what it is — a signed link, an object-store
@@ -442,6 +563,11 @@ def _classify(raw: str) -> str:
                 "Check the URL, or download the file and pass the path.",
             )
         kind = _kind_for_mime("", probed or "")
+        if kind == "video":
+            raise _fail(
+                f"{raw} serves {probed}, and frames are sampled locally.",
+                "Download it and pass the path.",
+            )
         if kind:
             return kind
         raise _fail(
@@ -460,17 +586,19 @@ def _classify(raw: str) -> str:
         return "state_file"
     raise _fail(
         f"{raw} is not a supported input.",
-        "This route reads images (JPEG/PNG/WebP/GIF, up to 8) and one PDF; "
-        "pass text with -s @file.",
+        "This route reads images (JPEG/PNG/WebP/GIF, up to 8), one PDF, or one "
+        "video sampled into frames; pass text with -s @file.",
     )
 
 
 def _kind_for_mime(suffix: str, mime: str) -> str | None:
-    """``image``, ``document`` or None, from an extension and a MIME type."""
+    """``image``, ``document``, ``video`` or None, from an extension and a MIME type."""
     if suffix == ".pdf" or mime == "application/pdf":
         return "document"
     if mime.startswith("image/"):
         return "image"
+    if suffix in VIDEO_SUFFIXES or mime.startswith("video/"):
+        return "video"
     return None
 
 
@@ -487,11 +615,12 @@ def _state_from_file(path: Path) -> Any:
 
 def _resolve_inputs(
     inputs: List[str], explicit_state: bool
-) -> Tuple[List[Any], List[str], Optional[str]]:
-    """Split positionals into state parts, images and one document."""
+) -> Tuple[List[Any], List[str], Optional[str], Optional[str]]:
+    """Split positionals into state parts, images, one document and one video."""
     state_parts: List[Any] = []
     images: List[str] = []
     document: Optional[str] = None
+    video: Optional[str] = None
 
     for raw in inputs:
         kind = _classify(raw)
@@ -504,10 +633,17 @@ def _resolve_inputs(
                     "Send a second request for the other document.",
                 )
             document = raw
+        elif kind == "video":
+            if video is not None:
+                raise _fail(
+                    "one video per command — each frame is a separate read.",
+                    "Run the command again for the other clip.",
+                )
+            video = raw
         elif explicit_state:
             raise _fail(
                 f"{raw} is not media, but --state was given.",
-                "With -s/--state every positional must be an image or a PDF.",
+                "With -s/--state every positional must be an image, a PDF or a video.",
             )
         elif kind == "state_file":
             state_parts.append(_state_from_file(Path(raw).expanduser()))
@@ -516,7 +652,173 @@ def _resolve_inputs(
 
     if len(images) > MAX_IMAGES:
         raise _fail(f"{len(images)} images; the limit is {MAX_IMAGES}.")
-    return state_parts, images, document
+    # A video is read frame by frame, each frame its own single-image request.
+    # Mixing in a still or a PDF would make every frame's read a different
+    # question, and the per-frame answers would no longer be comparable.
+    if video is not None and (images or document):
+        raise _fail(
+            "a video cannot be combined with other media.",
+            "Each frame is read on its own; send the image or PDF separately.",
+        )
+    return state_parts, images, document, video
+
+
+def _video_scope(source: str, fps: float, max_frames: int) -> Tuple[float, float]:
+    """Read a video's shape, refusing an ask that would cost more than intended.
+
+    Opens the decoder only to read its header, so the refusal costs nothing.
+    Cost policy lives here rather than in the SDK: the ceiling is about not
+    surprising someone with a bill, which is a property of this command.
+
+    Args:
+        source (str): Path to the video.
+        fps (float): Frames to read per second of video.
+        max_frames (int): Frames this command is willing to read.
+
+    Returns:
+        Tuple[float, float]: Duration in seconds and native frame rate, each
+            0.0 when the container does not report it.
+
+    Raises:
+        typer.Exit: If the video cannot be opened, or would sample past the
+            ceiling.
+    """
+    from vlmrun.common.video import VideoReader
+
+    path = Path(source).expanduser()
+    try:
+        reader = VideoReader(path)
+    except DependencyError as e:
+        raise _fail(str(e.message), e.suggestion)
+    except (FileNotFoundError, RuntimeError) as e:
+        raise _fail(
+            f"could not read {source}: {e}",
+            "Check the path, and that the file is a video this OpenCV build decodes.",
+        )
+    with reader:
+        duration_s, native_fps = reader.duration_s, reader.fps
+
+    if duration_s > 0:
+        # Marks fall at 0, 1/fps, 2/fps …, so the count is the last mark plus
+        # one — flooring the product alone undercounts a partial final second and
+        # lets a clip past the ceiling only to truncate it. The last frame sits a
+        # frame-interval short of the duration, so that is the real last instant;
+        # without it, a whole-second clip would be over-counted and refused.
+        last_instant = duration_s - (1.0 / native_fps if native_fps > 0 else 0.0)
+        estimate = max(1, math.floor(max(0.0, last_instant) * fps) + 1)
+        if estimate > max_frames:
+            raise _fail(
+                f"{fps:g} fps over {duration_s:.1f}s is up to {estimate} frames, "
+                f"past the {max_frames}-frame ceiling.",
+                f"Each frame is a billed read. Lower --fps, or raise "
+                f"--max-frames to {estimate}.",
+            )
+    return duration_s, native_fps
+
+
+def _first_frame_image(source: str) -> str:
+    """The first frame of a video as a data URL, for ``--dry-run``.
+
+    Raises:
+        typer.Exit: If the video cannot be read.
+    """
+    from vlmrun.common.image import encode_frame
+    from vlmrun.common.video import VideoReader
+
+    try:
+        with VideoReader(Path(source).expanduser()) as reader:
+            for sampled in reader.frames(1.0, max_frames=1):
+                return encode_frame(sampled.frame)
+    except DependencyError as e:
+        raise _fail(str(e.message), e.suggestion)
+    except (FileNotFoundError, RuntimeError) as e:
+        raise _fail(f"could not read {source}: {e}")
+    raise _fail(f"no frames were read from {source}.")
+
+
+def _collect_stream(
+    decisions: Any, *, total: int | None, show_progress: bool
+) -> List[Any]:
+    """Drain a decision stream, drawing a progress bar as answers arrive.
+
+    The stream yields lazily, so the bar tracks real progress rather than being
+    a spinner over one opaque wait.
+
+    Args:
+        decisions: The iterator from :meth:`DecisionStream.map`.
+        total (int | None): Expected frame count, when it can be estimated.
+        show_progress (bool): Draw the bar.
+
+    Returns:
+        List[Any]: Every :class:`~vlmrun.client.systemone.FrameDecision`, in order.
+    """
+    if not show_progress:
+        return list(decisions)
+    collected = []
+    with Progress(
+        TextColumn("[dim]reading[/dim]"),
+        BarColumn(bar_width=24),
+        TextColumn("[dim]{task.completed}/{task.total} frames[/dim]"),
+        TimeRemainingColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("reading", total=total)
+        for decision in decisions:
+            collected.append(decision)
+            progress.advance(task)
+    return collected
+
+
+def _sparkline(values: List[float], lo: float, hi: float) -> str:
+    """A one-character-per-value plot of a series over its own timeline."""
+    blocks = "▁▂▃▄▅▆▇█"
+    span = hi - lo
+    if span <= 0:
+        return blocks[0] * len(values)
+    out = []
+    for value in values:
+        fraction = (value - lo) / span
+        index = int(round(max(0.0, min(1.0, fraction)) * (len(blocks) - 1)))
+        out.append(blocks[index])
+    return "".join(out)
+
+
+def _downsample(values: List[float], width: int) -> List[float]:
+    """Average a series into at most ``width`` buckets, preserving its shape.
+
+    A sparkline is one character per value, so a series longer than the terminal
+    has to be condensed to be drawn at all. Bucket means smooth a lone spike,
+    which is why the extremes are reported separately and exactly.
+    """
+    if width < 1 or len(values) <= width:
+        return values
+    buckets = []
+    for position in range(width):
+        start = position * len(values) // width
+        end = max(start + 1, (position + 1) * len(values) // width)
+        chunk = values[start:end]
+        buckets.append(statistics.fmean(chunk) if chunk else 0.0)
+    return buckets
+
+
+def _runs_of(labels: List[str]) -> List[Tuple[str, int, int]]:
+    """Collapse a label series into ``(label, first index, last index)`` runs."""
+    segments: List[Tuple[str, int, int]] = []
+    for position, label in enumerate(labels):
+        if segments and segments[-1][0] == label:
+            name, start, _ = segments[-1]
+            segments[-1] = (name, start, position)
+        else:
+            segments.append((label, position, position))
+    return segments
+
+
+def _clock(seconds: float) -> str:
+    """A compact timestamp: ``4.5s`` under a minute, ``1:04`` over."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    return f"{int(seconds) // 60}:{seconds % 60:04.1f}"
 
 
 def _bar(value: float, width: int = 9) -> str:
@@ -832,6 +1134,241 @@ def _render_repeat(
     )
 
 
+def _render_timeline(
+    folded: Dict[str, Dict[str, Any]],
+    runs: List[Any],
+    frames: List[FrameDecision],
+    latency_s: float,
+    *,
+    fps: float,
+    duration_s: float,
+) -> None:
+    """Print each question as a series over the video's timeline.
+
+    Deliberately not :func:`_render_repeat`'s mean and spread. Those describe a
+    scatter of reads of one fixed input; these frames are different inputs, and
+    the shape over time — when a value rose, how long it held — is the answer
+    being asked for. A mean would average it away.
+    """
+    name_width = max(len(name) for name in folded)
+    indent = " " * (name_width + 2)
+    # Leave room for the name column, the metric label and the panel's borders.
+    plot_width = max(8, console.width - name_width - 16)
+    drawn_width = min(len(frames), plot_width)
+    lines: List[Text] = []
+    plotted = 0
+
+    for name, entry in folded.items():
+        line = Text()
+        line.append(f"{name:<{name_width}}  ", style="bold")
+
+        if entry["kind"] == "choice":
+            # A label series is a segmentation, not a curve: say what held when.
+            segments = _runs_of(entry["labels"])
+            line.append(
+                " · ".join(
+                    f"{label} {_clock(frames[start].timestamp_s)}"
+                    + ("" if start == end else f"-{_clock(frames[end].timestamp_s)}")
+                    for label, start, end in segments
+                ),
+                style="cyan",
+            )
+            line.no_wrap = True
+            lines.append(line)
+            counts = Counter(entry["labels"])
+            detail = " · ".join(f"{label} x{n}" for label, n in counts.most_common())
+            if entry["confidence"] is not None:
+                detail += f" · confidence {entry['confidence']:.2f}"
+            lines.append(Text(indent + detail, style="dim", no_wrap=True))
+            continue
+
+        values = entry["values"]
+        if not values:
+            lines.append(line)
+            continue
+        # Fixed scale, not the series' own range: an autoscaled flat series
+        # looks like violent movement.
+        if entry["kind"] == "score":
+            hi = float(max(entry["legend"])) if entry["legend"] else max(values)
+            metric = "score"
+        else:
+            hi, metric = 1.0, "P(yes)"
+        line.append(
+            _sparkline(_downsample(values, plot_width), 0.0, hi or 1.0), style="green"
+        )
+        line.append(f"  {metric}", style="dim")
+        lines.append(line)
+        # Extremes go on their own line: with the timestamps they need, they do
+        # not fit beside a sparkline as wide as the frame count.
+        peak = max(range(len(values)), key=values.__getitem__)
+        trough = min(range(len(values)), key=values.__getitem__)
+        lines.append(
+            Text(
+                f"{indent}mean {entry['mean']:.2f}"
+                f" · peak {values[peak]:.2f} @ {_clock(frames[peak].timestamp_s)}"
+                f" · low {values[trough]:.2f} @ {_clock(frames[trough].timestamp_s)}",
+                style="dim",
+                no_wrap=True,
+            )
+        )
+        plotted += 1
+
+    # One time axis under the sparklines, which all share the frame grid.
+    if plotted and len(frames) > 1:
+        first, last = _clock(frames[0].timestamp_s), _clock(frames[-1].timestamp_s)
+        axis = (
+            f"{first}{' ' * (drawn_width - len(first) - len(last))}{last}"
+            if drawn_width >= len(first) + len(last) + 1
+            else f"{first} → {last}"
+        )
+        lines.append(Text(indent + axis, style="dim", no_wrap=True))
+
+    shown_fps = f"{fps:g} fps"
+    scope = f"{len(frames)} frames @ {shown_fps}"
+    if duration_s > 0:
+        scope += f" of {_clock(duration_s)}"
+    console.print(
+        Panel(
+            Group(*lines),
+            title=f"Decisions [dim]({runs[0].model}, {scope})[/dim]",
+            title_align="left",
+            subtitle=f"[dim]{' · '.join(_stats_parts(runs, latency_s))}[/dim]",
+            border_style="dim",
+        )
+    )
+
+
+def _parse_gate_mode(raw: str) -> Tuple[str, int]:
+    """Split ``sustained:3`` into its mode and frame count.
+
+    Args:
+        raw (str): ``any``, ``all``, ``mean`` or ``sustained:N``.
+
+    Returns:
+        Tuple[str, int]: The mode, and the run length ``sustained`` needs (1 otherwise).
+
+    Raises:
+        typer.Exit: If the mode is unknown or its count is malformed.
+    """
+    name, _, count = raw.partition(":")
+    name = name.strip().lower()
+    if name not in GATE_MODES:
+        raise _fail(
+            f"--gate-mode must be one of {', '.join(GATE_MODES)}; got {raw!r}",
+            "sustained takes a frame count, e.g. --gate-mode sustained:3.",
+        )
+    if name != "sustained":
+        if count:
+            raise _fail(f"--gate-mode {name} takes no count; got {raw!r}")
+        return name, 1
+    if not count:
+        raise _fail(
+            "--gate-mode sustained needs a frame count.",
+            "e.g. --gate-mode sustained:3 — the gate holds for 3 frames in a row.",
+        )
+    try:
+        window = int(count)
+    except ValueError:
+        raise _fail(
+            f"--gate-mode sustained:{count!r} — {count!r} is not a whole number"
+        )
+    if window < 1:
+        raise _fail("--gate-mode sustained needs a count of 1 or more")
+    return "sustained", window
+
+
+def _longest_run(flags: List[bool]) -> int:
+    """The longest stretch of consecutive ``True`` in a series."""
+    longest = current = 0
+    for flag in flags:
+        current = current + 1 if flag else 0
+        longest = max(longest, current)
+    return longest
+
+
+def _evaluate_gates_over_frames(
+    gates: List[Tuple[str, str, Any]],
+    per_frame: List[Dict[str, Dict[str, Any]]],
+    frames: List[FrameDecision],
+    mode: str,
+    window: int,
+) -> List[Tuple[bool, str, Any]]:
+    """``(passed, expression, observed)`` for each gate, read across the timeline.
+
+    Args:
+        gates: Parsed gate triples.
+        per_frame: Each frame's answers, aggregated to themselves.
+        frames: The sampled frames, for timestamps.
+        mode: ``any``, ``all`` or ``sustained``.
+        window: Frames a ``sustained`` gate must hold for.
+
+    Returns:
+        One verdict per gate.
+    """
+    results = []
+    total = len(per_frame)
+    for selector, operator, expected in gates:
+        hits = [
+            _compare(_gate_value(folded, selector), operator, expected)
+            for folded in per_frame
+        ]
+        count = sum(hits)
+        expression = f"{selector}{operator}{expected}"
+        if mode == "sustained":
+            longest = _longest_run(hits)
+            passed = longest >= window
+            observed = f"longest run {longest}/{window}"
+            if passed:
+                # Where the run that satisfied it began. The default cannot be
+                # reached while _longest_run agrees with hits; it keeps a drift
+                # between them from surfacing as a bare StopIteration.
+                start = next(
+                    (
+                        position
+                        for position in range(total - longest + 1)
+                        if all(hits[position : position + longest])
+                    ),
+                    0,
+                )
+                observed += f" from {_clock(frames[start].timestamp_s)}"
+        else:
+            passed = count > 0 if mode == "any" else count == total
+            observed = f"{count}/{total} frames"
+            if count and mode == "any":
+                observed += f", first @ {_clock(frames[hits.index(True)].timestamp_s)}"
+        results.append((passed, expression, observed))
+    return results
+
+
+def _frames_json(
+    frames: List[FrameDecision],
+    runs: List[Any],
+    *,
+    fps: float,
+    duration_s: float,
+    native_fps: float,
+) -> str:
+    """The per-frame responses as one JSON object, each read carrying its timestamp."""
+    return json.dumps(
+        {
+            "video": {
+                "fps": fps,
+                "frames": len(frames),
+                "duration_s": round(duration_s, 3) or None,
+                "native_fps": native_fps or None,
+            },
+            "reads": [
+                {
+                    "frame": frame.index,
+                    "timestamp_s": round(frame.timestamp_s, 3),
+                    "response": _raw_body(run),
+                }
+                for frame, run in zip(frames, runs)
+            ],
+        }
+    )
+
+
 def _stats_parts(runs: List[Any], wall_s: float) -> List[str]:
     """The footer's numbers: tokens, then where the time actually went.
 
@@ -1112,6 +1649,44 @@ def systemone(
         max=64,
         help="Send the request N times and report mean and spread.",
     ),
+    fps: Optional[float] = typer.Option(
+        None,
+        "--fps",
+        help=(
+            "Frames to read per second of video "
+            f"(default {DEFAULT_VIDEO_FPS:g}). Each frame is one read."
+        ),
+    ),
+    max_frames: int = typer.Option(
+        DEFAULT_MAX_FRAMES,
+        "--max-frames",
+        min=1,
+        help="Refuse to sample more frames than this from one video.",
+    ),
+    concurrency: int = typer.Option(
+        4,
+        "--concurrency",
+        "-c",
+        min=1,
+        max=32,
+        help="Frame reads in flight at once.",
+    ),
+    ws: bool = typer.Option(
+        False,
+        "--ws",
+        help=(
+            "Read a video over one websocket session instead of a request per "
+            "frame. Needs vlmrun[ws]."
+        ),
+    ),
+    gate_mode: Optional[str] = typer.Option(
+        None,
+        "--gate-mode",
+        help=(
+            "How a gate reads a video: any (default), all, mean, or sustained:N "
+            "for N frames in a row."
+        ),
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -1184,9 +1759,43 @@ def systemone(
             'Add --noul ID, --choice ID="a|b|c", --score ID="low|high", or -Q \'{...}\'.',
         )
 
-    state_parts, images, document = _resolve_inputs(
+    state_parts, images, document, video = _resolve_inputs(
         list(inputs or []), state is not None
     )
+
+    if video is None:
+        if fps is not None:
+            raise _fail(
+                "--fps applies to a video, and none was given.",
+                "Pass a video file, or drop --fps.",
+            )
+        if gate_mode is not None and _parse_gate_mode(gate_mode)[0] != "mean":
+            raise _fail(
+                f"--gate-mode {gate_mode!r} describes a timeline, and this is a "
+                "single read.",
+                "Gate modes apply to a video; without one a gate reads the "
+                "single value (or, with --repeat, the mean).",
+            )
+        if ws:
+            raise _fail(
+                "--ws reads a video's frames over one session, and no video was given.",
+                "Pass a video file, or drop --ws.",
+            )
+        frame_fps = 0.0
+        gate_over_frames = ("mean", 1)
+    else:
+        # Each frame is its own read, so --repeat would multiply an already
+        # per-frame bill and the two spreads would be indistinguishable.
+        if repeat > 1:
+            raise _fail(
+                "--repeat and a video do not combine.",
+                "A video is already many reads; --fps sets how many. To measure "
+                "read-to-read spread, --repeat a single frame.",
+            )
+        frame_fps = DEFAULT_VIDEO_FPS if fps is None else fps
+        if frame_fps <= 0:
+            raise _fail(f"--fps must be positive; got {frame_fps:g}")
+        gate_over_frames = _parse_gate_mode(gate_mode or "any")
     resolved_state: Any = request_body.pop("state", None)
     if state is not None:
         resolved_state = _read_arg(state)
@@ -1196,10 +1805,10 @@ def systemone(
         resolved_state = " ".join(str(part) for part in state_parts)
 
     if resolved_state is None:
-        if not images and not document:
+        if not images and not document and video is None:
             raise _fail(
                 "no state was given.",
-                "Pass text, a text file, -s @file, or at least one image or PDF.",
+                "Pass text, a text file, -s @file, or at least one image, PDF or video.",
             )
         resolved_state = ""
 
@@ -1211,7 +1820,7 @@ def systemone(
         "model": True,
         "steps": steps is not None,
         "samples": samples is not None,
-        "content": bool(images or document),
+        "content": bool(images or document or video is not None),
         "reasoning_effort": reasoning_effort is not None,
     }
     extra_body = {k: v for k, v in request_body.items() if not overridden.get(k, False)}
@@ -1221,13 +1830,18 @@ def systemone(
     system_one = client.gateway.systemone
 
     if dry_run:
+        # For a video, the body of the first frame's read: every frame's request
+        # is this one with a different image.
+        dry_images = images
+        if video is not None:
+            dry_images = [_first_frame_image(video)]
         try:
             _print_body(
                 system_one.build_request(
                     resolved_state,
                     question_spec,
                     model=model or request_body.get("model"),
-                    images=images,
+                    images=dry_images,
                     document=document,
                     detail=detail,  # type: ignore[arg-type]
                     steps=steps,
@@ -1240,25 +1854,71 @@ def systemone(
             raise _fail(str(e.message), e.suggestion)
         return
 
+    duration_s = native_fps = 0.0
+    if video is not None:
+        duration_s, native_fps = _video_scope(video, frame_fps, max_frames)
+
+    common = dict(
+        model=model or request_body.get("model"),
+        detail=detail,
+        steps=steps,
+        samples=samples,
+        reasoning_effort=reasoning_effort,
+        timeout=timeout,
+        extra_body=extra_body or None,
+    )
+
+    decisions: List[FrameDecision] = []
     runs = []
     start = time.time()
     try:
-        for _ in range(repeat):
-            runs.append(
-                system_one.decide(
-                    resolved_state,
+        if video is not None:
+            from vlmrun.common.video import VideoReader
+
+            estimate = int(duration_s * frame_fps) if duration_s > 0 else None
+            with (
+                system_one.stream(
                     question_spec,
-                    model=model or request_body.get("model"),
-                    images=images,
-                    document=document,
-                    detail=detail,  # type: ignore[arg-type]
-                    steps=steps,
-                    samples=samples,
-                    reasoning_effort=reasoning_effort,
-                    timeout=timeout,
-                    extra_body=extra_body or None,
+                    state=resolved_state,
+                    concurrency=concurrency,
+                    transport="ws" if ws else "http",
+                    **common,  # type: ignore[arg-type]
+                ) as stream,
+                VideoReader(Path(video).expanduser()) as reader,
+            ):
+                decisions = _collect_stream(
+                    stream.map(reader.frames(frame_fps, max_frames=max_frames)),
+                    total=min(estimate, max_frames) if estimate else None,
+                    show_progress=not output_json and console.is_terminal,
                 )
-            )
+            runs = [decision.response for decision in decisions]
+            if not runs:
+                raise _fail(
+                    f"no frames were read from {video}.",
+                    "The file may be empty or its codec unsupported by this "
+                    "OpenCV build.",
+                )
+            if len(runs) >= max_frames:
+                # Reaching the ceiling means the tail was never looked at, and a
+                # partial timeline must not be presented as a whole one. Said
+                # whether or not the duration was known, because the estimate is
+                # an estimate.
+                console.print(
+                    f"[yellow]Stopped at the {max_frames}-frame ceiling; the rest "
+                    f"of the video was not read.[/yellow] "
+                    f"[dim]Raise --max-frames to go further.[/dim]"
+                )
+        else:
+            for _ in range(repeat):
+                runs.append(
+                    system_one.decide(
+                        resolved_state,
+                        question_spec,
+                        images=images,
+                        document=document,
+                        **common,  # type: ignore[arg-type]
+                    )
+                )
     except DependencyError as e:
         raise _fail(str(e.message), e.suggestion)
     except InputError as e:
@@ -1275,15 +1935,36 @@ def systemone(
 
     folded = _aggregate(runs)
     if output_json:
-        _print_json(runs if repeat > 1 else runs[0])
+        if video is not None:
+            console.print_json(
+                _frames_json(
+                    decisions,
+                    runs,
+                    fps=frame_fps,
+                    duration_s=duration_s,
+                    native_fps=native_fps,
+                )
+            )
+        else:
+            _print_json(runs if repeat > 1 else runs[0])
         Console(stderr=True).print(_timings_json(runs, latency_s), soft_wrap=True)
+    elif video is not None:
+        _render_timeline(
+            folded, runs, decisions, latency_s, fps=frame_fps, duration_s=duration_s
+        )
     elif repeat > 1:
         _render_repeat(folded, runs, latency_s)
     else:
         _render(runs[0], latency_s)
 
     if gates:
-        results = _evaluate_gates(gates, folded)
+        mode, window = gate_over_frames
+        if video is not None and mode != "mean":
+            results = _evaluate_gates_over_frames(
+                gates, [_aggregate([run]) for run in runs], decisions, mode, window
+            )
+        else:
+            results = _evaluate_gates(gates, folded)
         _render_gates(results, err=output_json)
         if not all(passed for passed, _, _ in results):
             raise typer.Exit(EXIT_GATE_FAILED)

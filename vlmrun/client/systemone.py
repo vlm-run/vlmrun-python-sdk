@@ -32,6 +32,21 @@ Example:
     result.nouls["is_urgent"].noul          # 0.91
     result.choices["department"].choice     # "billing"
     ```
+
+    A series of inputs — a video's frames, a camera, a queue — goes through a
+    :class:`DecisionStream`, which overlaps the reads and hands them back in
+    order:
+
+    ```python
+    from vlmrun.common.video import VideoReader
+
+    with client.gateway.systemone.stream(
+        questions=[{"id": "is_open", "type": "noul"}],
+        state="Is the door open?",
+    ) as stream, VideoReader("door.mp4") as video:
+        for decision in stream.map(video.frames(fps=2)):
+            print(decision.timestamp_s, decision.response.nouls["is_open"].noul)
+    ```
 """
 
 from __future__ import annotations
@@ -42,18 +57,32 @@ import ipaddress
 import json
 import os
 import re
+import asyncio
+import itertools
 import socket
+import threading
 import time
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    Iterator,
+    Literal,
+    Mapping,
+    NamedTuple,
+    Sequence,
+)
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
-from vlmrun.client.exceptions import InputError
-from vlmrun.common.dependencies import require_typesafe
+from vlmrun.client.exceptions import APIError, InputError, RequestTimeoutError
+from vlmrun.common.dependencies import require_typesafe, require_websockets
 from vlmrun.common.mime import (
     IMAGE_MIME_TYPES,
     data_url,
@@ -61,7 +90,7 @@ from vlmrun.common.mime import (
     normalize_mime,
     sniff_mime,
 )
-from vlmrun.constants import DEFAULT_GATEWAY_URL
+from vlmrun.constants import TYPESAFE_BASE_URL_ENV, gateway_base_url
 from vlmrun.types.abstract import VLMRunProtocol
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -71,6 +100,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # set this gateway actually has, and there is no catch-all alias (``jev-latest``
 # was removed when the route gained a second read strategy).
 SYSTEMONE_MODEL = "google/diffusiongemma-26b-a4b-it"
+
+# The websocket route, mounted beside the HTTP one under the same /typesafe root.
+TYPESAFE_WEBSOCKET_PATH = "/ws"
 
 # The gateway mounts TypeSafe's paths under this prefix, so the SDK's own
 # /v1/systemone and /v1/models suffixes resolve with no mapping.
@@ -120,10 +152,58 @@ def typesafe_base_url(gateway_url: str | None = None) -> str:
     Returns:
         The ``/typesafe`` root, without a trailing slash.
     """
-    root = (gateway_url or DEFAULT_GATEWAY_URL).rstrip("/")
+    root = gateway_base_url(gateway_url)
     if root.endswith("/v1"):
         root = root[: -len("/v1")]
     return f"{root.rstrip('/')}/{TYPESAFE_PREFIX}"
+
+
+def typesafe_websocket_url(
+    base_url: str | None = None, *, gateway_url: str | None = None
+) -> str:
+    """The ``wss://`` URL of the session route, derived from the ``/typesafe`` root.
+
+    The socket route is mounted beside the HTTP one under the same root, so its
+    URL is the typesafe base URL with the scheme swapped and
+    :data:`TYPESAFE_WEBSOCKET_PATH` appended. Derived rather than configured
+    separately, so pointing the SDK at another deployment moves both.
+
+    Args:
+        base_url (str | None, optional): An explicit ``/typesafe`` root. Falls
+            back to ``TYPESAFE_BASE_URL``, then to the root derived from the
+            gateway URL.
+        gateway_url (str | None, optional): Gateway URL the route is mounted
+            beside, when ``base_url`` is not given.
+
+    Returns:
+        str: e.g. ``wss://gateway.vlm.run/typesafe/ws``.
+
+    Example:
+        ```python
+        from vlmrun.client.systemone import typesafe_websocket_url
+
+        typesafe_websocket_url()                                  # the default gateway
+        typesafe_websocket_url(gateway_url="http://localhost:8000/v1")
+        ```
+    """
+    root = (
+        base_url or os.getenv(TYPESAFE_BASE_URL_ENV) or typesafe_base_url(gateway_url)
+    ).rstrip("/")
+    scheme, separator, rest = root.partition("://")
+    if not separator:  # a bare host, with no scheme to swap
+        return f"wss://{root}{TYPESAFE_WEBSOCKET_PATH}"
+    return f"{'wss' if scheme == 'https' else 'ws'}://{rest}{TYPESAFE_WEBSOCKET_PATH}"
+
+
+#: The ``/typesafe`` root this process will use, resolved at import.
+#: Call :func:`typesafe_base_url` instead if the environment may change after
+#: import, since this is fixed once and does not follow it.
+VLMRUN_TYPESAFE_BASE_URL = typesafe_base_url()
+
+#: The websocket session URL this process will use, resolved at import.
+#: Call :func:`typesafe_websocket_url` instead if the environment may change
+#: after import.
+VLMRUN_TYPESAFE_WEBSOCKET_URL = typesafe_websocket_url()
 
 
 def _spec_error(message: str, *, suggestion: str) -> InputError:
@@ -674,7 +754,9 @@ def usage_of(response: Any) -> dict[str, Any]:
 
     ``typesafe_sdk.Usage`` carries only Jev's ``input_tokens``/``output_tokens``
     and ignores the rest, so the gateway's additions — ``cost``, ``reads`` and
-    the ``input_tokens_details`` split — are read back off the raw body.
+    the ``input_tokens_details`` split — are read back off the raw body. A
+    websocket read has no HTTP body, so its session stashes the usage frame
+    instead; either way the caller gets the same mapping.
 
     Args:
         response: A response returned by :meth:`SystemOne.decide`.
@@ -688,6 +770,9 @@ def usage_of(response: Any) -> dict[str, Any]:
             return json.loads(raw.text).get("usage") or {}
         except (ValueError, AttributeError):
             pass
+    stashed = getattr(response, "__dict__", {}).get("_vlmrun_usage")
+    if stashed:
+        return dict(stashed)
     usage = getattr(response, "usage", None)
     if usage is None:
         return {}
@@ -716,6 +801,751 @@ def _timing_hooks() -> dict[str, list[Any]]:
             response.extensions["vlmrun_ttfb"] = (time.perf_counter() - started) * 1000
 
     return {"request": [on_request], "response": [on_response]}
+
+
+# How many reads a stream keeps in flight when the caller does not say. Reads
+# are independent, so this is purely about not opening an unbounded number of
+# connections on a caller's behalf.
+DEFAULT_STREAM_CONCURRENCY = 4
+
+
+class FrameDecision(NamedTuple):
+    """One read in a stream, with where its input came from.
+
+    Attributes:
+        index: Position in the stream, counting from 0. For a video this is the
+            frame's index in the source, so it survives sampling.
+        timestamp_s: Presentation time in seconds for a video frame, None for
+            an input that has no place on a timeline.
+        response: The read itself — the TypeSafe SDK's ``SystemOneResponse``.
+    """
+
+    index: int
+    timestamp_s: float | None
+    response: "SystemOneResponse"
+
+
+class DecisionStream:
+    """An open session that reads many decisions against one question spec.
+
+    There is no streaming route on the gateway and no video model behind it: a
+    decision is one request and one structured response. What is streamed is the
+    *series* — inputs go out as they arrive, reads overlap, and results come back
+    in input order, so a timeline can be consumed as it is produced rather than
+    after the last frame.
+
+    Held open because a stream owns things that need closing: a thread pool for
+    the reads in flight, and, while iterating a video, the decoder. Use it as a
+    context manager so both are released on the way out, including when the
+    consumer stops early.
+
+    The question spec is normalized once, when the stream is created, so a
+    malformed question fails there rather than on the first frame.
+
+    Example:
+        ```python
+        from vlmrun.common.video import VideoReader
+
+        with client.gateway.systemone.stream(
+            questions=[{"id": "is_open", "type": "noul"}],
+            state="Is the door open?",
+        ) as stream, VideoReader("door.mp4") as video:
+            # Concurrent, ordered, lazy.
+            for decision in stream.map(video.frames(fps=2)):
+                print(decision.timestamp_s, decision.response.nouls["is_open"].noul)
+
+            # Or one read at a time, the shape a live source wants.
+            for frame in video.frames(fps=2):
+                response = stream.send(frame)
+        ```
+
+    Attributes:
+        count: Reads issued so far.
+        is_open: Whether the stream can take reads right now.
+    """
+
+    def __init__(
+        self,
+        resource: "SystemOne",
+        questions: Any,
+        *,
+        state: Any = "",
+        model: str | None = None,
+        detail: ImageDetail = "auto",
+        steps: int | None = None,
+        samples: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        timeout: float | None = None,
+        extra_body: Mapping[str, Any] | None = None,
+        concurrency: int = DEFAULT_STREAM_CONCURRENCY,
+        quality: int = 85,
+    ) -> None:
+        """Open a decision stream.
+
+        Args:
+            resource: The :class:`SystemOne` resource the reads go through.
+            questions: Questions in either dialect; normalized once here.
+            state: State every read is about. Overridable per :meth:`send`.
+            model: Model override for every read in this stream.
+            detail: Vision budget per read.
+            steps: Denoise steps per read.
+            samples: Noise draws to average per read. Every draw is billed.
+            reasoning_effort: Thinking budget before the answer.
+            timeout: Per-read timeout in seconds.
+            extra_body: Extra top-level body fields, merged last.
+            concurrency: Reads in flight at once.
+            quality: JPEG quality for frames encoded from arrays.
+
+        Raises:
+            InputError: If the questions are malformed, or concurrency is < 1.
+        """
+        if concurrency < 1:
+            raise InputError(
+                message=f"concurrency must be at least 1; got {concurrency}",
+                suggestion="Pass 1 to read one at a time.",
+            )
+        self._resource = resource
+        self._questions = normalize_questions(questions)
+        self._state = state
+        self._concurrency = concurrency
+        self._quality = quality
+        self._options: dict[str, Any] = {
+            "model": model,
+            "detail": detail,
+            "steps": steps,
+            "samples": samples,
+            "reasoning_effort": reasoning_effort,
+            "timeout": timeout,
+            "extra_body": extra_body,
+        }
+        self._pool: ThreadPoolExecutor | None = None
+        self._count = 0
+
+    @property
+    def count(self) -> int:
+        """Reads issued on this stream so far."""
+        return self._count
+
+    @property
+    def is_open(self) -> bool:
+        """Whether the stream can take reads right now.
+
+        False both before it is entered and after it is closed — a stream is
+        usable only inside its ``with`` block.
+        """
+        return self._pool is not None
+
+    @property
+    def questions(self) -> dict[str, Any]:
+        """The normalized question spec every read in this stream asks."""
+        return dict(self._questions)
+
+    def __enter__(self) -> "DecisionStream":
+        """Start the worker pool.
+
+        Returns:
+            This stream.
+        """
+        self._pool = ThreadPoolExecutor(
+            max_workers=self._concurrency, thread_name_prefix="vlmrun-systemone"
+        )
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Close the stream, dropping queued reads when leaving on an error."""
+        self.close(cancel=exc_type is not None)
+
+    def close(self, *, cancel: bool = False) -> None:
+        """Release the worker pool.
+
+        The resource's HTTP client is deliberately left alone: it is shared with
+        every other read on the client, and a stream does not own it.
+
+        Args:
+            cancel: Drop reads that have not started instead of waiting for
+                them. Used when the stream is abandoned rather than finished.
+        """
+        pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.shutdown(wait=not cancel, cancel_futures=cancel)
+
+    def _check_open(self) -> None:
+        """Raise unless the stream is open for reads.
+
+        Raises:
+            InputError: If the stream has not been entered, or was closed.
+        """
+        if not self.is_open:
+            raise InputError(
+                message="this decision stream is not open",
+                suggestion="Use it as a context manager: `with resource.stream(...) as s:`.",
+            )
+
+    def _pool_or_raise(self) -> ThreadPoolExecutor:
+        """The worker pool, or a pointed error when the stream is not open."""
+        self._check_open()
+        assert self._pool is not None  # narrowed by _check_open
+        return self._pool
+
+    def _submit(self, image: str | Path) -> Future:
+        """Dispatch one read, returning a future for it.
+
+        The seam between the two transports: this one hands the read to a worker
+        pool, the websocket session pipelines it over one socket.
+        """
+        return self._pool_or_raise().submit(self._read, image)
+
+    def _as_image(self, item: Any) -> str | Path:
+        """Coerce one input into something a read accepts.
+
+        Paths, URLs and data URLs go through untouched; an array is encoded
+        here, and a :class:`~vlmrun.common.video.SampledFrame` contributes its
+        frame.
+        """
+        # Strings and paths first: a str carries plenty of attributes that look
+        # frame-like under getattr (``.index`` among them).
+        if isinstance(item, (str, Path)):
+            return item
+        frame = getattr(item, "frame", None)
+        from vlmrun.common.image import encode_frame
+
+        return encode_frame(item if frame is None else frame, quality=self._quality)
+
+    def _describe(
+        self, item: Any, position: int
+    ) -> tuple[int, float | None, str | Path]:
+        """``(index, timestamp, image)`` for one input.
+
+        A sampled frame keeps its own index and timestamp, so a timeline survives
+        being mapped. Everything else is numbered by position: a string has an
+        ``.index`` attribute of its own, and reading that as a frame number would
+        be silently wrong rather than loudly wrong.
+        """
+        image = self._as_image(item)
+        if isinstance(item, (str, Path)):
+            return position, None, image
+        index = getattr(item, "index", None)
+        timestamp = getattr(item, "timestamp_s", None)
+        return (
+            index if isinstance(index, int) else position,
+            timestamp if isinstance(timestamp, (int, float)) else None,
+            image,
+        )
+
+    def send(self, image: Any, *, state: Any = None) -> "SystemOneResponse":
+        """Read one input, blocking until the answer comes back.
+
+        For a live source — a camera, a queue — where inputs are not known in
+        advance. Use :meth:`map` or :meth:`video` to overlap reads.
+
+        Args:
+            image: A path, http(s) URL, data URL, RGB array, or ``SampledFrame``.
+            state: State for this read only; defaults to the stream's.
+
+        Returns:
+            The read.
+
+        Raises:
+            InputError: If the stream is not open, or the image cannot be read.
+            TypeSafeAPIError: If the gateway returns an unsuccessful response.
+        """
+        self._check_open()
+        return self._read(self._as_image(image), state)
+
+    def _read(self, image: str | Path, state: Any = None) -> "SystemOneResponse":
+        """One read against this stream's fixed spec."""
+        self._count += 1
+        return self._resource.decide(
+            self._state if state is None else state,
+            self._questions,
+            images=[image],
+            **self._options,
+        )
+
+    def map(self, images: Iterable[Any]) -> Iterator[FrameDecision]:
+        """Read many inputs lazily, overlapping the reads, yielding in input order.
+
+        The concurrent counterpart to :meth:`send`. Inputs are consumed lazily
+        and at most ``concurrency`` reads are in flight, so an iterator of a
+        million frames costs bounded memory and stopping early stops the spend.
+        Results are ordered by input, not by which answer arrived first.
+
+        Returns an iterator: nothing is read until it is consumed, and it has
+        to be consumed inside the ``with`` block.
+
+        Pair it with :meth:`vlmrun.common.video.VideoReader.frames` to read a
+        video::
+
+            with VideoReader("door.mp4") as video:
+                for decision in stream.map(video.frames(fps=2)):
+                    ...
+
+        Args:
+            images: Paths, URLs, data URLs, arrays, or
+                :class:`~vlmrun.common.video.SampledFrame` objects. A sampled
+                frame contributes its own index and timestamp, so a timeline
+                survives being mapped; anything else is numbered by position and
+                carries no timestamp.
+
+        Yields:
+            FrameDecision: Each read, in input order.
+
+        Raises:
+            InputError: If the stream is not open, or an input cannot be read.
+            TypeSafeAPIError: If the gateway returns an unsuccessful response.
+        """
+
+        def jobs() -> Iterator[tuple[int, float | None, str | Path]]:
+            for position, item in enumerate(images):
+                yield self._describe(item, position)
+
+        return self._ordered(jobs())
+
+    def _ordered(
+        self, items: Iterable[tuple[int, float | None, str | Path]]
+    ) -> Iterator[FrameDecision]:
+        """Submit lazily and yield in submission order.
+
+        A sliding window rather than ``Executor.map``: inputs are pulled only as
+        slots free up, so memory does not scale with the length of the series,
+        and a consumer that stops early cancels what has not started instead of
+        paying for it.
+        """
+        self._check_open()
+        pending: deque[tuple[int, float | None, Future]] = deque()
+        try:
+            for index, timestamp, image in items:
+                while len(pending) >= self._concurrency:
+                    done_index, done_at, future = pending.popleft()
+                    yield FrameDecision(done_index, done_at, future.result())
+                pending.append((index, timestamp, self._submit(image)))
+            while pending:
+                done_index, done_at, future = pending.popleft()
+                yield FrameDecision(done_index, done_at, future.result())
+        finally:
+            # Abandoned mid-series. The window is what keeps the waste bounded —
+            # only `concurrency` reads are ever submitted, and those have all
+            # started, so this cancels nothing today. It is the backstop if the
+            # window is ever allowed to run ahead of the workers.
+            for _, _, future in pending:
+                future.cancel()
+
+
+# Seconds allowed for the upgrade and the session.created ack.
+WEBSOCKET_OPEN_TIMEOUT = 30.0
+
+# Seconds to wait for session.stats when closing before giving up on it.
+WEBSOCKET_CLOSE_TIMEOUT = 5.0
+
+# Most reads the route will hold in flight for one session. The server's own
+# default is lower (2), so a session that wants concurrency has to ask for it;
+# asking past this is a validation error, so the request is clamped here.
+WEBSOCKET_MAX_INFLIGHT = 8
+
+
+class WebSocketStream(DecisionStream):
+    """A decision stream over the gateway's websocket session.
+
+    Same surface as :class:`DecisionStream` — :meth:`send`, :meth:`map`, used as
+    a context manager — over a different transport, so nothing above it changes.
+    What changes underneath:
+
+    * The question spec is sent once, in ``session.create``, instead of riding
+      every request. The server reports it back as cached prompt tokens, so a
+      long series is materially cheaper per read.
+    * Reads are pipelined over one socket rather than run on parallel
+      connections. ``concurrency`` is requested as the session's ``max_inflight``
+      — the route's own default is lower than this SDK's, so a session that wants
+      concurrency has to ask — and the ack's value is then authoritative, so the
+      stream never outruns what the server actually granted.
+    * The state is session-scoped. It is sent once when the session opens;
+      changing it later is a barrier (see :meth:`send`).
+
+    Because a socket is one ordered channel, reads are correlated by an id
+    echoed on each ``decision`` frame rather than by arrival order.
+
+    Attributes:
+        limits: The server's ``session.created`` ack — its declared ceilings.
+        stats: The ``session.stats`` frame, once the session has been closed.
+    """
+
+    def __init__(self, resource: "SystemOne", questions: Any, **kwargs: Any) -> None:
+        """Open a websocket-backed decision stream.
+
+        Args:
+            resource: The :class:`SystemOne` resource supplying the URL and key.
+            questions: Questions in either dialect; normalized once here.
+            **kwargs: As :class:`DecisionStream`.
+
+        Raises:
+            InputError: If the questions are malformed or concurrency is < 1.
+        """
+        super().__init__(resource, questions, **kwargs)
+        if self._options.get("extra_body"):
+            # session.create rejects unknown fields outright, so there is nowhere
+            # to put these. Failing here beats discarding them silently.
+            raise InputError(
+                message="extra_body is not supported on the websocket transport",
+                suggestion="The session route rejects unknown fields; use transport='http'.",
+            )
+        self._ws: Any = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._reader: Any = None
+        self._pending: dict[str, Any] = {}
+        self._ids = itertools.count()
+        self._inflight: Any = None
+        self._state_lock: Any = None
+        self._limits: dict[str, Any] = {}
+        self._stats: dict[str, Any] = {}
+        self._sent_state: Any = None
+        self._window = self._concurrency
+
+    @property
+    def url(self) -> str:
+        """The ``wss://`` URL this stream connects to.
+
+        Derived from the resource's ``/typesafe`` root, so a resource pointed at
+        another deployment takes its socket along.
+        """
+        return typesafe_websocket_url(self._resource.base_url)
+
+    @property
+    def limits(self) -> dict[str, Any]:
+        """The server's declared ceilings, from ``session.created``."""
+        return dict(self._limits)
+
+    @property
+    def stats(self) -> dict[str, Any]:
+        """The session's ``session.stats`` frame, available after closing."""
+        return dict(self._stats)
+
+    @property
+    def is_open(self) -> bool:
+        """Whether the session is connected and able to take reads."""
+        return self._ws is not None
+
+    def __enter__(self) -> "WebSocketStream":
+        """Connect, create the session, and start reading frames.
+
+        Returns:
+            This stream.
+
+        Raises:
+            DependencyError: If ``websockets`` is not installed.
+            InputError: If the server refuses the session.
+        """
+        websockets = require_websockets()
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._loop.run_forever,
+            name="vlmrun-systemone-ws",
+            daemon=True,
+        )
+        self._thread.start()
+        try:
+            self._await(self._open(websockets), timeout=WEBSOCKET_OPEN_TIMEOUT)
+        except BaseException:
+            self._teardown()
+            raise
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Close the session and stop the event loop."""
+        self.close(cancel=exc_type is not None)
+
+    def _await(self, coro: Any, *, timeout: float | None = None) -> Any:
+        """Run a coroutine on the session's loop and wait for it here."""
+        assert self._loop is not None
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout)
+
+    async def _open(self, websockets: Any) -> None:
+        """Upgrade, send ``session.create``, and accept the ack."""
+        self._ws = await websockets.connect(
+            self.url,
+            additional_headers={"authorization": f"Bearer {self._resource._api_key()}"},
+            open_timeout=WEBSOCKET_OPEN_TIMEOUT,
+            # Frames carry base64 images; the server states its own cap.
+            max_size=None,
+        )
+        await self._ws.send(
+            json.dumps(
+                {
+                    "type": "session.create",
+                    "model": self._options["model"] or self._resource.model,
+                    "questions": self._questions,
+                    # Ask for the concurrency the caller wanted. The route's own
+                    # default is 2, so not asking silently throttles the session.
+                    "max_inflight": min(self._concurrency, WEBSOCKET_MAX_INFLIGHT),
+                    # These are session-scoped on this route: `decide` rejects
+                    # them outright, so they have to ride the handshake or they
+                    # are silently lost — `samples` most expensively, since the
+                    # server would bill its own default number of draws.
+                    **{
+                        field: self._options[field]
+                        for field in ("steps", "samples", "reasoning_effort")
+                        if self._options.get(field) is not None
+                    },
+                }
+            )
+        )
+        raw = await asyncio.wait_for(self._ws.recv(), timeout=WEBSOCKET_OPEN_TIMEOUT)
+        ack = json.loads(raw)
+        if ack.get("type") != "session.created":
+            raise InputError(
+                message=f"the gateway refused the session: {ack.get('message', ack)}",
+                suggestion="Check the model and question spec with `vlmrun gw s1 models`.",
+            )
+        self._limits = ack
+        # The ack is authoritative: the server may grant less than was asked.
+        ceiling = ack.get("max_inflight") or self._concurrency
+        self._window = max(1, min(self._concurrency, int(ceiling)))
+        self._inflight = asyncio.Semaphore(self._window)
+        # Serializes state transitions. Two barriers draining permits at once
+        # would each hold part of the window and wait for the other's share.
+        self._state_lock = asyncio.Lock()
+        self._reader = asyncio.create_task(self._pump())
+        if self._state not in (None, ""):
+            await self._send_state(self._state)
+
+    async def _send_state(self, state: Any) -> None:
+        """Set the session's state."""
+        await self._ws.send(json.dumps({"type": "state", "state": state}))
+        self._sent_state = state
+
+    async def _pump(self) -> None:
+        """Dispatch server frames to whoever is waiting for them."""
+        try:
+            async for raw in self._ws:
+                message = json.loads(raw)
+                kind = message.get("type")
+                if kind == "decision":
+                    self._settle(message.get("id"), message)
+                elif kind == "session.stats":
+                    self._stats = message
+                elif kind == "error":
+                    # The server closes the socket after an error, so it ends
+                    # every read in flight, not only an attributable one.
+                    self._abort(
+                        APIError(
+                            message=str(message.get("message", message)),
+                            suggestion="Check the request against `vlmrun gw s1 --help`.",
+                        ),
+                        only=message.get("id"),
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - surfaced to every waiting read
+            self._abort(e)
+
+    def _settle(self, request_id: Any, message: dict[str, Any]) -> None:
+        """Hand one decision to the read that asked for it."""
+        future = self._pending.pop(str(request_id), None)
+        if future is not None and not future.done():
+            future.set_result(message)
+
+    def _abort(self, error: BaseException, *, only: Any = None) -> None:
+        """Fail one waiting read, or all of them."""
+        if only is not None and str(only) in self._pending:
+            future = self._pending.pop(str(only))
+            if not future.done():
+                future.set_exception(error)
+            return
+        for future in list(self._pending.values()):
+            if not future.done():
+                future.set_exception(error)
+        self._pending.clear()
+
+    def _submit(self, image: str | Path) -> Future:
+        """Pipeline one read over the socket."""
+        self._check_open()
+        assert self._loop is not None
+        return asyncio.run_coroutine_threadsafe(self._decide(image), self._loop)
+
+    def _read(self, image: str | Path, state: Any = None) -> "SystemOneResponse":
+        """One read, blocking until its decision comes back."""
+        self._check_open()
+        return self._await(self._decide(image, state))
+
+    async def _decide(
+        self, image: str | Path, state: Any = None
+    ) -> "SystemOneResponse":
+        """Send one ``decide`` and await the matching ``decision``."""
+        # Prepare the media off the loop and before taking a permit: a remote
+        # image is fetched synchronously, and doing that here would block the
+        # reply pump and stall decisions that have already come back.
+        loop = asyncio.get_running_loop()
+        content = await loop.run_in_executor(None, self._content_for, image)
+
+        if state is not None and state != self._sent_state:
+            # One state transition at a time, and the check is repeated under
+            # the lock because another read may have just made the same change.
+            async with self._state_lock:
+                if state != self._sent_state:
+                    await self._barrier(state)
+        elif self._state_lock.locked():
+            # A transition is draining the window; queue behind it rather than
+            # taking a permit it is waiting for.
+            async with self._state_lock:
+                pass
+
+        async with self._inflight:
+            request_id = str(next(self._ids))
+            future = loop.create_future()
+            self._pending[request_id] = future
+            message: dict[str, Any] = {"type": "decide", "id": request_id}
+            if content:
+                message["content"] = content
+            timeout = self._options["timeout"]
+            try:
+                await self._ws.send(json.dumps(message))
+                payload = await (
+                    asyncio.wait_for(future, timeout) if timeout else future
+                )
+            except asyncio.TimeoutError as e:
+                raise RequestTimeoutError(
+                    message=f"no decision within {timeout}s on the websocket session",
+                    suggestion="Raise the stream's timeout, or check the gateway.",
+                ) from e
+            finally:
+                # Dropped either way, so a late reply cannot revive this read.
+                self._pending.pop(request_id, None)
+            self._count += 1
+            return self._as_response(payload)
+
+    def _content_for(self, image: str | Path) -> list[dict[str, Any]] | None:
+        """The content parts for one image. Runs off the session's loop."""
+        return build_content(
+            images=[image],
+            detail=self._options["detail"],
+            timeout=self._options["timeout"] or 30.0,
+        )
+
+    async def _barrier(self, state: Any) -> None:
+        """Change the session state with no read in flight.
+
+        The state belongs to the session, not to a request, so a read already
+        out would otherwise pick up the new one. Draining first makes the change
+        apply from here forward and no earlier.
+
+        The caller must hold :attr:`_state_lock`. Two barriers draining at once
+        would each hold part of the window while waiting for the other's share,
+        and neither could finish.
+        """
+        for _ in range(self._window):
+            await self._inflight.acquire()
+        try:
+            await self._send_state(state)
+        finally:
+            for _ in range(self._window):
+                self._inflight.release()
+
+    def _as_response(self, payload: dict[str, Any]) -> "SystemOneResponse":
+        """Decode a ``decision`` frame into the same model the HTTP route returns.
+
+        Callers should not have to know which transport answered, so the ws
+        frame is validated into ``SystemOneResponse`` and carries the server's
+        own ``latency_ms`` as the read's api time.
+        """
+        typesafe = require_typesafe()
+        response = typesafe.SystemOneResponse.model_validate(
+            {
+                "model": self._limits.get("model") or self._resource.model,
+                "answers": {
+                    name: self._coerce_answer(answer)
+                    for name, answer in (payload.get("answers") or {}).items()
+                },
+                "usage": payload.get("usage")
+                or {"input_tokens": 0, "output_tokens": 0},
+            }
+        )
+        latency = payload.get("latency_ms")
+        response.__dict__["_vlmrun_timings"] = RequestTimings(
+            prep_ms=0.0, ttfb_ms=None, api_ms=latency, total_ms=latency
+        )
+        # The typed Usage drops the gateway's cost and cached-token split, and
+        # there is no raw body here to read them back off.
+        response.__dict__["_vlmrun_usage"] = payload.get("usage") or {}
+        return response
+
+    @staticmethod
+    def _coerce_answer(answer: Any) -> Any:
+        """Make one wire answer match the shape the response model declares.
+
+        A score's ``legend`` and ``probabilities`` are keyed by level, which JSON
+        can only carry as strings. The HTTP path is decoded by the TypeSafe SDK,
+        which converts them; validating a socket frame directly does not, and
+        ``ScoreAnswer`` declares ``dict[int, ...]``. Without this, a score
+        question works over HTTP and fails over the socket.
+        """
+        if not isinstance(answer, dict) or answer.get("type") != "score":
+            return answer
+        coerced = dict(answer)
+        for field in ("legend", "probabilities"):
+            value = coerced.get(field)
+            if isinstance(value, dict):
+                coerced[field] = {
+                    (int(key) if str(key).lstrip("-").isdigit() else key): item
+                    for key, item in value.items()
+                }
+        return coerced
+
+    def close(self, *, cancel: bool = False) -> None:
+        """Close the session, collecting its stats, then stop the loop.
+
+        Args:
+            cancel: Skip the polite ``session.close`` and drop in-flight reads.
+                Used when the stream is abandoned rather than finished.
+        """
+        if self._ws is not None and not cancel:
+            try:
+                self._await(self._close_session(), timeout=WEBSOCKET_CLOSE_TIMEOUT)
+            except Exception:
+                # A session that will not close politely is still closed below.
+                pass
+        self._teardown()
+
+    async def _close_session(self) -> None:
+        """Ask the server to close, and take its stats frame if it sends one."""
+        await self._ws.send(json.dumps({"type": "session.close"}))
+        deadline = time.monotonic() + WEBSOCKET_CLOSE_TIMEOUT
+        while not self._stats and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+
+    def _teardown(self) -> None:
+        """Drop the socket, the reader task and the loop, in that order."""
+        if self._loop is not None and self._ws is not None:
+            try:
+                self._await(self._shutdown(), timeout=WEBSOCKET_CLOSE_TIMEOUT)
+            except Exception:
+                pass
+        self._ws = None
+        loop, self._loop = self._loop, None
+        if loop is not None:
+            loop.call_soon_threadsafe(loop.stop)
+        thread, self._thread = self._thread, None
+        if thread is not None:
+            thread.join(timeout=WEBSOCKET_CLOSE_TIMEOUT)
+        if loop is not None:
+            loop.close()
+        self._abort(
+            InputError(
+                message="the websocket session closed before this read finished",
+                suggestion="Consume the iterator inside the `with` block.",
+            )
+        )
+
+    async def _shutdown(self) -> None:
+        """Cancel the reader and close the socket."""
+        if self._reader is not None:
+            self._reader.cancel()
+            try:
+                await self._reader
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._reader = None
+        if self._ws is not None:
+            await self._ws.close()
 
 
 class SystemOne:
@@ -751,7 +1581,9 @@ class SystemOne:
         """
         self._client = client
         self._base_url = (
-            base_url or os.getenv("TYPESAFE_BASE_URL") or typesafe_base_url(gateway_url)
+            base_url
+            or os.getenv(TYPESAFE_BASE_URL_ENV)
+            or typesafe_base_url(gateway_url)
         ).rstrip("/")
         self._model = model or os.getenv("TYPESAFE_DEFAULT_MODEL") or SYSTEMONE_MODEL
         self._timeout = timeout
@@ -983,6 +1815,88 @@ class SystemOne:
             total_ms=(time.perf_counter() - started) * 1000,
         )
         return response
+
+    def stream(
+        self,
+        questions: Any,
+        *,
+        state: Any = "",
+        model: str | None = None,
+        detail: ImageDetail = "auto",
+        steps: int | None = None,
+        samples: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        timeout: float | None = None,
+        extra_body: Mapping[str, Any] | None = None,
+        concurrency: int = DEFAULT_STREAM_CONCURRENCY,
+        quality: int = 85,
+        transport: Literal["http", "ws"] = "http",
+    ) -> DecisionStream:
+        """Open a stream that reads many decisions against one question spec.
+
+        For a series of inputs — a video's frames, a camera, a queue, a directory
+        of stills — where the questions stay the same and the input changes. Use
+        it as a context manager; see :class:`DecisionStream`.
+
+        Args:
+            questions: Questions in either dialect, normalized once up front.
+            state: State every read is about.
+            model: Model override for every read in the stream.
+            detail: Vision budget per read.
+            steps: Denoise steps per read (1-8).
+            samples: Noise draws to average per read (1-32). Every draw is billed.
+            reasoning_effort: Thinking budget before the answer; generative
+                engines only.
+            timeout: Per-read timeout in seconds.
+            extra_body: Extra top-level body fields, merged last.
+            concurrency: Reads in flight at once. On ``ws`` the server's own
+                ``max_inflight`` caps this.
+            quality: JPEG quality for frames encoded from arrays.
+            transport: ``http`` (default) sends an independent request per read.
+                ``ws`` opens one session on ``/typesafe/ws``: the questions go
+                once and are cached server-side, and reads are pipelined over a
+                single socket. Needs ``pip install vlmrun[ws]``.
+
+        Returns:
+            A stream, not yet open — enter it to start reading.
+
+        Raises:
+            InputError: If the questions are malformed, concurrency is < 1, or
+                the transport is not one of ``http`` or ``ws``.
+
+        Example:
+            ```python
+            from vlmrun.common.video import VideoReader
+
+            with client.gateway.systemone.stream(
+                questions=[{"id": "is_open", "type": "noul"}],
+                state="Is the door open?",
+                concurrency=8,
+            ) as stream, VideoReader("door.mp4") as video:
+                for decision in stream.map(video.frames(fps=2)):
+                    print(decision.timestamp_s, decision.response.nouls["is_open"].noul)
+            ```
+        """
+        if transport not in ("http", "ws"):
+            raise InputError(
+                message=f"transport must be 'http' or 'ws'; got {transport!r}",
+                suggestion="Use 'ws' for one pipelined session, 'http' for independent reads.",
+            )
+        cls = WebSocketStream if transport == "ws" else DecisionStream
+        return cls(
+            self,
+            questions,
+            state=state,
+            model=model,
+            detail=detail,
+            steps=steps,
+            samples=samples,
+            reasoning_effort=reasoning_effort,
+            timeout=timeout,
+            extra_body=extra_body,
+            concurrency=concurrency,
+            quality=quality,
+        )
 
     def models(self) -> "ListModelsResponse":
         """List the models this route serves.

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import base64
 import json
+from pathlib import Path
 
 import pytest
+import typer
 
 from tests.conftest import strip_ansi
 from vlmrun.cli._cli.gateway_systemone import (
@@ -20,11 +22,19 @@ from vlmrun.cli._cli.gateway_systemone import (
     _answer_row,
     _bar,
     _classify,
+    _clock,
+    _downsample,
+    _evaluate_gates_over_frames,
+    _longest_run,
     _parse_gate,
+    _parse_gate_mode,
     _questions_from_flags,
     _resolve_inputs,
+    _runs_of,
+    _sparkline,
 )
 from vlmrun.cli.cli import app
+from vlmrun.client.systemone import FrameDecision
 from vlmrun.client.systemone import SystemOne
 
 PNG_BYTES = base64.b64decode(
@@ -75,8 +85,14 @@ class Recorded:
         raise RuntimeError("no raw response in tests")
 
     def model_dump_json(self):
+        """Serialize the answers this response actually carries."""
         return json.dumps(
-            {"model": self.model, "answers": {"is_urgent": {"noul": 0.91}}}
+            {
+                "model": self.model,
+                "answers": {
+                    name: dict(answer.__dict__) for name, answer in self.answers.items()
+                },
+            }
         )
 
 
@@ -190,7 +206,7 @@ class TestClassifyInputs:
     def test_json_state_file_is_parsed(self, tmp_path):
         state_file = tmp_path / "s.json"
         state_file.write_text('{"message": "hi"}')
-        state_parts, images, document = _resolve_inputs([str(state_file)], False)
+        state_parts, images, document, _ = _resolve_inputs([str(state_file)], False)
         assert state_parts == [{"message": "hi"}]
         assert images == [] and document is None
 
@@ -888,3 +904,437 @@ class TestDryRun:
             ["gw", "systemone", "x", "-Q", '[{"id":"a","type":"nope"}]', "--dry-run"],
         )
         assert result.exit_code == EXIT_ERROR
+
+
+SAMPLE_VIDEO = Path(__file__).parent.parent / "test_data" / "test.mp4"
+"""168 frames at 25 fps — 6.72s, so a 1 fps read is 7 frames."""
+
+
+def _stub_answer(image: str) -> float:
+    """The value :func:`frame_decide` derives from one frame's data URL."""
+    return (len(image) % 900) / 1000.0
+
+
+def expected_series(fps: float) -> list[float]:
+    """The answers a correct run must produce, frame by frame.
+
+    Derived by sampling the video here rather than from the CLI's own output, so
+    it catches a response paired with the wrong frame — which asserting on
+    timestamps alone cannot, since those come from the frame list either way.
+    """
+    from vlmrun.common.image import encode_frame
+    from vlmrun.common.video import VideoReader
+
+    with VideoReader(SAMPLE_VIDEO) as reader:
+        return [
+            _stub_answer(encode_frame(sampled.frame)) for sampled in reader.frames(fps)
+        ]
+
+
+@pytest.fixture
+def frame_decide(monkeypatch):
+    """Answer each frame from its own pixels, recording the images sent.
+
+    The fixture video's frames differ, so a per-frame answer derived from the
+    frame proves the CLI sent distinct images in timeline order rather than the
+    same one N times.
+    """
+    calls: list = []
+
+    def fake_decide(self, state, questions, **kwargs):
+        image = kwargs["images"][0]
+        calls.append({"state": state, "questions": questions, **kwargs})
+        # A stable per-frame number: the encoded length varies with content.
+        value = _stub_answer(image)
+        return Recorded(
+            calls,
+            answers={
+                "moving": Answer(type="noul", noul=value),
+                "scene": Answer(
+                    type="choice",
+                    choice="busy" if value > 0.45 else "calm",
+                    probabilities={"busy": value, "calm": 1 - value},
+                    confidence=0.6,
+                ),
+            },
+        )
+
+    monkeypatch.setattr(SystemOne, "decide", fake_decide)
+    return calls
+
+
+class TestVideoSeries:
+    """Small helpers behind the timeline rendering."""
+
+    def test_sparkline_tracks_the_values(self):
+        assert _sparkline([0.0, 1.0], 0.0, 1.0) == "▁█"
+        assert len(_sparkline([0.1, 0.5, 0.9], 0.0, 1.0)) == 3
+
+    def test_sparkline_of_a_flat_series_is_flat(self):
+        assert _sparkline([0.5, 0.5, 0.5], 0.5, 0.5) == "▁▁▁"
+
+    def test_downsample_condenses_to_the_width(self):
+        assert _downsample([0.0, 1.0, 0.0, 1.0], 2) == [0.5, 0.5]
+        assert len(_downsample(list(range(100)), 10)) == 10
+
+    def test_downsample_leaves_a_short_series_alone(self):
+        values = [0.1, 0.2, 0.3]
+        assert _downsample(values, 10) is values
+
+    def test_runs_of_collapses_repeats(self):
+        assert _runs_of(["a", "a", "b", "a"]) == [("a", 0, 1), ("b", 2, 2), ("a", 3, 3)]
+
+    def test_longest_run(self):
+        assert _longest_run([False, True, True, False, True]) == 2
+        assert _longest_run([]) == 0
+        assert _longest_run([True, True, True]) == 3
+
+    def test_clock_switches_to_minutes(self):
+        assert _clock(4.5) == "4.5s"
+        assert _clock(64.0) == "1:04.0"
+
+
+class TestGateModes:
+    def test_parses_each_mode(self):
+        assert _parse_gate_mode("any") == ("any", 1)
+        assert _parse_gate_mode("all") == ("all", 1)
+        assert _parse_gate_mode("mean") == ("mean", 1)
+        assert _parse_gate_mode("sustained:3") == ("sustained", 3)
+
+    def test_rejects_an_unknown_mode(self, runner):
+        with pytest.raises(typer.Exit):
+            _parse_gate_mode("sometimes")
+
+    def test_sustained_needs_a_count(self, runner):
+        with pytest.raises(typer.Exit):
+            _parse_gate_mode("sustained")
+
+    def test_a_count_on_a_countless_mode_is_rejected(self, runner):
+        with pytest.raises(typer.Exit):
+            _parse_gate_mode("any:3")
+
+    @staticmethod
+    def _timeline(values):
+        """Per-frame aggregates and frames for a noul series."""
+        runs = [
+            Recorded([], answers={"p": Answer(type="noul", noul=value)})
+            for value in values
+        ]
+        frames = [
+            FrameDecision(index=i, timestamp_s=float(i), response=None)
+            for i in range(len(values))
+        ]
+        return [_aggregate([run]) for run in runs], frames
+
+    def test_any_passes_on_a_single_frame(self):
+        per_frame, frames = self._timeline([0.1, 0.9, 0.1])
+        ((passed, _, observed),) = _evaluate_gates_over_frames(
+            [("p", ">", 0.5)], per_frame, frames, "any", 1
+        )
+        assert passed
+        assert "1/3 frames" in observed and "1.0s" in observed
+
+    def test_all_fails_when_one_frame_misses(self):
+        per_frame, frames = self._timeline([0.9, 0.9, 0.1])
+        ((passed, _, observed),) = _evaluate_gates_over_frames(
+            [("p", ">", 0.5)], per_frame, frames, "all", 1
+        )
+        assert not passed
+        assert "2/3 frames" in observed
+
+    def test_sustained_needs_consecutive_frames(self):
+        # Four frames over the line, but never three in a row.
+        per_frame, frames = self._timeline([0.9, 0.9, 0.1, 0.9, 0.9])
+        gate = [("p", ">", 0.5)]
+        ((passed, _, observed),) = _evaluate_gates_over_frames(
+            gate, per_frame, frames, "sustained", 3
+        )
+        assert not passed
+        assert "longest run 2/3" in observed
+        ((passed, _, _),) = _evaluate_gates_over_frames(
+            gate, per_frame, frames, "sustained", 2
+        )
+        assert passed
+
+    def test_sustained_reports_where_the_run_began(self):
+        per_frame, frames = self._timeline([0.1, 0.1, 0.9, 0.9, 0.9])
+        ((passed, _, observed),) = _evaluate_gates_over_frames(
+            [("p", ">", 0.5)], per_frame, frames, "sustained", 3
+        )
+        assert passed
+        assert "from 2.0s" in observed
+
+
+class TestVideoInputs:
+    def test_a_video_path_is_classified_as_video(self):
+        assert _classify(str(SAMPLE_VIDEO)) == "video"
+
+    def test_resolve_inputs_returns_the_video(self):
+        state, images, document, video = _resolve_inputs([str(SAMPLE_VIDEO)], False)
+        assert (state, images, document) == ([], [], None)
+        assert video == str(SAMPLE_VIDEO)
+
+    def test_a_video_url_is_rejected(self, runner):
+        with pytest.raises(typer.Exit):
+            _classify("https://example.com/clip.mp4")
+
+    def test_a_video_data_url_is_rejected(self, runner):
+        with pytest.raises(typer.Exit):
+            _classify("data:video/mp4;base64,AAAA")
+
+    def test_two_videos_are_rejected(self, runner):
+        with pytest.raises(typer.Exit):
+            _resolve_inputs([str(SAMPLE_VIDEO), str(SAMPLE_VIDEO)], False)
+
+    def test_a_video_cannot_be_mixed_with_an_image(self, runner, tmp_path):
+        image = tmp_path / "a.png"
+        image.write_bytes(PNG_BYTES)
+        with pytest.raises(typer.Exit):
+            _resolve_inputs([str(SAMPLE_VIDEO), str(image)], False)
+
+
+class TestVideoCommand:
+    def test_one_read_per_sampled_frame(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--fps", "1"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert len(frame_decide) == 7
+        # Every read carries exactly one image, and no two frames are the same.
+        assert all(len(call["images"]) == 1 for call in frame_decide)
+        assert len({call["images"][0] for call in frame_decide}) == 7
+        # No PDF rides along with a frame.
+        assert all(call.get("document") is None for call in frame_decide)
+
+    def test_frames_are_sent_as_jpeg_data_urls(self, runner, frame_decide, config_file):
+        runner.invoke(
+            app, ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--fps", "0.5"]
+        )
+        assert frame_decide
+        for call in frame_decide:
+            assert call["images"][0].startswith("data:image/jpeg;base64,")
+
+    def test_fps_sets_the_read_count(self, runner, frame_decide, config_file):
+        runner.invoke(
+            app, ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--fps", "0.5"]
+        )
+        assert len(frame_decide) == 4
+
+    def test_default_rate_is_one_a_second(self, runner, frame_decide, config_file):
+        runner.invoke(app, ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving"])
+        assert len(frame_decide) == 7
+
+    def test_the_panel_reports_the_scope(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--fps", "1"]
+        )
+        out = strip_ansi(result.stdout)
+        assert "7 frames @ 1 fps" in out
+        assert "moving" in out
+
+    def test_a_choice_renders_as_segments(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                str(SAMPLE_VIDEO),
+                "--choice",
+                "scene=busy|calm",
+                "--fps",
+                "1",
+            ],
+        )
+        out = strip_ansi(result.stdout)
+        # A segmentation carries timestamps, not a mean.
+        assert "0.0s" in out
+        assert "±" not in out
+
+    def test_state_text_applies_to_every_frame(self, runner, frame_decide, config_file):
+        runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                "-s",
+                "Is anything moving?",
+                str(SAMPLE_VIDEO),
+                "--noul",
+                "moving",
+                "--fps",
+                "0.5",
+            ],
+        )
+        assert frame_decide
+        assert all(call["state"] == "Is anything moving?" for call in frame_decide)
+
+    def test_json_carries_a_timestamp_per_read(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                str(SAMPLE_VIDEO),
+                "--noul",
+                "moving",
+                "--fps",
+                "0.5",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        body, _ = json.JSONDecoder().raw_decode(strip_ansi(result.stdout).lstrip())
+        assert body["video"] == {
+            "fps": 0.5,
+            "frames": 4,
+            "duration_s": 6.72,
+            "native_fps": 25.0,
+        }
+        assert [read["timestamp_s"] for read in body["reads"]] == [0.0, 2.0, 4.0, 6.0]
+        assert [read["frame"] for read in body["reads"]] == [0, 50, 100, 150]
+
+    def test_dry_run_shows_one_frames_body(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app,
+            ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--dry-run"],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert frame_decide == []
+        body = json.loads(strip_ansi(result.stdout))
+        assert len(body["content"]) == 1
+        assert body["content"][0]["image_url"]["url"].startswith("data:image/jpeg")
+
+    def test_the_frame_ceiling_refuses_before_reading(
+        self, runner, frame_decide, config_file
+    ):
+        result = runner.invoke(
+            app,
+            ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--fps", "25"],
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert frame_decide == []
+        assert "--max-frames" in strip_ansi(result.stdout)
+
+    def test_the_ceiling_can_be_raised(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                str(SAMPLE_VIDEO),
+                "--noul",
+                "moving",
+                "--fps",
+                "25",
+                "--max-frames",
+                "200",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert len(frame_decide) == 168
+
+    def test_concurrency_preserves_frame_order(self, runner, frame_decide, config_file):
+        """The reads go out concurrently; the series must still be in time order."""
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                str(SAMPLE_VIDEO),
+                "--noul",
+                "moving",
+                "--fps",
+                "1",
+                "--concurrency",
+                "7",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        body, _ = json.JSONDecoder().raw_decode(strip_ansi(result.stdout).lstrip())
+        assert [read["timestamp_s"] for read in body["reads"]] == [
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+        ]
+        # Each answer has to belong to the frame it is filed under.
+        series = expected_series(1.0)
+        assert len(set(series)) > 1, "the fixture must give a non-uniform series"
+        assert [
+            read["response"]["answers"]["moving"]["noul"] for read in body["reads"]
+        ] == series
+
+    def test_repeat_and_a_video_do_not_combine(self, runner, frame_decide, config_file):
+        result = runner.invoke(
+            app,
+            ["gw", "s1", str(SAMPLE_VIDEO), "--noul", "moving", "--repeat", "3"],
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert frame_decide == []
+        assert "--repeat" in strip_ansi(result.stdout)
+
+    def test_fps_without_a_video_is_an_error(self, runner, decide, config_file):
+        result = runner.invoke(
+            app, ["gw", "s1", "some text", "--noul", "a", "--fps", "2"]
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert decide == []
+
+    def test_a_timeline_gate_mode_needs_a_video(self, runner, decide, config_file):
+        result = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                "some text",
+                "--noul",
+                "a",
+                "--gate",
+                "a>0.5",
+                "--gate-mode",
+                "sustained:2",
+            ],
+        )
+        assert result.exit_code == EXIT_ERROR
+        assert decide == []
+
+    def test_a_gate_over_frames_sets_the_exit_code(
+        self, runner, frame_decide, config_file
+    ):
+        passing = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                str(SAMPLE_VIDEO),
+                "--noul",
+                "moving",
+                "--fps",
+                "1",
+                "--gate",
+                "moving>=0.0",
+            ],
+        )
+        assert passing.exit_code == 0, passing.stdout
+        assert "PASS" in strip_ansi(passing.stdout)
+
+        failing = runner.invoke(
+            app,
+            [
+                "gw",
+                "s1",
+                str(SAMPLE_VIDEO),
+                "--noul",
+                "moving",
+                "--fps",
+                "1",
+                "--gate",
+                "moving>1.0",
+            ],
+        )
+        assert failing.exit_code == EXIT_GATE_FAILED
+        assert "FAIL" in strip_ansi(failing.stdout)

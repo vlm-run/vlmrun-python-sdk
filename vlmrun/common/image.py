@@ -60,6 +60,36 @@ def encode_video(path: Union[Path, str]) -> str:
         return f"data:{mime_type};base64,{video_b64}"
 
 
+def encode_frame(frame, quality: int = 85) -> str:
+    """Encode one RGB frame as a JPEG data URL.
+
+    The counterpart to :func:`encode_image` for video frames, which arrive as
+    arrays rather than files. JPEG rather than PNG: a frame is photographic, and
+    a lossless encode spends a multiple of the bytes on detail a read does not
+    use.
+
+    Args:
+        frame: An RGB array shaped ``(height, width, 3)``, as
+            :class:`vlmrun.common.video.VideoReader` yields.
+        quality: JPEG quality (1-100, default 85).
+
+    Returns:
+        The ``data:image/jpeg;base64,...`` URL.
+
+    Raises:
+        ValueError: If quality is out of range or the frame is not encodable.
+    """
+    if not (1 <= quality <= 100):
+        raise ValueError(f"Quality must be between 1 and 100, got {quality}")
+    try:
+        image = Image.fromarray(frame)
+    except Exception as e:
+        raise ValueError(f"Cannot encode frame of type {type(frame)}: {e}") from e
+    buffered = BytesIO()
+    image.convert("RGB").save(buffered, format="JPEG", quality=quality)
+    return f"data:image/jpeg;base64,{b64encode(buffered.getvalue()).decode()}"
+
+
 def encode_image(
     image: Union[Image.Image, str, Path],
     format: Literal["PNG", "JPEG", "binary"] = "PNG",

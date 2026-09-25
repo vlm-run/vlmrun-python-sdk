@@ -4,8 +4,18 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Union,
+)
 
+from vlmrun.client.exceptions import InputError
 from vlmrun.common.dependencies import require_cv2, require_numpy
 
 if TYPE_CHECKING:
@@ -14,6 +24,20 @@ if TYPE_CHECKING:
     Frame = np.ndarray
 else:
     Frame = Any
+
+
+class SampledFrame(NamedTuple):
+    """One frame drawn out of a video, with where it came from.
+
+    Attributes:
+        index: The frame's position in the source video, counting from 0.
+        timestamp_s: Its presentation time in seconds.
+        frame: The frame itself, RGB.
+    """
+
+    index: int
+    timestamp_s: float
+    frame: Frame
 
 
 class BaseVideoReader(ABC):
@@ -123,12 +147,40 @@ class BaseVideoReader(ABC):
         self.seek(0)
 
     def __enter__(self):
-        """Enter the context manager."""
+        """Enter the context manager, opening the video if it is not open.
+
+        A reader opens on construction, so entering is usually a no-op. It
+        reopens a closed one so that ``with reader:`` means the same thing every
+        time rather than only the first — a reader closed once would otherwise
+        advertise the protocol and then refuse to read.
+
+        Returns:
+            This reader.
+
+        Raises:
+            RuntimeError: If the video cannot be opened.
+        """
+        if self._video is None:
+            self._video = self.open()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Exit the context manager."""
         self.close()
+
+    def __del__(self):
+        """Release the capture if the reader was never closed.
+
+        ``VideoReader(path).frames(fps=2)`` is a reasonable thing to write, and
+        it leaves no handle to close. A context manager is still the explicit
+        way; this keeps the terse form from holding a decoder open until the
+        interpreter happens to collect it.
+        """
+        try:
+            self.close()
+        except Exception:
+            # Interpreter shutdown can pull the module out from under us.
+            pass
 
 
 class VideoReader(BaseVideoReader):
@@ -265,6 +317,146 @@ class VideoReader(BaseVideoReader):
         if idx < 0 or idx >= len(self):
             raise IndexError(f"Frame index out of bounds: {idx}")
         self._video.set(self._cv2.CAP_PROP_POS_FRAMES, idx)
+
+    @property
+    def fps(self) -> float:
+        """The video's native frame rate.
+
+        Returns:
+            float: Frames per second, or 0.0 when the container does not report
+                a usable rate (some streams and remuxed files report 0 or NaN).
+        """
+        if self._video is None:
+            return 0.0
+        try:
+            rate = float(self._video.get(self._cv2.CAP_PROP_FPS))
+        except Exception:
+            return 0.0
+        # NaN fails its own equality test; a four-figure rate is a bad header.
+        return rate if rate == rate and 0.0 < rate < 1000.0 else 0.0
+
+    @property
+    def duration_s(self) -> float:
+        """The video's duration.
+
+        Returns:
+            float: Seconds, or 0.0 when the frame count or rate is unknown.
+        """
+        count, rate = len(self), self.fps
+        return count / rate if count > 0 and rate > 0 else 0.0
+
+    def _rewind(self) -> None:
+        """Seek to the first frame without :meth:`seek`'s bounds check.
+
+        ``seek`` validates against ``len(self)``, which is ``CAP_PROP_FRAME_COUNT``
+        and is 0 for a container with no frame count — a file this class can
+        still read straight through.
+        """
+        if self._video is None:
+            raise RuntimeError("Video is not opened")
+        self._video.set(self._cv2.CAP_PROP_POS_FRAMES, 0)
+
+    def frames(
+        self, fps: float, *, max_frames: Optional[int] = None
+    ) -> Iterator[SampledFrame]:
+        """Draw frames at a fixed rate, in presentation order.
+
+        Frames are decoded sequentially and emitted whenever the presentation
+        clock reaches the next ``1/fps`` mark, rather than by seeking to
+        computed indices. Sequential decoding costs more CPU but is right in
+        the two cases seeking is wrong: a container that misreports
+        ``CAP_PROP_FRAME_COUNT``, and a variable-rate video, where frame index
+        and time do not scale together. For the sampling rates this is built
+        for — a few frames a second, each one sent to a model — decoding is not
+        the bottleneck.
+
+        A rate at or above the video's own returns every frame; nothing is
+        interpolated. After a gap in the source, sampling resumes from the
+        frame that ends it instead of emitting a burst to catch up.
+
+        Args:
+            fps (float): Frames to emit per second of video.
+            max_frames (Optional[int], optional): Stop after this many frames.
+                Defaults to None, which reads to the end.
+
+        Yields:
+            SampledFrame: The frame, its index and its timestamp.
+
+        Raises:
+            InputError: If ``fps`` is not positive, or the reader is closed.
+
+        Example:
+            ```python
+            from itertools import islice
+            from vlmrun.common.video import VideoReader
+
+            with VideoReader("door.mp4") as reader:
+                for frame in islice(reader.frames(fps=2), 10):
+                    print(frame.timestamp_s, frame.frame.shape)
+            ```
+        """
+        if fps <= 0:
+            raise InputError(
+                message=f"sampling rate must be positive; got {fps}",
+                suggestion="Pass a rate like 1 (one frame a second) or 0.5 (one every two).",
+            )
+        if self._video is None:
+            raise InputError(
+                message=f"{self.filename} is closed, so it has no frames to read",
+                suggestion="Read inside the reader's block: `with VideoReader(path) as video:`.",
+            )
+
+        interval_s = 1.0 / fps
+        native = self.fps
+        self._rewind()
+
+        # Land on the frame nearest each mark rather than the first one past
+        # it: a container whose clock is a rounding error short of 1.000s
+        # should still answer a 1 fps request with that frame.
+        tolerance_s = 0.5 / native if native > 0 else 1e-6
+
+        emitted, index, next_at = 0, -1, 0.0
+        while True:
+            try:
+                frame = next(self)
+            except StopIteration:
+                return
+            index += 1
+            # Read the clock after the decode: while positioned on a frame,
+            # CAP_PROP_POS_MSEC is the time of the frame already returned.
+            try:
+                position_ms = float(self._video.get(self._cv2.CAP_PROP_POS_MSEC))
+            except Exception:
+                position_ms = 0.0
+
+            timestamp_s = position_ms / 1000.0
+            if timestamp_s <= 0.0 and index > 0:
+                if native > 0:
+                    # No presentation clock, but the rate maps index to time.
+                    timestamp_s = index / native
+                else:
+                    # Neither a rate nor a clock: every frame would sit at 0.0,
+                    # the mark would never advance, and only the first frame
+                    # would ever be emitted. Say so rather than return a
+                    # one-frame timeline for a decodable video.
+                    raise InputError(
+                        message=(
+                            f"{self.filename} reports neither a frame rate nor "
+                            f"presentation timestamps, so frames cannot be placed in time"
+                        ),
+                        suggestion=(
+                            "Re-encode the file (e.g. `ffmpeg -i in.mp4 -r 30 out.mp4`) "
+                            "so it carries a frame rate."
+                        ),
+                    )
+
+            if timestamp_s + tolerance_s < next_at:
+                continue
+            yield SampledFrame(index=index, timestamp_s=timestamp_s, frame=frame)
+            emitted += 1
+            if max_frames is not None and emitted >= max_frames:
+                return
+            next_at = max(next_at + interval_s, timestamp_s + interval_s)
 
 
 class VideoWriter:

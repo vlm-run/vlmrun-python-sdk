@@ -191,3 +191,188 @@ def test_video_reader_real_video(real_video_path):
         reader.reset()
         frame_count = sum(1 for _ in reader)
         assert frame_count == REAL_VIDEO_FRAMES
+
+
+class TestFrames:
+    """``VideoReader.frames`` — rate-based frame sampling.
+
+    The fixture is 168 frames at 25 fps, so 6.72s: a 1 fps read is 7 frames at
+    whole seconds, and the frame indices follow from the native rate.
+    """
+
+    def test_reports_the_native_rate_and_duration(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            assert reader.fps == REAL_VIDEO_FPS
+            assert reader.duration_s == pytest.approx(
+                REAL_VIDEO_FRAMES / REAL_VIDEO_FPS
+            )
+
+    def test_one_frame_a_second_lands_on_whole_seconds(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            sampled = list(reader.frames(1.0))
+        assert [frame.index for frame in sampled] == [0, 25, 50, 75, 100, 125, 150]
+        assert [round(frame.timestamp_s, 3) for frame in sampled] == [
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+        ]
+
+    def test_rate_scales_the_frame_count(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            assert len(list(reader.frames(2.0))) == 14
+            assert len(list(reader.frames(0.5))) == 4
+
+    def test_a_rate_above_the_native_one_returns_every_frame(self, sample_video):
+        """Nothing is interpolated, and no frame is emitted twice."""
+        with VideoReader(sample_video) as reader:
+            sampled = list(reader.frames(REAL_VIDEO_FPS * 2))
+        assert [frame.index for frame in sampled] == list(range(REAL_VIDEO_FRAMES))
+
+    def test_max_frames_stops_early(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            sampled = list(reader.frames(1.0, max_frames=3))
+        assert [frame.index for frame in sampled] == [0, 25, 50]
+
+    def test_frames_are_rgb_arrays(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            frame = next(iter(reader.frames(1.0)))
+        assert frame.frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
+        assert frame.frame.dtype == np.uint8
+
+    def test_sampling_twice_gives_the_same_frames(self, sample_video):
+        """Each call rewinds, so a reader is not consumed by one read."""
+        with VideoReader(sample_video) as reader:
+            first = [frame.index for frame in reader.frames(1.0)]
+            second = [frame.index for frame in reader.frames(1.0)]
+        assert first == second
+
+    def test_reading_inside_a_with_block(self, sample_video):
+        """The documented form: `with VideoReader(..) as video:`."""
+        with VideoReader(sample_video) as video:
+            assert [frame.index for frame in video.frames(fps=1)] == [
+                0,
+                25,
+                50,
+                75,
+                100,
+                125,
+                150,
+            ]
+        assert video._video is None, "the block should release the decoder"
+
+    def test_a_reader_can_be_entered_again(self):
+        """`with` has to mean the same thing the second time.
+
+        A reader opens on construction and closes on exit, so entering a closed
+        one has to reopen it rather than hand back something that cannot read.
+        """
+        video = VideoReader(Path(__file__).parent.parent / "test_data" / "test.mp4")
+        with video:
+            first = [frame.index for frame in video.frames(fps=1)]
+        with video:
+            second = [frame.index for frame in video.frames(fps=1)]
+        assert first == second != []
+
+    def test_a_closed_reader_says_so(self, sample_video):
+        """Not a bare RuntimeError: the fix is to read inside the block."""
+        from vlmrun.client.exceptions import InputError
+
+        video = VideoReader(sample_video)
+        video.close()
+        with pytest.raises(InputError) as caught:
+            next(video.frames(fps=1))
+        assert "closed" in caught.value.message
+        assert "with VideoReader" in caught.value.suggestion
+
+    @pytest.mark.parametrize("rate", [0, -1, -0.5])
+    def test_a_non_positive_rate_is_rejected(self, sample_video, rate):
+        from vlmrun.client.exceptions import InputError
+
+        with VideoReader(sample_video) as reader:
+            with pytest.raises(InputError):
+                next(iter(reader.frames(rate)))
+
+
+class FakeCapture:
+    """A capture that reports whatever a test needs it to.
+
+    Substituted for the reader's own handle rather than patching
+    ``VideoReader``: patching the class leaks into whatever runs next, and
+    ``cv2.VideoCapture.get`` is read-only so it cannot be patched per instance.
+    """
+
+    def __init__(self, *, frames=100, fps=0.0, pos_msec=0.0, width=8):
+        self._cv2 = __import__("cv2")
+        self.total = frames
+        self.reported_fps = fps
+        self.pos_msec = pos_msec
+        self.width = width
+        self.position = 0
+
+    def get(self, prop):
+        if prop == self._cv2.CAP_PROP_FPS:
+            return self.reported_fps
+        if prop == self._cv2.CAP_PROP_FRAME_COUNT:
+            return float(self.total)
+        if prop == self._cv2.CAP_PROP_POS_MSEC:
+            # Either a dead clock, or one that tracks the reported rate.
+            if self.pos_msec is None and self.reported_fps > 0:
+                return 1000.0 * (self.position - 1) / self.reported_fps
+            return self.pos_msec
+        if prop == self._cv2.CAP_PROP_POS_FRAMES:
+            return float(self.position)
+        return 0.0
+
+    def set(self, prop, value):
+        if prop == self._cv2.CAP_PROP_POS_FRAMES:
+            self.position = int(value)
+        return True
+
+    def read(self):
+        if self.position >= self.total:
+            return False, None
+        self.position += 1
+        return True, np.zeros((self.width, self.width, 3), dtype=np.uint8)
+
+    def isOpened(self):  # noqa: N802 - the cv2 spelling
+        return True
+
+    def release(self):
+        return None
+
+
+class TestMissingClock:
+    """A container with no rate and no timestamps used to yield one frame.
+
+    Every timestamp stayed at 0.0, so the next sampling mark was never reached
+    and every frame after the first was skipped — a decodable video silently
+    became a one-frame timeline.
+    """
+
+    def test_no_rate_and_no_clock_is_rejected(self, sample_video):
+        from vlmrun.client.exceptions import InputError
+
+        with VideoReader(sample_video) as reader:
+            reader._video = FakeCapture(frames=100, fps=0.0, pos_msec=0.0)
+            with pytest.raises(InputError) as caught:
+                list(reader.frames(1.0))
+        assert "frame rate" in caught.value.message
+        assert "ffmpeg" in caught.value.suggestion
+
+    def test_a_dead_clock_alone_falls_back_to_the_rate(self, sample_video):
+        """With a known rate, index/rate still places frames in time."""
+        with VideoReader(sample_video) as reader:
+            reader._video = FakeCapture(frames=100, fps=25.0, pos_msec=0.0)
+            sampled = list(reader.frames(1.0))
+        assert [frame.index for frame in sampled] == [0, 25, 50, 75]
+        assert [frame.timestamp_s for frame in sampled] == [0.0, 1.0, 2.0, 3.0]
+
+    def test_a_working_clock_is_preferred(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            reader._video = FakeCapture(frames=60, fps=30.0, pos_msec=None)
+            sampled = list(reader.frames(1.0))
+        assert [frame.index for frame in sampled] == [0, 30]
