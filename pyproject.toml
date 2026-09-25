@@ -56,7 +56,10 @@ typesafe = [
     "typesafe-sdk>=0.7.1",
 ]
 ws = [
-    "websockets>=13.0",
+    # 14.0 is the floor, not 13: `websockets.connect` only became the asyncio
+    # client there, and the session uses its `additional_headers`. On 13.x the
+    # name resolves to the legacy client, which takes `extra_headers` instead.
+    "websockets>=14.0,<18.0",
 ]
 all = [
     "numpy>=1.24.0",
@@ -65,7 +68,7 @@ all = [
     "pandas",
     "ipython",
     "typesafe-sdk>=0.7.1",
-    "websockets>=13.0",
+    "websockets>=14.0,<18.0",
 ]
 
 [tool.setuptools.dynamic]

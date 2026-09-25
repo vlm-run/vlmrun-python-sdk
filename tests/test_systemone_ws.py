@@ -12,6 +12,7 @@ import asyncio
 import base64
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -760,3 +761,54 @@ class TestReviewFindings:
                 # The session still works once given enough time.
                 stream._options["timeout"] = 5.0
                 assert stream.send(PNG_DATA_URL) is not None
+
+
+class TestDeclaredWebsocketsRange:
+    """The declared range has to match the API this transport actually calls.
+
+    The floor is 14.0 rather than 13.x because ``websockets.connect`` only became
+    the asyncio client there. On 13.x the same name resolves to the legacy
+    client, which takes ``extra_headers`` — so a 13.x install would raise
+    TypeError on the first session, and declaring it supported would be a lie.
+    """
+
+    @staticmethod
+    def _declared_spec():
+        import tomllib
+
+        root = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        extras = tomllib.load(root.open("rb"))["project"]["optional-dependencies"]
+        specs = [d for d in extras["ws"] if d.startswith("websockets")]
+        assert len(specs) == 1, specs
+        return specs[0]
+
+    def test_the_ws_extra_has_both_bounds(self):
+        from packaging.requirements import Requirement
+
+        spec = Requirement(self._declared_spec())
+        operators = {s.operator for s in spec.specifier}
+        assert ">=" in operators, "a floor is needed: 13.x cannot run this code"
+        assert any(op in operators for op in ("<", "<=")), "an upper bound is needed"
+
+    def test_the_all_extra_declares_the_same_range(self):
+        import tomllib
+
+        root = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        extras = tomllib.load(root.open("rb"))["project"]["optional-dependencies"]
+        in_all = [d for d in extras["all"] if d.startswith("websockets")]
+        assert in_all == [self._declared_spec()], "the extras must not drift apart"
+
+    def test_the_installed_version_satisfies_what_is_declared(self):
+        from packaging.requirements import Requirement
+
+        assert (
+            websockets.version.version in Requirement(self._declared_spec()).specifier
+        )
+
+    def test_the_api_the_session_uses_exists(self):
+        """If a release drops one of these, the upper bound should have caught it."""
+        import inspect
+
+        parameters = set(inspect.signature(websockets.connect).parameters)
+        assert {"additional_headers", "max_size", "open_timeout"} <= parameters
+        assert websockets.connect.__module__ == "websockets.asyncio.client"
