@@ -55,6 +55,9 @@ doc = [
 typesafe = [
     "typesafe-sdk>=0.7.1",
 ]
+ws = [
+    "websockets>=13.0",
+]
 all = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
@@ -62,6 +65,7 @@ all = [
     "pandas",
     "ipython",
     "typesafe-sdk>=0.7.1",
+    "websockets>=13.0",
 ]
 
 [tool.setuptools.dynamic]

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import json
+import time
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +22,8 @@ from vlmrun.client.systemone import (
     MAX_IMAGE_BYTES,
     REASONING_EFFORTS,
     SYSTEMONE_MODEL,
+    DecisionStream,
+    FrameDecision,
     SystemOne,
     build_content,
     _guard_fetchable,
@@ -35,6 +39,15 @@ PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
 PDF_BYTES = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n"
+
+PNG_DATA_URL = f"data:image/png;base64,{base64.b64encode(PNG_BYTES).decode()}"
+"""A 1x1 PNG, as the route wants images."""
+
+PNG_BYTES2 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhQGAWjR9awAAAABJRU5ErkJggg=="
+)
+PNG_DATA_URL2 = f"data:image/png;base64,{base64.b64encode(PNG_BYTES2).decode()}"
+"""A second 1x1 PNG, distinguishable from the first on the wire."""
 
 
 class TestTypesafeBaseUrl:
@@ -664,3 +677,367 @@ class TestResourceWiring:
         with resource(capture(sent)) as system_one:
             system_one.decide("x", [{"id": "a", "type": "noul"}])
         assert "client" not in system_one.__dict__
+
+
+SAMPLE_VIDEO = Path(__file__).parent / "test_data" / "test.mp4"
+"""168 frames at 25 fps — 6.72s, so a 1 fps read is 7 frames."""
+
+NOUL = [{"id": "is_urgent", "type": "noul"}]
+
+
+def counting_capture(sent: list, *, delay_for=None):
+    """A handler that records bodies and tracks how many reads overlap.
+
+    Returns the handler and a dict carrying ``peak`` — the most reads in flight
+    at once — so a test can check the stream's concurrency bound from the
+    server's side rather than trusting the pool's configuration.
+    """
+    import threading
+
+    state = {"live": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        with lock:
+            state["live"] += 1
+            state["peak"] = max(state["peak"], state["live"])
+        body = json.loads(request.content)
+        if delay_for is not None:
+            time.sleep(delay_for(body))
+        with lock:
+            state["live"] -= 1
+            sent.append(body)
+        return httpx2.Response(
+            200, json=ANSWERS, headers={"x-typesafe-request-id": "req_test"}
+        )
+
+    return handler, state
+
+
+def image_of(body: dict) -> str:
+    """The data URL one recorded request body carried."""
+    return body["content"][0]["image_url"]["url"]
+
+
+class TestDecisionStream:
+    """``SystemOne.stream`` — a held-open session over a series of inputs."""
+
+    def test_reads_each_input_once_in_order(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            decisions = list(stream.map([PNG_DATA_URL, PNG_DATA_URL2]))
+        assert [decision.index for decision in decisions] == [0, 1]
+        assert all(decision.timestamp_s is None for decision in decisions)
+        # Both inputs were read exactly once. Which arrived first is completion
+        # order and not promised; the yielded order above is what is.
+        assert sorted(image_of(body) for body in sent) == sorted(
+            [PNG_DATA_URL, PNG_DATA_URL2]
+        )
+
+    def test_order_survives_out_of_order_completion(self):
+        """The slowest read is submitted first, so ordering cannot be luck.
+
+        More inputs than slots, so this covers the sliding window rather than
+        only the drain at the end of the series.
+        """
+        sent: list = []
+        # The first image is delayed well past the rest, so it must finish last.
+        handler, _ = counting_capture(
+            sent, delay_for=lambda body: 0.15 if image_of(body) == PNG_DATA_URL else 0.0
+        )
+        images = [PNG_DATA_URL] + [PNG_DATA_URL2] * 5
+        with resource(handler).stream(NOUL, concurrency=2) as stream:
+            decisions = list(stream.map(images))
+        assert [decision.index for decision in decisions] == [0, 1, 2, 3, 4, 5]
+        # The slow read was submitted first but completed after at least one
+        # other, so the ordering above was restored rather than incidental.
+        assert image_of(sent[0]) != PNG_DATA_URL
+
+    def test_concurrency_is_bounded(self):
+        sent: list = []
+        handler, state = counting_capture(sent, delay_for=lambda body: 0.03)
+        with resource(handler).stream(NOUL, concurrency=3) as stream:
+            list(stream.map([PNG_DATA_URL] * 12))
+        assert len(sent) == 12
+        assert state["peak"] <= 3
+
+    def test_serial_when_concurrency_is_one(self):
+        sent: list = []
+        handler, state = counting_capture(sent, delay_for=lambda body: 0.01)
+        with resource(handler).stream(NOUL, concurrency=1) as stream:
+            list(stream.map([PNG_DATA_URL] * 4))
+        assert state["peak"] == 1
+
+    def test_inputs_are_pulled_lazily(self):
+        """A long source must not be drained to answer the first few reads."""
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        pulled = {"n": 0}
+
+        def plenty():
+            # Bounded, so a regression that drains the source fails the count
+            # assertion rather than hanging the suite.
+            for _ in range(10_000):
+                pulled["n"] += 1
+                yield PNG_DATA_URL
+
+        with resource(handler).stream(NOUL, concurrency=2) as stream:
+            taken = []
+            for decision in stream.map(plenty()):
+                taken.append(decision)
+                if len(taken) == 3:
+                    break
+        assert len(taken) == 3
+        # Bounded by the window, not by the (infinite) source.
+        assert pulled["n"] <= 6
+
+    def test_stopping_early_does_not_pay_for_the_rest(self):
+        sent: list = []
+        handler, _ = counting_capture(sent, delay_for=lambda body: 0.02)
+        with resource(handler).stream(NOUL, concurrency=2) as stream:
+            for decision in stream.map([PNG_DATA_URL] * 40):
+                if decision.index == 1:
+                    break
+        assert len(sent) < 12, f"issued {len(sent)} reads after breaking at the 2nd"
+
+    def test_is_only_open_inside_its_block(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        stream = resource(handler).stream(NOUL)
+        assert isinstance(stream, DecisionStream)
+        # Not usable before being entered, nor after leaving.
+        assert not stream.is_open
+        with stream:
+            assert stream.is_open
+        assert not stream.is_open
+        with pytest.raises(InputError):
+            list(stream.map([PNG_DATA_URL]))
+        assert sent == []
+
+    def test_counts_its_reads(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            assert stream.count == 0
+            list(stream.map([PNG_DATA_URL] * 3))
+            assert stream.count == 3
+
+    def test_normalizes_the_spec_once_up_front(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(
+            [{"id": "dept", "type": "choice", "options": ["a", "b"]}]
+        ) as stream:
+            assert stream.questions == {
+                "dept": {"type": "choice", "criteria": {"a": None, "b": None}}
+            }
+
+    def test_a_malformed_spec_fails_before_any_read(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with pytest.raises(InputError):
+            resource(handler).stream([{"id": "a", "type": "nope"}])
+        assert sent == []
+
+    @pytest.mark.parametrize("concurrency", [0, -1])
+    def test_concurrency_must_be_positive(self, concurrency):
+        with pytest.raises(InputError):
+            resource(capture([])).stream(NOUL, concurrency=concurrency)
+
+    def test_the_streams_options_apply_to_every_read(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(
+            NOUL, state="fixed state", model="m/x", steps=3, samples=2, detail="high"
+        ) as stream:
+            list(stream.map([PNG_DATA_URL] * 2))
+        assert len(sent) == 2
+        for body in sent:
+            assert body["state"] == "fixed state"
+            assert body["model"] == "m/x"
+            assert body["steps"] == 3 and body["samples"] == 2
+            assert body["content"][0]["image_url"]["detail"] == "high"
+
+    def test_send_reads_one_input(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL, state="base") as stream:
+            response = stream.send(PNG_DATA_URL)
+        assert response.nouls["is_urgent"].noul == 0.91
+        assert sent[0]["state"] == "base"
+
+    def test_send_can_override_the_state(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL, state="base") as stream:
+            stream.send(PNG_DATA_URL, state="just this one")
+        assert sent[0]["state"] == "just this one"
+
+    def test_an_array_is_encoded_as_a_jpeg_frame(self):
+        numpy = pytest.importorskip("numpy")
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        frame = numpy.full((8, 8, 3), 200, dtype=numpy.uint8)
+        with resource(handler).stream(NOUL) as stream:
+            stream.send(frame)
+        assert image_of(sent[0]).startswith("data:image/jpeg;base64,")
+
+    def test_a_read_failure_propagates(self):
+        with pytest.raises(Exception) as caught:
+            with resource(capture([], status=500)).stream(NOUL) as stream:
+                list(stream.map([PNG_DATA_URL]))
+        assert type(caught.value).__name__.startswith("TypeSafe")
+
+
+class TestDecisionStreamOverFrames:
+    """``map`` and ``send`` over :meth:`vlmrun.common.video.VideoReader.frames`."""
+
+    @staticmethod
+    def _frames(fps, **kwargs):
+        """The fixture's frames at a rate, with the reader closed after."""
+        from vlmrun.common.video import VideoReader
+
+        with VideoReader(SAMPLE_VIDEO) as reader:
+            yield from reader.frames(fps, **kwargs)
+
+    def test_map_reads_every_sampled_frame(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            decisions = list(stream.map(self._frames(1.0)))
+        assert [d.index for d in decisions] == [0, 25, 50, 75, 100, 125, 150]
+        assert len(sent) == 7
+
+    def test_map_carries_each_frames_timestamp(self):
+        """A timeline has to survive being mapped, or the answers lose their x-axis."""
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            decisions = list(stream.map(self._frames(1.0)))
+        assert [round(d.timestamp_s, 3) for d in decisions] == [
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+        ]
+
+    def test_map_of_plain_inputs_has_no_timestamps(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            decisions = list(stream.map([PNG_DATA_URL, PNG_DATA_URL2]))
+        assert [d.index for d in decisions] == [0, 1]
+        assert all(d.timestamp_s is None for d in decisions)
+
+    def test_every_frame_is_a_distinct_jpeg(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            list(stream.map(self._frames(1.0)))
+        images = [image_of(body) for body in sent]
+        assert all(image.startswith("data:image/jpeg;base64,") for image in images)
+        assert len(set(images)) == len(images)
+
+    def test_fps_sets_the_read_count(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            assert len(list(stream.map(self._frames(0.5)))) == 4
+
+    def test_frames_compose_with_islice(self):
+        """The point of a plain iterator: it slices."""
+        from itertools import islice
+
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            decisions = list(stream.map(islice(self._frames(1.0), 3)))
+        assert [d.index for d in decisions] == [0, 25, 50]
+        assert len(sent) == 3
+
+    def test_frames_compose_with_a_filter(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            decisions = list(
+                stream.map(f for f in self._frames(1.0) if f.timestamp_s >= 4.0)
+            )
+        assert [round(d.timestamp_s, 1) for d in decisions] == [4.0, 5.0, 6.0]
+
+    def test_map_over_frames_is_still_concurrent(self):
+        sent: list = []
+        handler, state = counting_capture(sent, delay_for=lambda body: 0.03)
+        with resource(handler).stream(NOUL, concurrency=3) as stream:
+            list(stream.map(self._frames(2.0)))
+        assert len(sent) == 14
+        assert state["peak"] > 1, "reads should overlap"
+        assert state["peak"] <= 3
+
+    def test_send_reads_one_frame_at_a_time(self):
+        sent: list = []
+        handler, state = counting_capture(sent, delay_for=lambda body: 0.01)
+        responses = []
+        with resource(handler).stream(NOUL) as stream:
+            for frame in self._frames(1.0, max_frames=3):
+                responses.append((frame.timestamp_s, stream.send(frame)))
+        assert [t for t, _ in responses] == [0.0, 1.0, 2.0]
+        assert all(r.nouls["is_urgent"].noul == 0.91 for _, r in responses)
+        # send() is blocking by construction, so nothing overlaps.
+        assert state["peak"] == 1
+
+    def test_breaking_out_closes_the_decoder(self, monkeypatch):
+        from vlmrun.common import video as video_module
+
+        opened, closed = [], []
+        real_init = video_module.VideoReader.__init__
+        real_close = video_module.VideoReader.close
+
+        def spy_init(self, *args, **kwargs):
+            opened.append(1)
+            real_init(self, *args, **kwargs)
+
+        def spy_close(self):
+            # Count releases that actually did something: close() is idempotent
+            # and __del__ calls it again after an explicit close.
+            if getattr(self, "_video", None) is not None:
+                closed.append(1)
+            real_close(self)
+
+        monkeypatch.setattr(video_module.VideoReader, "__init__", spy_init)
+        monkeypatch.setattr(video_module.VideoReader, "close", spy_close)
+
+        sent: list = []
+        handler, _ = counting_capture(sent, delay_for=lambda body: 0.01)
+        with resource(handler).stream(NOUL, concurrency=2) as stream:
+            for decision in stream.map(self._frames(25.0)):
+                if decision.index == 2:
+                    break
+        assert len(opened) == 1 and len(closed) == 1
+        assert len(sent) < 12, f"issued {len(sent)} of 168 possible reads"
+
+    def test_a_missing_video_raises(self, tmp_path):
+        from vlmrun.common.video import VideoReader
+
+        with resource(capture([])).stream(NOUL) as stream:
+            with pytest.raises((FileNotFoundError, InputError)):
+                with VideoReader(tmp_path / "nope.mp4") as reader:
+                    list(stream.map(reader.frames(1.0)))
+
+    def test_a_non_positive_rate_is_rejected(self):
+        with resource(capture([])).stream(NOUL) as stream:
+            with pytest.raises(InputError):
+                list(stream.map(self._frames(0)))
+
+    def test_a_frame_decision_unpacks(self):
+        sent: list = []
+        handler, _ = counting_capture(sent)
+        with resource(handler).stream(NOUL) as stream:
+            first = next(iter(stream.map(self._frames(1.0, max_frames=1))))
+        index, timestamp_s, response = first
+        assert isinstance(first, FrameDecision)
+        assert (index, timestamp_s) == (0, 0.0)
+        assert response.nouls["is_urgent"].noul == 0.91

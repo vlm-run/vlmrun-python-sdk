@@ -191,3 +191,69 @@ def test_video_reader_real_video(real_video_path):
         reader.reset()
         frame_count = sum(1 for _ in reader)
         assert frame_count == REAL_VIDEO_FRAMES
+
+
+class TestFrames:
+    """``VideoReader.frames`` — rate-based frame sampling.
+
+    The fixture is 168 frames at 25 fps, so 6.72s: a 1 fps read is 7 frames at
+    whole seconds, and the frame indices follow from the native rate.
+    """
+
+    def test_reports_the_native_rate_and_duration(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            assert reader.fps == REAL_VIDEO_FPS
+            assert reader.duration_s == pytest.approx(
+                REAL_VIDEO_FRAMES / REAL_VIDEO_FPS
+            )
+
+    def test_one_frame_a_second_lands_on_whole_seconds(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            sampled = list(reader.frames(1.0))
+        assert [frame.index for frame in sampled] == [0, 25, 50, 75, 100, 125, 150]
+        assert [round(frame.timestamp_s, 3) for frame in sampled] == [
+            0.0,
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+        ]
+
+    def test_rate_scales_the_frame_count(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            assert len(list(reader.frames(2.0))) == 14
+            assert len(list(reader.frames(0.5))) == 4
+
+    def test_a_rate_above_the_native_one_returns_every_frame(self, sample_video):
+        """Nothing is interpolated, and no frame is emitted twice."""
+        with VideoReader(sample_video) as reader:
+            sampled = list(reader.frames(REAL_VIDEO_FPS * 2))
+        assert [frame.index for frame in sampled] == list(range(REAL_VIDEO_FRAMES))
+
+    def test_max_frames_stops_early(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            sampled = list(reader.frames(1.0, max_frames=3))
+        assert [frame.index for frame in sampled] == [0, 25, 50]
+
+    def test_frames_are_rgb_arrays(self, sample_video):
+        with VideoReader(sample_video) as reader:
+            frame = next(iter(reader.frames(1.0)))
+        assert frame.frame.shape == (REAL_VIDEO_HEIGHT, REAL_VIDEO_WIDTH, 3)
+        assert frame.frame.dtype == np.uint8
+
+    def test_sampling_twice_gives_the_same_frames(self, sample_video):
+        """Each call rewinds, so a reader is not consumed by one read."""
+        with VideoReader(sample_video) as reader:
+            first = [frame.index for frame in reader.frames(1.0)]
+            second = [frame.index for frame in reader.frames(1.0)]
+        assert first == second
+
+    @pytest.mark.parametrize("rate", [0, -1, -0.5])
+    def test_a_non_positive_rate_is_rejected(self, sample_video, rate):
+        from vlmrun.client.exceptions import InputError
+
+        with VideoReader(sample_video) as reader:
+            with pytest.raises(InputError):
+                next(iter(reader.frames(rate)))
