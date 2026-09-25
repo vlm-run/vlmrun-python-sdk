@@ -35,9 +35,13 @@ class StubServer:
     error, which is where a pipelined client is easiest to get wrong.
     """
 
-    def __init__(self, *, max_inflight=2, reverse=False, fail_on=None, noul=0.5):
+    def __init__(
+        self, *, max_inflight=2, reverse=False, shuffle=None, fail_on=None, noul=0.5
+    ):
         self.max_inflight = max_inflight
         self.reverse = reverse
+        self.shuffle = shuffle  # a random.Random, to permute each batch
+        self.reply_order: list = []
         self.fail_on = fail_on
         self.noul = noul
         self.received: list = []
@@ -89,9 +93,16 @@ class StubServer:
                     self._live -= 1
                     continue
                 held.append(message.get("id"))
-                # Answer in batches so `reverse` actually reorders replies.
-                if len(held) >= (self.max_inflight if self.reverse else 1):
-                    for request_id in reversed(held) if self.reverse else held:
+                # Answer in batches so a reorder has something to reorder.
+                batched = self.reverse or self.shuffle is not None
+                if len(held) >= (self.max_inflight if batched else 1):
+                    order = list(held)
+                    if self.shuffle is not None:
+                        self.shuffle.shuffle(order)
+                    elif self.reverse:
+                        order.reverse()
+                    for request_id in order:
+                        self.reply_order.append(request_id)
                         await ws.send(json.dumps(self._decision(request_id)))
                         self._live -= 1
                     held.clear()
@@ -454,3 +465,135 @@ class TestInflightNegotiation:
                 list(stream.map([PNG_DATA_URL] * 6))
         assert server.creates[0]["max_inflight"] == 8
         assert server.peak_inflight <= 2
+
+
+class TestOrderingIsIntact:
+    """Responses must come back paired to the input that produced them.
+
+    One socket carries every read, so arrival order is whatever the server
+    chose. The stub folds each reply's id into its answer, which makes a
+    mispairing visible rather than merely possible.
+    """
+
+    @pytest.mark.parametrize("seed", range(5))
+    def test_a_shuffled_server_still_pairs_correctly(self, seed):
+        import random
+
+        with StubServer(max_inflight=4, shuffle=random.Random(seed)) as server:
+            with stream_to(server, concurrency=4) as stream:
+                decisions = list(stream.map([PNG_DATA_URL] * 16))
+        assert [d.index for d in decisions] == list(range(16))
+        # answer == 0.5 + id/1000, so this is the identity of each reply.
+        assert [round(d.response.nouls["a"].noul, 4) for d in decisions] == [
+            round(0.5 + i / 1000, 4) for i in range(16)
+        ]
+        assert server.reply_order != [
+            str(i) for i in range(16)
+        ], "the stub should have replied out of order for this to prove anything"
+
+    def test_frame_timestamps_stay_with_their_answers(self):
+        """The timeline's x-axis and y-axis must not come apart."""
+        import random
+
+        from vlmrun.common.video import SampledFrame
+
+        numpy = pytest.importorskip("numpy")
+        frames = [
+            SampledFrame(
+                index=i,
+                timestamp_s=i * 0.5,
+                frame=numpy.full((4, 4, 3), i, dtype=numpy.uint8),
+            )
+            for i in range(12)
+        ]
+        with StubServer(max_inflight=4, shuffle=random.Random(7)) as server:
+            with stream_to(server, concurrency=4) as stream:
+                decisions = list(stream.map(frames))
+        assert [d.index for d in decisions] == list(range(12))
+        assert [d.timestamp_s for d in decisions] == [i * 0.5 for i in range(12)]
+        assert [round(d.response.nouls["a"].noul, 4) for d in decisions] == [
+            round(0.5 + i / 1000, 4) for i in range(12)
+        ]
+
+
+class TestAnswerTypesOverTheSocket:
+    """Every answer type has to decode, not just the one the other tests use.
+
+    A score's legend and probabilities are keyed by level, which JSON carries as
+    strings. The HTTP path is decoded by the TypeSafe SDK, which converts them;
+    a socket frame validated directly does not, and the model wants ints.
+    """
+
+    @staticmethod
+    def _server_answering(answers):
+        class Fixed(StubServer):
+            def _decision(self, request_id):
+                return {
+                    "type": "decision",
+                    "frame": 0,
+                    "id": request_id,
+                    "answers": answers,
+                    "usage": {"input_tokens": 10, "output_tokens": 0},
+                    "latency_ms": 5.0,
+                }
+
+        return Fixed()
+
+    def test_a_score_answer_decodes(self):
+        answers = {
+            "mood": {
+                "type": "score",
+                "score": 1.4,
+                # String keys, as JSON delivers them.
+                "legend": {"0": "calm", "1": "cross", "2": "furious"},
+                "probabilities": {"0": 0.1, "1": 0.5, "2": 0.4},
+                "confidence": 0.33,
+            }
+        }
+        with self._server_answering(answers) as server:
+            with stream_to(server) as stream:
+                decision = next(iter(stream.map([PNG_DATA_URL])))
+        score = decision.response.scores["mood"]
+        assert score.score == pytest.approx(1.4)
+        assert score.legend[1] == "cross", "legend must be keyed by level"
+        assert score.probabilities[2] == pytest.approx(0.4)
+
+    def test_a_choice_answer_decodes(self):
+        answers = {
+            "dept": {
+                "type": "choice",
+                "choice": "billing",
+                "probabilities": {"billing": 0.9, "sales": 0.1},
+                "confidence": 0.7,
+            }
+        }
+        with self._server_answering(answers) as server:
+            with stream_to(server) as stream:
+                decision = next(iter(stream.map([PNG_DATA_URL])))
+        choice = decision.response.choices["dept"]
+        assert choice.choice == "billing"
+        assert choice.probabilities["billing"] == pytest.approx(0.9)
+
+    def test_all_three_types_in_one_read(self):
+        answers = {
+            "urgent": {"type": "noul", "noul": 0.9},
+            "dept": {
+                "type": "choice",
+                "choice": "billing",
+                "probabilities": {"billing": 1.0},
+                "confidence": 1.0,
+            },
+            "mood": {
+                "type": "score",
+                "score": 0.5,
+                "legend": {"0": "calm", "1": "cross"},
+                "probabilities": {"0": 0.5, "1": 0.5},
+                "confidence": 0.0,
+            },
+        }
+        with self._server_answering(answers) as server:
+            with stream_to(server) as stream:
+                decision = next(iter(stream.map([PNG_DATA_URL])))
+        assert decision.response.nouls["urgent"].noul == pytest.approx(0.9)
+        assert decision.response.choices["dept"].choice == "billing"
+        assert decision.response.scores["mood"].legend[0] == "calm"

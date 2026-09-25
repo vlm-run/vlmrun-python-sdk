@@ -1348,7 +1348,10 @@ class WebSocketStream(DecisionStream):
         response = typesafe.SystemOneResponse.model_validate(
             {
                 "model": self._limits.get("model") or self._resource.model,
-                "answers": payload.get("answers") or {},
+                "answers": {
+                    name: self._coerce_answer(answer)
+                    for name, answer in (payload.get("answers") or {}).items()
+                },
                 "usage": payload.get("usage")
                 or {"input_tokens": 0, "output_tokens": 0},
             }
@@ -1361,6 +1364,28 @@ class WebSocketStream(DecisionStream):
         # there is no raw body here to read them back off.
         response.__dict__["_vlmrun_usage"] = payload.get("usage") or {}
         return response
+
+    @staticmethod
+    def _coerce_answer(answer: Any) -> Any:
+        """Make one wire answer match the shape the response model declares.
+
+        A score's ``legend`` and ``probabilities`` are keyed by level, which JSON
+        can only carry as strings. The HTTP path is decoded by the TypeSafe SDK,
+        which converts them; validating a socket frame directly does not, and
+        ``ScoreAnswer`` declares ``dict[int, ...]``. Without this, a score
+        question works over HTTP and fails over the socket.
+        """
+        if not isinstance(answer, dict) or answer.get("type") != "score":
+            return answer
+        coerced = dict(answer)
+        for field in ("legend", "probabilities"):
+            value = coerced.get(field)
+            if isinstance(value, dict):
+                coerced[field] = {
+                    (int(key) if str(key).lstrip("-").isdigit() else key): item
+                    for key, item in value.items()
+                }
+        return coerced
 
     def close(self, *, cancel: bool = False) -> None:
         """Close the session, collecting its stats, then stop the loop.
