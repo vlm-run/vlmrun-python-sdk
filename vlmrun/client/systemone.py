@@ -90,7 +90,7 @@ from vlmrun.common.mime import (
     normalize_mime,
     sniff_mime,
 )
-from vlmrun.constants import DEFAULT_GATEWAY_URL
+from vlmrun.constants import TYPESAFE_BASE_URL_ENV, gateway_base_url
 from vlmrun.types.abstract import VLMRunProtocol
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -100,6 +100,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # set this gateway actually has, and there is no catch-all alias (``jev-latest``
 # was removed when the route gained a second read strategy).
 SYSTEMONE_MODEL = "google/diffusiongemma-26b-a4b-it"
+
+# The websocket route, mounted beside the HTTP one under the same /typesafe root.
+TYPESAFE_WEBSOCKET_PATH = "/ws"
 
 # The gateway mounts TypeSafe's paths under this prefix, so the SDK's own
 # /v1/systemone and /v1/models suffixes resolve with no mapping.
@@ -149,10 +152,47 @@ def typesafe_base_url(gateway_url: str | None = None) -> str:
     Returns:
         The ``/typesafe`` root, without a trailing slash.
     """
-    root = (gateway_url or DEFAULT_GATEWAY_URL).rstrip("/")
+    root = gateway_base_url(gateway_url)
     if root.endswith("/v1"):
         root = root[: -len("/v1")]
     return f"{root.rstrip('/')}/{TYPESAFE_PREFIX}"
+
+
+def typesafe_websocket_url(
+    base_url: str | None = None, *, gateway_url: str | None = None
+) -> str:
+    """The ``wss://`` URL of the session route, derived from the ``/typesafe`` root.
+
+    The socket route is mounted beside the HTTP one under the same root, so its
+    URL is the typesafe base URL with the scheme swapped and
+    :data:`TYPESAFE_WEBSOCKET_PATH` appended. Derived rather than configured
+    separately, so pointing the SDK at another deployment moves both.
+
+    Args:
+        base_url (str | None, optional): An explicit ``/typesafe`` root. Falls
+            back to ``TYPESAFE_BASE_URL``, then to the root derived from the
+            gateway URL.
+        gateway_url (str | None, optional): Gateway URL the route is mounted
+            beside, when ``base_url`` is not given.
+
+    Returns:
+        str: e.g. ``wss://gateway.vlm.run/typesafe/ws``.
+
+    Example:
+        ```python
+        from vlmrun.client.systemone import typesafe_websocket_url
+
+        typesafe_websocket_url()                                  # the default gateway
+        typesafe_websocket_url(gateway_url="http://localhost:8000/v1")
+        ```
+    """
+    root = (
+        base_url or os.getenv(TYPESAFE_BASE_URL_ENV) or typesafe_base_url(gateway_url)
+    ).rstrip("/")
+    scheme, separator, rest = root.partition("://")
+    if not separator:  # a bare host, with no scheme to swap
+        return f"wss://{root}{TYPESAFE_WEBSOCKET_PATH}"
+    return f"{'wss' if scheme == 'https' else 'ws'}://{rest}{TYPESAFE_WEBSOCKET_PATH}"
 
 
 def _spec_error(message: str, *, suggestion: str) -> InputError:
@@ -1079,9 +1119,6 @@ class DecisionStream:
                 future.cancel()
 
 
-# The websocket route, mounted beside the HTTP one under the same /typesafe root.
-WEBSOCKET_PATH = "/ws"
-
 # Seconds allowed for the upgrade and the session.created ack.
 WEBSOCKET_OPEN_TIMEOUT = 30.0
 
@@ -1146,10 +1183,12 @@ class WebSocketStream(DecisionStream):
 
     @property
     def url(self) -> str:
-        """The ``wss://`` URL this stream connects to."""
-        base = self._resource.base_url
-        scheme = "wss" if base.startswith("https") else "ws"
-        return f"{scheme}://{base.split('://', 1)[-1]}{WEBSOCKET_PATH}"
+        """The ``wss://`` URL this stream connects to.
+
+        Derived from the resource's ``/typesafe`` root, so a resource pointed at
+        another deployment takes its socket along.
+        """
+        return typesafe_websocket_url(self._resource.base_url)
 
     @property
     def limits(self) -> dict[str, Any]:
@@ -1478,7 +1517,9 @@ class SystemOne:
         """
         self._client = client
         self._base_url = (
-            base_url or os.getenv("TYPESAFE_BASE_URL") or typesafe_base_url(gateway_url)
+            base_url
+            or os.getenv(TYPESAFE_BASE_URL_ENV)
+            or typesafe_base_url(gateway_url)
         ).rstrip("/")
         self._model = model or os.getenv("TYPESAFE_DEFAULT_MODEL") or SYSTEMONE_MODEL
         self._timeout = timeout

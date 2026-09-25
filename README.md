@@ -172,6 +172,22 @@ simpler, but it does not overlap, so a `for` loop over `send()` is serial.
 The stream is a context manager because it owns a worker pool, released on the way out
 including when you stop early or raise.
 
+The URLs are derived, not configured separately, so pointing the SDK at another
+deployment moves everything with it:
+
+```python
+from vlmrun.constants import DEFAULT_GATEWAY_URL, gateway_base_url
+from vlmrun.client.systemone import typesafe_base_url, typesafe_websocket_url
+
+gateway_base_url()        # 'https://gateway.vlm.run/v1'  (VLMRUN_GATEWAY_BASE_URL wins)
+typesafe_base_url()       # 'https://gateway.vlm.run/typesafe'
+typesafe_websocket_url()  # 'wss://gateway.vlm.run/typesafe/ws'
+```
+
+`gateway_base_url()` takes an explicit argument first, then `VLMRUN_GATEWAY_BASE_URL`,
+then the older `VLMRUN_GATEWAY_URL`, then `DEFAULT_GATEWAY_URL`. `TYPESAFE_BASE_URL`
+overrides the `/typesafe` root on its own.
+
 #### One session instead of a request per frame
 
 `transport="ws"` (CLI: `--ws`) opens a single session on `/typesafe/ws` rather than a

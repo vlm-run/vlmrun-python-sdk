@@ -12,11 +12,10 @@ chat-completions / models interface.
 
 from __future__ import annotations
 
-import os
 from functools import cached_property
 from typing import Any, List, Optional
 
-from vlmrun.constants import DEFAULT_GATEWAY_URL
+from vlmrun.constants import gateway_base_url
 from vlmrun.common.dependencies import require_openai
 from vlmrun.types.abstract import VLMRunProtocol
 
@@ -31,7 +30,8 @@ class Gateway:
     gateway using the standard OpenAI chat-completions and models interfaces.
 
     Attributes:
-        base_url: Gateway base URL (defaults to ``VLMRUN_GATEWAY_URL`` env var or
+        base_url: Gateway base URL (defaults to the ``VLMRUN_GATEWAY_BASE_URL``
+            env var, then ``VLMRUN_GATEWAY_URL``, then
             ``https://gateway.vlm.run/v1``).
     """
 
@@ -43,12 +43,11 @@ class Gateway:
         Args:
             client: VLM Run API client instance (provides the API key).
             base_url: Optional gateway base URL override. Falls back to the
-                ``VLMRUN_GATEWAY_URL`` environment variable, then the default.
+                ``VLMRUN_GATEWAY_BASE_URL`` environment variable, then the older
+                ``VLMRUN_GATEWAY_URL``, then :data:`DEFAULT_GATEWAY_URL`.
         """
         self._client = client
-        self._base_url = (
-            base_url or os.getenv("VLMRUN_GATEWAY_URL") or DEFAULT_GATEWAY_URL
-        )
+        self._base_url = gateway_base_url(base_url)
 
     @property
     def base_url(self) -> str:

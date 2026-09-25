@@ -1041,3 +1041,98 @@ class TestDecisionStreamOverFrames:
         assert isinstance(first, FrameDecision)
         assert (index, timestamp_s) == (0, 0.0)
         assert response.nouls["is_urgent"].noul == 0.91
+
+
+class TestPublicUrlConstants:
+    """The URLs downstream code needs, and where they come from.
+
+    Every gateway URL resolves through one function so the resources cannot
+    disagree, and the socket URL is derived from the ``/typesafe`` root rather
+    than configured beside it — pointing the SDK elsewhere has to move both.
+    """
+
+    def test_the_gateway_default_is_a_constant(self):
+        from vlmrun.constants import DEFAULT_GATEWAY_URL, gateway_base_url
+
+        assert DEFAULT_GATEWAY_URL == "https://gateway.vlm.run/v1"
+        assert gateway_base_url() == DEFAULT_GATEWAY_URL
+
+    def test_an_explicit_url_wins(self, monkeypatch):
+        from vlmrun.constants import gateway_base_url
+
+        monkeypatch.setenv("VLMRUN_GATEWAY_BASE_URL", "https://env.test/v1")
+        assert gateway_base_url("https://arg.test/v1") == "https://arg.test/v1"
+
+    def test_the_gateway_base_url_env_var(self, monkeypatch):
+        from vlmrun.constants import VLMRUN_GATEWAY_BASE_URL_ENV, gateway_base_url
+
+        monkeypatch.delenv("VLMRUN_GATEWAY_URL", raising=False)
+        monkeypatch.setenv(VLMRUN_GATEWAY_BASE_URL_ENV, "https://staging.test/v1/")
+        # The trailing slash is dropped, so callers can join paths safely.
+        assert gateway_base_url() == "https://staging.test/v1"
+
+    def test_the_older_env_var_is_still_honoured(self, monkeypatch):
+        """Renaming it outright would break existing setups."""
+        from vlmrun.constants import VLMRUN_GATEWAY_URL_ENV, gateway_base_url
+
+        monkeypatch.delenv("VLMRUN_GATEWAY_BASE_URL", raising=False)
+        monkeypatch.setenv(VLMRUN_GATEWAY_URL_ENV, "https://old.test/v1")
+        assert gateway_base_url() == "https://old.test/v1"
+
+    def test_the_new_name_takes_precedence_over_the_old(self, monkeypatch):
+        from vlmrun.constants import gateway_base_url
+
+        monkeypatch.setenv("VLMRUN_GATEWAY_BASE_URL", "https://new.test/v1")
+        monkeypatch.setenv("VLMRUN_GATEWAY_URL", "https://old.test/v1")
+        assert gateway_base_url() == "https://new.test/v1"
+
+    def test_the_gateway_resource_uses_the_resolver(self, monkeypatch):
+        from vlmrun.client.gateway import Gateway
+
+        monkeypatch.delenv("VLMRUN_GATEWAY_URL", raising=False)
+        monkeypatch.setenv("VLMRUN_GATEWAY_BASE_URL", "https://staging.test/v1")
+        assert Gateway(FakeClient()).base_url == "https://staging.test/v1"
+
+    def test_the_websocket_url_is_derived_from_the_typesafe_root(self):
+        from vlmrun.client.systemone import (
+            TYPESAFE_WEBSOCKET_PATH,
+            typesafe_base_url,
+            typesafe_websocket_url,
+        )
+
+        root = typesafe_base_url("https://gw.test/v1")
+        assert root == "https://gw.test/typesafe"
+        assert (
+            typesafe_websocket_url(root)
+            == f"wss://gw.test/typesafe{TYPESAFE_WEBSOCKET_PATH}"
+        )
+
+    def test_a_plain_http_deployment_gives_ws_not_wss(self):
+        from vlmrun.client.systemone import typesafe_websocket_url
+
+        assert (
+            typesafe_websocket_url(gateway_url="http://localhost:8000/v1")
+            == "ws://localhost:8000/typesafe/ws"
+        )
+
+    def test_the_websocket_url_follows_the_gateway_env_var(self, monkeypatch):
+        from vlmrun.client.systemone import typesafe_websocket_url
+
+        monkeypatch.delenv("TYPESAFE_BASE_URL", raising=False)
+        monkeypatch.delenv("VLMRUN_GATEWAY_URL", raising=False)
+        monkeypatch.setenv("VLMRUN_GATEWAY_BASE_URL", "https://staging.test/v1")
+        assert typesafe_websocket_url() == "wss://staging.test/typesafe/ws"
+
+    def test_typesafe_base_url_env_overrides_the_derivation(self, monkeypatch):
+        from vlmrun.client.systemone import typesafe_websocket_url
+
+        monkeypatch.setenv("TYPESAFE_BASE_URL", "https://elsewhere.test/typesafe")
+        monkeypatch.setenv("VLMRUN_GATEWAY_BASE_URL", "https://ignored.test/v1")
+        assert typesafe_websocket_url() == "wss://elsewhere.test/typesafe/ws"
+
+    def test_a_stream_reports_the_url_it_will_dial(self, monkeypatch):
+        monkeypatch.delenv("TYPESAFE_BASE_URL", raising=False)
+        stream = SystemOne(FakeClient(), gateway_url="https://gw.test/v1").stream(
+            [{"id": "a", "type": "noul"}], transport="ws"
+        )
+        assert stream.url == "wss://gw.test/typesafe/ws"

@@ -169,7 +169,9 @@ vlmrun chat "What colors are present?" --session-id <session-uuid>
 |----------|-------------|
 | `VLMRUN_API_KEY` | Your VLM Run API key (required) |
 | `VLMRUN_CACHE_DIR` | Custom cache directory (default: `~/.vlmrun/cache/artifacts`) |
-| `VLMRUN_GATEWAY_URL` | Override the model gateway base URL (default: `https://gateway.vlm.run/v1`) |
+| `VLMRUN_GATEWAY_BASE_URL` | Override the model gateway base URL (default: `https://gateway.vlm.run/v1`) |
+| `VLMRUN_GATEWAY_URL` | The gateway URL's original variable name; still honoured, after `VLMRUN_GATEWAY_BASE_URL` |
+| `TYPESAFE_BASE_URL` | Override the `/typesafe` root, which the System One HTTP and websocket URLs are derived from |
 
 ## How It Works
 
