@@ -45,15 +45,18 @@ dynamic = ["version"]
 [project.optional-dependencies]
 test = ["pytest", "pre-commit"]
 build = ["twine", "build"]
+# Upper bounds are the next major above what is released today: enough room for
+# the versions in the wild, closed against an unvetted major.
 video = [
-    "numpy>=1.24.0",
-    "opencv-python>=4.8.0",
+    "numpy>=1.24.0,<3.0",
+    "opencv-python>=4.8.0,<6.0",
 ]
 doc = [
-    "pypdfium2>=4.30.0",
+    "pypdfium2>=4.30.0,<6.0",
 ]
 typesafe = [
-    "typesafe-sdk>=0.7.1",
+    # Still 0.x, where a minor may break; bounded at the 1.0 boundary pip sees.
+    "typesafe-sdk>=0.7.1,<1.0",
 ]
 ws = [
     # 14.0 is the floor, not 13: `websockets.connect` only became the asyncio
@@ -62,12 +65,12 @@ ws = [
     "websockets>=14.0,<18.0",
 ]
 all = [
-    "numpy>=1.24.0",
-    "opencv-python>=4.8.0",
-    "pypdfium2>=4.30.0",
-    "pandas",
-    "ipython",
-    "typesafe-sdk>=0.7.1",
+    "numpy>=1.24.0,<3.0",
+    "opencv-python>=4.8.0,<6.0",
+    "pypdfium2>=4.30.0,<6.0",
+    "pandas<4.0",
+    "ipython<10.0",
+    "typesafe-sdk>=0.7.1,<1.0",
     "websockets>=14.0,<18.0",
 ]
 

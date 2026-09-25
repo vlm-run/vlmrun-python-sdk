@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -773,37 +774,38 @@ class TestDeclaredWebsocketsRange:
     """
 
     @staticmethod
-    def _declared_spec():
-        import tomllib
+    def _declared_specs():
+        """Every `websockets` requirement in pyproject, in file order.
 
+        Read as text rather than parsed: `tomllib` is stdlib only from 3.11 and
+        this project supports 3.10, and pulling in a TOML backport to assert on
+        two lines would be a poor trade.
+        """
         root = Path(__file__).resolve().parents[1] / "pyproject.toml"
-        extras = tomllib.load(root.open("rb"))["project"]["optional-dependencies"]
-        specs = [d for d in extras["ws"] if d.startswith("websockets")]
-        assert len(specs) == 1, specs
-        return specs[0]
+        return re.findall(
+            r'^\s*"(websockets[^"]*)"', root.read_text(), flags=re.MULTILINE
+        )
 
     def test_the_ws_extra_has_both_bounds(self):
         from packaging.requirements import Requirement
 
-        spec = Requirement(self._declared_spec())
-        operators = {s.operator for s in spec.specifier}
+        specs = self._declared_specs()
+        assert specs, "no websockets requirement found in pyproject.toml"
+        operators = {s.operator for s in Requirement(specs[0]).specifier}
         assert ">=" in operators, "a floor is needed: 13.x cannot run this code"
         assert any(op in operators for op in ("<", "<=")), "an upper bound is needed"
 
-    def test_the_all_extra_declares_the_same_range(self):
-        import tomllib
-
-        root = Path(__file__).resolve().parents[1] / "pyproject.toml"
-        extras = tomllib.load(root.open("rb"))["project"]["optional-dependencies"]
-        in_all = [d for d in extras["all"] if d.startswith("websockets")]
-        assert in_all == [self._declared_spec()], "the extras must not drift apart"
+    def test_every_extra_declares_the_same_range(self):
+        """The `ws` extra and `all` both carry it; they must not drift apart."""
+        specs = self._declared_specs()
+        assert len(specs) == 2, specs
+        assert len(set(specs)) == 1, specs
 
     def test_the_installed_version_satisfies_what_is_declared(self):
         from packaging.requirements import Requirement
 
-        assert (
-            websockets.version.version in Requirement(self._declared_spec()).specifier
-        )
+        spec = Requirement(self._declared_specs()[0]).specifier
+        assert websockets.version.version in spec
 
     def test_the_api_the_session_uses_exists(self):
         """If a release drops one of these, the upper bound should have caught it."""
