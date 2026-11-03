@@ -436,13 +436,19 @@ def capture(sent: list, payload=ANSWERS, status: int = 200):
     return handler
 
 
+# typesafe-sdk >= 0.7.5 rejects a noul question with neither instructions nor
+# criteria before it is sent, so every question that reaches decide() has one.
+NOUL = [{"id": "is_urgent", "type": "noul", "instructions": "Time-sensitive?"}]
+NOUL_A = [{"id": "a", "type": "noul", "instructions": "Is it a?"}]
+
+
 class TestDecide:
     def test_posts_the_wire_body(self):
         sent: list = []
         response = resource(capture(sent)).decide(
             "the state",
             [
-                {"id": "is_urgent", "type": "noul"},
+                NOUL[0],
                 {"id": "dept", "type": "choice", "options": ["billing", "sales"]},
             ],
         )
@@ -451,7 +457,7 @@ class TestDecide:
             "state": "the state",
             "model": SYSTEMONE_MODEL,
             "questions": {
-                "is_urgent": {"type": "noul"},
+                "is_urgent": {"type": "noul", "instructions": "Time-sensitive?"},
                 "dept": {
                     "type": "choice",
                     "criteria": {"billing": None, "sales": None},
@@ -465,7 +471,7 @@ class TestDecide:
 
     def test_no_content_key_without_media(self):
         sent: list = []
-        resource(capture(sent)).decide("x", [{"id": "a", "type": "noul"}])
+        resource(capture(sent)).decide("x", NOUL_A)
         assert "content" not in sent[0]["body"]
 
     def test_media_and_extensions_ride_extra_body(self, tmp_path):
@@ -474,7 +480,7 @@ class TestDecide:
         sent: list = []
         resource(capture(sent)).decide(
             "x",
-            [{"id": "a", "type": "noul"}],
+            NOUL_A,
             images=[image],
             detail="high",
             steps=2,
@@ -487,42 +493,36 @@ class TestDecide:
 
     def test_reasoning_effort_rides_the_body(self):
         sent: list = []
-        resource(capture(sent)).decide(
-            "x", [{"id": "a", "type": "noul"}], reasoning_effort="medium"
-        )
+        resource(capture(sent)).decide("x", NOUL_A, reasoning_effort="medium")
         assert sent[0]["body"]["reasoning_effort"] == "medium"
 
     def test_reasoning_effort_absent_by_default(self):
         sent: list = []
-        resource(capture(sent)).decide("x", [{"id": "a", "type": "noul"}])
+        resource(capture(sent)).decide("x", NOUL_A)
         assert "reasoning_effort" not in sent[0]["body"]
 
     def test_bad_reasoning_effort_never_reaches_the_wire(self):
         sent: list = []
         with pytest.raises(InputError, match="is not one of"):
-            resource(capture(sent)).decide(
-                "x", [{"id": "a", "type": "noul"}], reasoning_effort="ultra"
-            )
+            resource(capture(sent)).decide("x", NOUL_A, reasoning_effort="ultra")
         assert sent == []
 
     def test_build_request_carries_reasoning_effort(self):
         body = SystemOne(FakeClient(), gateway_url="http://gw.test/v1").build_request(
-            "x", [{"id": "a", "type": "noul"}], reasoning_effort="high"
+            "x", NOUL_A, reasoning_effort="high"
         )
         assert body["reasoning_effort"] == "high"
 
     def test_extra_body_wins(self):
         sent: list = []
         resource(capture(sent)).decide(
-            "x", [{"id": "a", "type": "noul"}], samples=4, extra_body={"samples": 8}
+            "x", NOUL_A, samples=4, extra_body={"samples": 8}
         )
         assert sent[0]["body"]["samples"] == 8
 
     def test_model_override(self):
         sent: list = []
-        resource(capture(sent)).decide(
-            "x", [{"id": "a", "type": "noul"}], model="jev-latest"
-        )
+        resource(capture(sent)).decide("x", NOUL_A, model="jev-latest")
         assert sent[0]["body"]["model"] == "jev-latest"
 
     def test_bad_questions_never_reach_the_wire(self):
@@ -534,9 +534,7 @@ class TestDecide:
     def test_unknown_model_raises_not_found(self):
         detail = {"detail": {"error_type": "not_found_error", "message": "nope"}}
         with pytest.raises(typesafe_sdk.TypeSafeNotFoundError):
-            resource(capture([], detail, status=404)).decide(
-                "x", [{"id": "a", "type": "noul"}]
-            )
+            resource(capture([], detail, status=404)).decide("x", NOUL_A)
 
     def test_validation_error_carries_the_detail_list(self):
         detail = {
@@ -546,7 +544,7 @@ class TestDecide:
         }
         with pytest.raises(typesafe_sdk.TypeSafeUnprocessableEntityError) as excinfo:
             resource(capture([], detail, status=422), model=SYSTEMONE_MODEL).decide(
-                "x", [{"id": "a", "type": "noul"}]
+                "x", NOUL_A
             )
         assert excinfo.value.body["detail"][0]["msg"] == "bad"
 
@@ -564,25 +562,25 @@ class TestDecide:
         )
         sent: list = []
         system_one = resource(capture(sent))
-        built = system_one.build_request("x", [{"id": "a", "type": "noul"}], **kwargs)
-        system_one.decide("x", [{"id": "a", "type": "noul"}], **kwargs)
+        built = system_one.build_request("x", NOUL_A, **kwargs)
+        system_one.decide("x", NOUL_A, **kwargs)
         assert built == sent[0]["body"]
         assert list(built) == list(sent[0]["body"])
 
     def test_build_request_needs_no_client(self):
         body = SystemOne(FakeClient(), gateway_url="http://gw.test/v1").build_request(
-            "x", [{"id": "a", "type": "noul"}], samples=2
+            "x", NOUL_A, samples=2
         )
         assert body == {
             "state": "x",
             "model": SYSTEMONE_MODEL,
-            "questions": {"a": {"type": "noul"}},
+            "questions": {"a": {"type": "noul", "instructions": "Is it a?"}},
             "samples": 2,
         }
 
     def test_attaches_timings(self):
         system_one = resource(capture([]))
-        response = system_one.decide("x", [{"id": "a", "type": "noul"}])
+        response = system_one.decide("x", NOUL_A)
         t = timings_of(response)
         assert t is not None
         assert t.ttfb_ms is not None and t.ttfb_ms >= 0
@@ -593,8 +591,8 @@ class TestDecide:
     def test_timings_are_per_response(self):
         """Concurrent calls must not read each other's numbers."""
         system_one = resource(capture([]))
-        first = system_one.decide("x", [{"id": "a", "type": "noul"}])
-        second = system_one.decide("y", [{"id": "a", "type": "noul"}])
+        first = system_one.decide("x", NOUL_A)
+        second = system_one.decide("y", NOUL_A)
         assert timings_of(first) is not timings_of(second)
 
     def test_usage_keeps_fields_the_sdk_drops(self):
@@ -613,9 +611,7 @@ class TestDecide:
                 "cost": 5.2e-05,
             },
         }
-        response = resource(capture([], payload)).decide(
-            "x", [{"id": "a", "type": "noul"}]
-        )
+        response = resource(capture([], payload)).decide("x", NOUL_A)
         # The SDK's typed model keeps only Jev's two fields ...
         assert response.usage.model_dump() == {"input_tokens": 368, "output_tokens": 0}
         # ... while the gateway's additions stay reachable.
@@ -625,7 +621,7 @@ class TestDecide:
         assert usage["input_tokens_details"]["cached_tokens"] == 256
 
     def test_usage_falls_back_to_the_typed_model(self):
-        response = resource(capture([])).decide("x", [{"id": "a", "type": "noul"}])
+        response = resource(capture([])).decide("x", NOUL_A)
         response.__dict__.pop("_raw")
         assert usage_of(response) == {"input_tokens": 149, "output_tokens": 0}
 
@@ -675,14 +671,12 @@ class TestResourceWiring:
     def test_is_a_context_manager(self):
         sent: list = []
         with resource(capture(sent)) as system_one:
-            system_one.decide("x", [{"id": "a", "type": "noul"}])
+            system_one.decide("x", NOUL_A)
         assert "client" not in system_one.__dict__
 
 
 SAMPLE_VIDEO = Path(__file__).parent / "test_data" / "test.mp4"
 """168 frames at 25 fps — 6.72s, so a 1 fps read is 7 frames."""
-
-NOUL = [{"id": "is_urgent", "type": "noul"}]
 
 
 def counting_capture(sent: list, *, delay_for=None):
