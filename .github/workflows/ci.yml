@@ -56,3 +56,35 @@ jobs:
           uv pip install --system -e '.[all]'
           pytest tests/common/test_dependencies.py -v
           make test
+
+  test-lowest:
+    # Guards the floors in pyproject.toml: core dependencies resolve to the
+    # oldest versions allowed, on the oldest supported Python.
+    name: Test (lowest core dependencies)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: dev
+    defaults:
+      run:
+        shell: bash -el {0}
+
+    steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install lowest core dependencies
+        run: |
+          pip install uv
+          # Core first at their floors; the extras and test tools then install
+          # around them without upgrading what is already satisfied.
+          uv pip install --system --resolution lowest-direct -e .
+          uv pip install --system -e '.[test,all]'
+          uv pip list --system
+
+      - name: Run all tests
+        run: |
+          make test

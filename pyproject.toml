@@ -28,17 +28,26 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 license = {text = "Apache-2.0"}
+# Core dependencies are floors, not pins: vlmrun is installed next to other
+# libraries (openai, Pillow, pydantic, ...) and an exact pin or a speculative
+# upper bound makes those environments unresolvable. Each floor is the oldest
+# version the test suite passes against (the `lowest` CI job checks this);
+# pydantic keeps its <3 cap because v3 is a declared breaking release.
 dependencies = [
-    "cachetools==7.1.7",
-    "loguru==0.7.3",
-    "openai==1.109.1",
-    "Pillow==11.3.0",
-    "pydantic==2.13.5",
-    "requests==2.34.2",
-    "rich==14.3.4",
-    "tenacity==9.1.4",
-    "typer==0.27.2",
-    "vlmrun-hub==0.1.35",
+    "cachetools>=5.0",
+    "loguru>=0.7.0",
+    # 1.92 promoted `chat.completions.stream` out of beta.
+    "openai>=1.92",
+    # 10.3 fixes CVE-2024-28219 (buffer overflow in _imagingcms).
+    "Pillow>=10.3.0",
+    # 2.9 is what vlmrun-hub's datamodel-code-generator imports against.
+    "pydantic>=2.9,<3",
+    "requests>=2.31.0",
+    "rich>=13.0",
+    "tenacity>=8.2",
+    # Older typer releases don't cap click and break on click>=8.2.
+    "typer>=0.15.4",
+    "vlmrun-hub>=0.1.28",
 ]
 dynamic = ["version"]
 
