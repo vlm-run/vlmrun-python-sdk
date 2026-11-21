@@ -98,6 +98,8 @@ class Skills:
         order_by: str = "created_at",
         descending: bool = True,
         grouped: bool = False,
+        include_public: bool = True,
+        only_public: bool = False,
     ) -> List[SkillInfo]:
         """List available skills.
 
@@ -107,6 +109,10 @@ class Skills:
             order_by: Sort field (created_at, updated_at, name).
             descending: Sort direction.
             grouped: If True, return only the latest version per skill name.
+            include_public: If True, include public skills alongside the
+                caller's organization skills. Defaults to True to preserve
+                the server's existing behavior.
+            only_public: If True, return only public skills.
 
         Returns:
             List of SkillInfo objects
@@ -117,6 +123,8 @@ class Skills:
             "order_by": order_by,
             "descending": descending,
             "grouped": grouped,
+            "include_public": include_public,
+            "only_public": only_public,
         }
         response, status_code, headers = self._requestor.request(
             method="GET",

@@ -52,9 +52,19 @@ def list_skills(
         "-g",
         help="Show only the latest version of each skill name.",
     ),
+    public: bool = typer.Option(
+        False,
+        "--public",
+        help="Include public skills in the listing. By default, only the caller's "
+        "non-public (organization-owned) skills are shown.",
+    ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output raw JSON."),
 ) -> None:
-    """List available skills."""
+    """List available skills.
+
+    By default, only non-public skills owned by your organization are shown.
+    Pass --public to include public skills as well.
+    """
     client: VLMRun = ctx.obj
     skills = client.skills.list(
         limit=limit,
@@ -62,6 +72,7 @@ def list_skills(
         order_by=order_by,
         descending=descending,
         grouped=grouped,
+        include_public=public,
     )
 
     if not skills:
