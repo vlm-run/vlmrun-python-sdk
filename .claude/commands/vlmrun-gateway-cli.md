@@ -1,115 +1,148 @@
 ---
-description: Natural-language interface to the `vlmrun gw` gateway CLI — say what you want done to a file/URL/text and it runs the right command
-argument-hint: "<request>, e.g. 'embed this image ~/data/image.jpg' or 'transcribe ~/clip.mp3'"
+description: Natural-language front-end to the `vlmrun gw` gateway CLI. Say what to do with a file, URL or text, and it runs the right command.
+argument-hint: "<request>, e.g. 'parse ~/docs/contract.pdf to markdown' or 'is ~/scans/a.jpg a receipt?'"
 ---
 
-# vlmrun gateway — do what I asked
+# vlmrun gw: do what I asked
 
 Request: **$ARGUMENTS**
 
-Translate the request above into the correct `vlmrun gw` command, run it, and
-show the result. You are a thin natural-language front-end to an existing CLI —
-choose the subcommand, model, and method, execute, and report. Do not modify the
-CLI or write code.
+Turn the request into one `vlmrun gw` command, run it, and report the result. You are a thin front-end to the
+CLI. Do not edit the CLI. Write code only for the few tasks in [When the CLI cannot do it](#when-the-cli-cannot-do-it).
 
 ## 1. Parse the request
 
-From the request text pull out:
+- **Inputs:** local paths (expand `~`), `http(s)://` URLs, literal text.
+- **Intent:** see the table in step 2.
+- **Model or method named by the user:** use it. It wins over the defaults below.
 
-- **Inputs** — local paths (`~/…`, `./…`, absolute), `http(s)://…` URLs, and any
-  literal text to act on ("embed the phrase 'blue parrot'"). Expand `~`.
-- **Intent** — what to do with them (see the mapping below).
+Ask one short question only when an input is missing or the intent is unclear. A missing model is not unclear: use
+the default.
 
-If there is no input and the intent needs one, or the request is genuinely
-ambiguous, ask one short clarifying question instead of guessing. A missing
-model is not ambiguity — pick a sensible default.
+## 2. Route
 
-## 2. Map intent → subcommand, model, method
+The catalog changes. Before you run a model you have not used in this session, check it with
+`vlmrun gw models <id>` (methods, default method `*`, inputs, aliases). `vlmrun gw models` lists all of them. Pass
+the full `<org>/<name>` id.
 
-Model ids drift, so confirm your choice against `vlmrun gw models` (and
-`vlmrun gw models <model>` for its methods) before running. The defaults below
-are current; if one is absent from the catalog, pick another model whose `task`
-and `methods` fit. Always pass the full `<org>/<name>` id.
+| Intent | Command | Notes |
+| --- | --- | --- |
+| Document or scan to markdown | `vlmrun gw chat <in> -m zai-org/glm-ocr` | Only method is `markdown`. Other markdown models: `vlm-run/ocr:auto`, `paddlepaddle/paddleocr-vl-1.6`, `nvidia/nemotron-3.5-parse`, `lightonai/lightonocr-3-4b`, `rednote-hilab/dots.mocr`. |
+| Plain text | `vlmrun gw chat <in> -m paddleocr/pp-ocrv6 -M text` | |
+| Text with boxes and scores (JSON) | `vlmrun gw chat <in> -m paddleocr/pp-ocrv6` | Default method `ocr`. Knobs: `--method-params '{"score_threshold":0.5}'`, `'{"word_boxes":true}'`. |
+| Text-region boxes only | `vlmrun gw chat <in> -m paddleocr/pp-ocrv6 -M detect` | |
+| Layout regions | `vlmrun gw chat <in> -m vlm-run/ocr:auto -M layout` | Or `rednote-hilab/dots.mocr -M parse_layout`. |
+| Tables, formulas, charts | `vlmrun gw chat <in> -m paddlepaddle/paddleocr-vl-1.6 -M table` | Methods: `table`, `formula`, `chart`, `ocr`, `markdown`. |
+| Question about an image, PDF or video | `vlmrun gw chat <in> -p "<question>" -m qwen/qwen3.5-0.8b` | Stronger: `qwen/qwen3.8-27b` (any API key), `google/gemma4-26b-a4b-it` (paid). Video: add `-e video_fps=1 -e video_max_frames=8`. |
+| Text-only chat | `vlmrun gw chat -p "<text>" -m qwen/qwen3.5-0.8b` | OCR, detection and pose models reject text-only input. |
+| Frontier model by name | `vlmrun gw chat <in> -p "..." -m <id>` | `google/gemini-*`, `moonshotai/kimi-k3`, `minimax/minimax-m3`, `meta/muse-*`. All paid. |
+| Caption | `vlmrun gw chat <img> -m microsoft/florence-2-base-ft` | Default `caption`. Also `detailed_caption`, `more_detailed_caption`, `od`. |
+| Object boxes (COCO classes) | `vlmrun gw chat <img> -m roboflow/rfdetr-large` | |
+| Masks for a named object | `vlmrun gw chat <img> -m facebook/sam3.1 --method-params '{"prompt":"car"}'` | COCO instance masks: `roboflow/rfdetr-seg-large`. |
+| Body or hand pose | `vlmrun gw chat <in> -m usyd-community/vitpose-plus-large` | Hands: `geopavlakos/hamer`. |
+| Embedding | `vlmrun gw embed <files> -t "<text>" -m qwen/qwen3-vl-embedding-2b` | 2048 dims, image, video or text. Text-first: `google/embeddinggemma-2` (768 dims). |
+| Transcription | `vlmrun gw transcribe <in> -m nvidia/parakeet-tdt-0.6b-v3` | Audio file, URL, or a video's audio track. |
+| Yes/no, a label, or a score with probabilities | `vlmrun gw s1 <in> --noul id="Question?"` | System One. See below. |
 
-**Transcription** — audio, or "transcribe" a video (its audio track).
-Triggers: transcribe, subtitles/captions, "what is said". Extensions: mp3, wav,
-m4a, flac, ogg; or a video when the intent is transcription.
-→ `vlmrun gw transcribe <input> -m nvidia/parakeet-tdt-0.6b-v3`
-  - subtitles → `-f srt` (or `-f vtt`); timestamps/detail → `-f verbose_json`
-  - a hosted URL → `--url <url>` (no positional file); language hint → `-l en`
+Pick `gw s1` over `gw chat` when the answer is a label, a probability or a pass/fail gate. Pick `gw chat` when the
+answer is text.
 
-**Embedding** — turn an image, text, or video into a vector.
-Triggers: embed, vectorize, "embedding for", similarity/index.
-→ `vlmrun gw embed <files…> -m qwen/qwen3-vl-embedding-2b`
-  - literal text → `-t "…"` (repeatable); each file/`-t` is its own vector
-  - "embed the image together with this caption" → add `--join` (one file max)
-  - "give me N dims" → `--dimensions N`; scripting → `--json` for full vectors
+### Flags that matter
 
-**Document parsing** — a PDF/DOCX, or an image of a document/form/receipt.
-Triggers: parse, read, "to markdown", extract text, OCR, layout/structure.
-→ `vlmrun gw chat <file> -m <model> --method <method>`
-  - to markdown / clean reading order → `-m zai-org/glm-ocr --method markdown`
-  - text + confidence + polygons (JSON) → `-m paddleocr/pp-ocrv6 --method ocr`
-  - just text-region boxes → `-m paddleocr/pp-ocrv6 --method detect`
-  - layout blocks / sections → `-m rednote-hilab/dots.mocr --method parse_layout`
-  - OCR knobs: `--method-params '{"lang":"en","score_threshold":0.5}'` (pp-ocrv6)
+- `gw chat`: `-m` (required), `-p`, `-M/--method`, `--method-params '<json>'`, `-e key=value` (repeatable, e.g.
+  `-e document_dpi=72`), `--json-mode`, `--response-format '<json>'`, `-ns`, `-j`, `--timeout`.
+- `gw embed`: `-m` (required), `-t/-p` text (repeatable), `--join` (one vector, at most one file),
+  `-d/--dimensions`, `-j` (full vectors).
+- `gw transcribe`: `-m` (required), one input or `--url`, `-f json|text|verbose_json|srt|vtt` (default `json`),
+  `-l en`, `-p "<proper nouns>"`, `-j`.
+- `gw s1`: `--noul id="Q?"`, `--choice id="a|b|c"`, `--score id="low|mid|high"`, `-Q @questions.json`, `-s` state,
+  `-m`, `--detail auto|low|high`, `-g/--gate`, `-r/--repeat`, `--dry-run`, `-j`.
+- `-j` formats the CLI output as JSON. `--json-mode` asks the model for a JSON object. With both, `-j` prints the
+  parsed object.
+- `--response-format '{"type":"json_schema","json_schema":{...}}'` constrains chat models to a schema. OCR models do
+  not support it; use `--json-mode` there.
 
-**Image understanding / VQA** — a free-form question or description of an image.
-Triggers: describe, caption, "what/how many/what color/is there…", summarize.
-→ `vlmrun gw chat <image> -p "<the question>" -m qwen/qwen3.5-0.8b`
-  (Use the OCR models above only when the intent is text extraction, not a
-  question about the scene.)
+### System One (`gw s1`)
 
-Notes that matter:
+- Inputs: literal text, a `.txt/.md/.json/.yaml` state file, up to 8 images, one PDF, or one local video.
+- Every `--noul` needs question text: `--noul is_urgent="Is this urgent?"`. A bare `--noul is_urgent` fails.
+- Models: `vlmrun gw s1 models`. Default `google/diffusiongemma-26b-a4b-it`. `-R/--reasoning-effort` works only with
+  `-m google/gemma4-26b-a4b-it`; other models return 422.
+- `--gate 'id>0.9'` sets the exit code: 0 pass, 1 gate failed, 2 request failed.
+- Video: a local file only (download a URL first). `--fps` (default 1) times the clip length is the number of
+  billed reads; `--max-frames` (default 60) refuses more. `--ws` reads over one socket and is cheaper per frame.
+  Needs `pip install "vlmrun[video,ws]"`.
 
-- Images are sent as `image_url`, documents as `document_url` — the CLI decides
-  from the file's real bytes, so a mislabelled extension is fine; you don't set
-  this.
-- Only the OCR/document `chat` models are strict about needing a file. VQA takes
-  `-p`; embedding takes `-t`.
-- If the user names a model or method explicitly, honor it over the defaults.
+```bash
+vlmrun gw s1 ~/scans/2.jpg --choice kind="invoice|receipt|contract" --noul has_total="Is a total visible?"
+vlmrun gw s1 ticket.txt --choice dept="billing|technical|sales" --gate 'dept==billing'
+```
+
+## When the CLI cannot do it
+
+| Need | Path |
+| --- | --- |
+| `google/gemini-decision-1` decisions | `POST https://gateway.vlm.run/decisions` with the System One body (`model`, `state`, `content`, `questions`). Paid key. `gw s1 -m google/gemini-decision-1` returns 404. |
+| Upload a local file once, reuse its URL | `curl https://gateway.vlm.run/openai/files -H "Authorization: Bearer $VLMRUN_API_KEY" -F file=@scan.pdf`. Pass the reply's `url` as an input. Needs an API key; anonymous calls get 401. |
+| Embed a PDF or audio | `POST https://gateway.vlm.run/openai/embeddings` with `google/embeddinggemma-2` and a `document_url` or `audio_url` part. `gw embed` accepts images and video only. |
+| Many calls from code | OpenAI SDK with `base_url="https://gateway.vlm.run/openai"`. Same models, methods (`extra_body={"method": ...}`) and errors. |
+| System One from code or curl | `POST https://gateway.vlm.run/typesafe/v1/systemone`; the body must name `model`. `vlmrun gw s1 ... --dry-run` prints a body you can send. |
+| Gateway models as agent tools | MCP: `claude mcp add --transport http vlmrun https://gateway.vlm.run/mcp --header "Authorization: Bearer $VLMRUN_API_KEY"`. Tools: `read_document`, `read_image`, `read_audio`, `read_video`, `list_models`, `get_model_info`, `get_completion`, `create_upload_token`. |
+| Frame-by-frame realtime detection or pose | `wss://gateway.vlm.run/v1/ws`. See https://docs.vlm.run/gateway/realtime. |
+| Multi-step agent work, image or video generation | Orion: `vlmrun chat`. See the `vlmrun-cli-skill` skill. |
 
 ## 3. Run it
 
-Before executing, make sure a stale dev environment isn't shadowing the
-configured key: `unset VLMRUN_API_KEY VLMRUN_BASE_URL VLMRUN_GATEWAY_URL` (the
-CLI reads the key from `~/.vlmrun/config.toml`). Then:
+1. Key. The CLI reads `--api-key`, then `VLMRUN_API_KEY`, then `~/.vlmrun/config.toml`. Check which `VLMRUN_*`
+   variables are set without printing values (`env | grep -o '^VLMRUN_[A-Z_]*'`). If `VLMRUN_GATEWAY_BASE_URL` or
+   `VLMRUN_GATEWAY_URL` points away from `https://gateway.vlm.run/v1` and the user did not ask for that, unset that
+   one variable. Do not unset a working key.
+2. No key at all: the CLI fails with `Missing credentials`. Run with `VLMRUN_API_KEY=vlmrun` for anonymous access.
+   Paid models then return 401.
+3. Show the exact command on one line, then run it. Add `-j` only when the user wants raw output or is scripting.
+4. On an error, fix and retry at most twice:
 
-1. Show the exact `vlmrun gw …` command you're about to run (one line).
-2. Run it. Default to the human-readable panel; add `--json` only if the user
-   asked for raw output or is clearly scripting.
-3. If it fails: a `model not found` error prints the valid ids — pick the right
-   one and retry once. An `Error: Unknown method …` means the method is wrong
-   for that model — drop `--method` (use its default) or pick a listed one. A
-   `model not found`/wrong-task pairing means you chose the wrong model for the
-   task; re-map and retry. Don't loop more than a couple of times — if still
-   stuck, report what you tried.
+| Error | Fix |
+| --- | --- |
+| `API Error`, `Error code: 404` | Wrong model id. Run `vlmrun gw models <id>`; it names a missing model. |
+| `API Error`, `Error code: 400` | Wrong method or input for the model. Check `vlmrun gw models <id>`. Text-only input to an OCR model is a 400. |
+| `Authentication Error`, `Error code: 401` | The model needs an API key or a paid account. Say so; do not loop. |
+| `--noul ... has neither instructions nor criteria` | Add question text: `--noul id="Question?"`. |
+| `gw s1` 422 on `reasoning_effort` | Use `-m google/gemma4-26b-a4b-it`, or drop `-R`. |
+| `gw s1` frame ceiling | Lower `--fps`. Raise `--max-frames` only if the user accepts the cost. |
+
+The CLI prints only the status code for API errors. To read the gateway's message, send the same request with curl.
 
 ## 4. Report
 
-State what you ran and give the result: the transcript, the extracted
-text/markdown, the VQA answer, or for embeddings a one-line summary (how many
-vectors, their dimension) rather than dumping raw floats unless asked. If you
-picked a model/method the user didn't specify, say which and why in one line so
-they can steer next time.
+Say what you ran and give the result: the markdown or text, the answer, the transcript, the decisions. For
+embeddings, give the count and dimension, not the floats. If you chose the model or method, say which and why in
+one line.
 
-Chat/OCR responses carry `usage.cost` (USD) — the panel footer shows it, and
-`--json` puts it under `usage.cost`. Report the cost when it's relevant, and for
-a batch over many files sum it into a total.
+`gw chat` and `gw s1` show cost in USD on the closing rule; `-j` puts it in `usage.cost`. Read `usage.cost`; do not
+compute it from tokens. For a batch, give the total.
 
 ## Examples
 
-- `"embed this image ~/data/image.jpg"`
-  → `vlmrun gw embed ~/data/image.jpg -m qwen/qwen3-vl-embedding-2b`
-- `"what's in ~/photos/street.jpg?"`
-  → `vlmrun gw chat ~/photos/street.jpg -p "What's in this image?" -m qwen/qwen3.5-0.8b`
-- `"extract the text from ~/scans/receipt.png"`
-  → `vlmrun gw chat ~/scans/receipt.png -m paddleocr/pp-ocrv6 --method ocr`
-- `"parse ~/docs/contract.pdf to markdown"`
-  → `vlmrun gw chat ~/docs/contract.pdf -m zai-org/glm-ocr --method markdown`
-- `"get the layout blocks of ~/forms/intake.jpg"`
-  → `vlmrun gw chat ~/forms/intake.jpg -m rednote-hilab/dots.mocr --method parse_layout`
-- `"transcribe ~/calls/standup.mp4 as subtitles"`
-  → `vlmrun gw transcribe ~/calls/standup.mp4 -m nvidia/parakeet-tdt-0.6b-v3 -f srt`
-- `"embed the caption 'a blue parrot' with ~/img/parrot.jpg as one vector"`
-  → `vlmrun gw embed ~/img/parrot.jpg -t "a blue parrot" --join -m qwen/qwen3-vl-embedding-2b`
+```bash
+# "parse ~/docs/contract.pdf to markdown"
+vlmrun gw chat ~/docs/contract.pdf -m zai-org/glm-ocr
+# "extract the text from ~/scans/receipt.png"
+vlmrun gw chat ~/scans/receipt.png -m paddleocr/pp-ocrv6 -M text
+# "OCR ~/scans/receipt.png with boxes"
+vlmrun gw chat ~/scans/receipt.png -m paddleocr/pp-ocrv6
+# "layout of ~/forms/intake.jpg"
+vlmrun gw chat ~/forms/intake.jpg -m vlm-run/ocr:auto -M layout
+# "what is the total on ~/scans/receipt.png?"
+vlmrun gw chat ~/scans/receipt.png -p "What is the total?" -m qwen/qwen3.5-0.8b
+# "find the cars in ~/img/street.jpg"
+vlmrun gw chat ~/img/street.jpg -m roboflow/rfdetr-large
+# "embed ~/img/parrot.jpg with the caption 'a blue parrot' as one vector"
+vlmrun gw embed ~/img/parrot.jpg -t "a blue parrot" --join -m qwen/qwen3-vl-embedding-2b
+# "subtitles for ~/calls/standup.mp4"
+vlmrun gw transcribe ~/calls/standup.mp4 -m nvidia/parakeet-tdt-0.6b-v3 -f srt
+# "is ~/scans/receipt.png a receipt or an invoice?"
+vlmrun gw s1 ~/scans/receipt.png --choice kind="receipt|invoice|other"
+# "does anyone appear in ~/cam/door.mp4?"
+vlmrun gw s1 ~/cam/door.mp4 --fps 1 --ws --noul has_people="Are people visible?"
+```
